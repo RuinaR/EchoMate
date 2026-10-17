@@ -15,7 +15,7 @@
 
 ## 실제로 구현된 것
 - `src/echomate_studio/analyze.py`: JSON 구조/ID/시간 검증, 파일별 통계, URL·멘션·커스텀 이모지 제거, 반감기 가중 평균 문자 길이, 연속 발언 후보 그룹 수.
-- `tests/test_analyze.py`: 합성 입력 단위 테스트 5개.
+- `tests/test_analyze.py`: 기존 합성 입력 단위 테스트 5개 + 신규 3개 채널 CLI 인수 테스트 1개(신규 테스트 실행 미확인).
 - `docs/STUDIO-QUICKSTART.md`: PowerShell 실행법.
 - GUI 없음, 페르소나 아티팩트 없음, QLoRA·RAG 미구현, Discord 봇 실행 코드 없음.
 
@@ -39,4 +39,4 @@
 진행 시 합성 데이터 테스트를 수행하고, 완료 후 WORKLOG와 HANDOFF 갱신. 테스트하지 않은 것을 완료로 선언하지 않는다.
 원본 데이터/봇 토큰·비밀/로컬 아티팩트는 절대로 공개 GitHub에 올리지 않는다.
 
-현재 설계의 기술적 참고 자료는 REFERENCE-PROJECTS와 각 활성 설계 문서에만 둔다. 폐기된 과거 요구 문서는 삭제되었다.
+현재 설계의 기술적 참고 자료는 REFERENCE-PROJECTS와 각 활성 설계 문서에만 둔다. 폐기된 과거 요구 문서 5개는 현재 브랜치에서 삭제되었다. JSON 입력은 `nargs='+'`로 최소 1개, 여러 개 지원. 각 파일을 별도 채널로 취급. 추가된 6번째 테스트는 아직 Windows 실행 확인 전.
