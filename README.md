@@ -11,7 +11,7 @@
 | EchoMate Bot | 검증된 모델을 읽기 전용으로 불러와 지정한 채널/스레드에서 자율 대화. 서버 별명·프로필, 활동 빈도, 시작/중지 |
 | DiscordChatExporter | 독립된 외부 백업 도구(선택 사항). EchoMate Bot에 과거 기록 수집 기능을 내장하지 않음 |
 
-최초 검증 대상은 사용자가 직접 제공한 **본인 단일 화자 메시지** 2개 파일이다. 추후 권한/동의가 확인된 파일의 작성자 목록을 표시하고 선택해 페르소나를 제작하는 방향으로 확장한다. 여러 페르소나가 동시에 발언하는 기능은 초기 범위 밖.
+최초 검증은 본인 단일 화자 메시지 2개 파일로 수행했다. **실제 Studio 입력 개수는 1개 이상 제한 없이 확장**하며, JSON 파일 하나를 독립적인 채널 하나로 취급한다. 여러 파일은 같은 페르소나의 자료로 합산 가능하고 채널 간 메시지는 연속 발화로 병합하지 않는다. 추후 권한/동의가 확인된 파일의 작성자 목록을 표시하고 선택해 페르소나를 제작하는 방향으로 확장한다. 여러 페르소나가 동시에 발언하는 기능은 초기 범위 밖.
 
 ## 데이터와 대화 품질
 - 각 JSON 파일은 각각 별개의 채널에서 작성한 한 사람의 메시지 기록. 상대의 발언이 없으므로 실제 질문과 답변 관계를 복원할 수 없다.
@@ -35,7 +35,7 @@ Python 3.11 이상 권장. 저장소 루트에서:
 ```powershell
 $env:PYTHONPATH = "src"
 python -m unittest discover -s tests -v
-python -m echomate_studio.analyze "C:\\path\\messages1.json" "C:\\path\\messages2.json" --output "local_data\\report.json"
+python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-b.json" "C:\\data\\channel-c.json" --output "local_data\\report.json"
 ```
 
 경로는 본인의 실제 로컬 파일 위치로 교체. 이 분석기는 원본 메시지 전문을 보고서에 기록하지 않고 집계 수치만 기록하며 모델을 학습시키지 않는다.
@@ -55,4 +55,4 @@ python -m echomate_studio.analyze "C:\\path\\messages1.json" "C:\\path\\messages
 - [인수인계](docs/AI-HANDOFF.md) · [작업 로그](docs/WORKLOG.md)
 - [Studio CLI 실행법](docs/STUDIO-QUICKSTART.md)
 
-과거 요구를 다룬 문서는 이력 보존 목적이며 **PROJECT-DEFINITION과 AI-HANDOFF 최신 요약을 우선**한다.
+과거 요구에만 해당하는 폐기 문서는 제거했다. 저장소 문서는 현행 기능·요구사항을 기준으로 유지한다.
