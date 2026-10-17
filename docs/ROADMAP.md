@@ -61,3 +61,10 @@
 - [ ] 주기적인 오프라인 품질 평가 후 허용된 데이터만 LoRA 후보에 포함
 - [ ] Discord API 메시지로 관계·친밀도 영구 자동 프로파일링하지 않는지 테스트
 - 설계: [CONTINUOUS-ADAPTATION.md](CONTINUOUS-ADAPTATION.md)
+
+## 2026-10-18 최신 우선순위 — 경량 봇 + 독립 Studio
+- [ ] EchoMate Bot: 표시 이름/프로필, 모델 아티팩트 로드, 대화 빈도, 활동 채널/스레드, 중지/시작.
+- [ ] EchoMate Studio: 허가된 기존 JSON/CSV 데이터 구조 검증, 사용자 목록, 오프라인 제작/평가/버전 캐시.
+- [ ] Bot에 데이터 수집·파인튜닝·관계 프로파일링 경로가 없음을 테스트.
+- [ ] Studio 아티팩트 manifest 호환성/해시 및 업데이트·롤백 테스트.
+- 관련: [DEPLOYMENT-SEPARATION.md](DEPLOYMENT-SEPARATION.md).
