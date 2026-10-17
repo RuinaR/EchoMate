@@ -53,3 +53,11 @@
 - P2: 필요 시 허가된 RAG/LoRA 품질 실험.
 - 다중 페르소나 및 검색 리스트박스는 v1 이후로 이동(기존 항목 중 해당 사항은 이전 제안).
 - 상세: [SINGLE-PERSONA-PLAN.md](SINGLE-PERSONA-PLAN.md).
+
+## 누적 개인화 (2026-10-18)
+- [ ] 현재 대화의 톤/상황 단기 분석과 TTL 기반 소멸
+- [ ] 본인 평가·교정 데이터의 출처/사용 조건/승인 관리
+- [ ] 지속 페르소나 프로필 버전/롤백, 사용자 opt-out 및 삭제
+- [ ] 주기적인 오프라인 품질 평가 후 허용된 데이터만 LoRA 후보에 포함
+- [ ] Discord API 메시지로 관계·친밀도 영구 자동 프로파일링하지 않는지 테스트
+- 설계: [CONTINUOUS-ADAPTATION.md](CONTINUOUS-ADAPTATION.md)
