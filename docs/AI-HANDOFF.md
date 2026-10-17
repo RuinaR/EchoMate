@@ -35,3 +35,10 @@
 - WORKLOG 최신 항목으로 현재 상태 검증.
 - 계획과 구현을 구분해 결과 보고.
 - 변경 후 인수인계와 로그 갱신.
+
+## 2026-10-18 추가 조사 및 반영
+- 신규 문서: docs/REFERENCE-PROJECTS.md, docs/DATA-ACQUISITION-OPTIONS.md.
+- 조사 대상: Disclone, discord-inference-bot, Archimedes, discord-persona-bot, MarkBot, DiscordChatExporter.
+- 채택할 설계: 스트리밍, 단기 기억 TTL, Ollama 상태/성능, persona manifest, 관리자 제어, 권한·삭제 처리, 자율참여 Gate 및 stale 답변 폐기, importer 인터페이스.
+- 공식 데이터 패키지 이전 대안: 본인 작성 사례로 AI 기능 테스트, 이미 적법하게 보유한 자료 검토, 실시간 스레드 MVP. 사용자 토큰 self-bot/전체 기록 스크래핑은 지원하지 않는다.
+- 코드 구현·테스트는 아직 착수하지 않음. 다음에는 Phase 1의 합성 데이터 분석기 또는 Phase 3의 지정 스레드 MVP를 구현.
