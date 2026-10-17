@@ -80,3 +80,9 @@
 - 운영 중 Bot에서 데이터 수집·학습하지 않음. Model artifact는 읽기 전용 로드.
 - 최신 아키텍처: docs/DEPLOYMENT-SEPARATION.md. 이전의 봇 내 학습 UI/파이프라인은 보류.
 - Discord API 기반 AI 학습 정책 확인은 도구를 분리해도 여전히 필요. 코드는 아직 구현되지 않음.
+
+## 2026-10-18 최신 데이터 세부 규칙
+- 사용자 확인: 첨부 messages1.json, messages2.json 각각 **한 채널**의 본인 메시지 기록임. 서로 다른 채널이며 JSON 자체에는 channel ID 없음.
+- 사용자는 최근 기록에 높은 학습 비중을 원함. 시간 감쇠 반감기 후보를 비교하고 오래된 표현도 일부 보존.
+- EchoMate Bot 출력은 **텍스트 및 Discord 기본 Unicode 이모지 한정**. GIF, 스티커, 이미지/동영상 등 첨부, 커스텀 서버 이모지는 사용 금지.
+- docs/TEMPORAL-STYLE-AND-MEDIA.md 참조. 아직 전처리 코드/학습/실행 QA는 없음.
