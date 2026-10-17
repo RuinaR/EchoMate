@@ -40,3 +40,9 @@
 - [ ] 데이터 importer별 출처/학습 허가 상태 검사와 preview-only 모드
 - [ ] 외부 프로젝트 라이선스 검토, 오프라인 회귀 테스트
 - 조사 상세: [REFERENCE-PROJECTS.md](REFERENCE-PROJECTS.md), [DATA-ACQUISITION-OPTIONS.md](DATA-ACQUISITION-OPTIONS.md)
+
+## 관계별 개인화 작업
+- [ ] 수동 설정 기반 persona×target 관계별 말투 설정 및 기본값
+- [ ] 검색 가능한 대상 사용자 리스트, 호칭·친밀도 선호·장난 강도·존댓말 설정 UI
+- [ ] 상대방 opt-out 및 관계 설정 삭제, 권한 검사, 테스트
+- [ ] Discord API 데이터로 친밀도/인물 관계 자동 프로파일링 금지 검증
