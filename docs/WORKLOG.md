@@ -49,3 +49,8 @@
 - docs/DEPLOYMENT-SEPARATION.md 신규, PROJECT-DEFINITION/ARCHITECTURE/ROADMAP/AI-HANDOFF 정합성 갱신.
 - 모델 아티팩트 형식, 캐시/검증/롤백, 봇 allowlist와 학습 분리 경계 명시.
 - 설계만 완료. Discord/학습 동작 테스트 미수행.
+
+## 2026-10-18 — 채널별 데이터/최근 가중치/미디어 출력 제한
+- 사용자 확인으로 입력 2개 JSON이 각각 단일 채널의 기록임을 문서화.
+- 신규 문서 docs/TEMPORAL-STYLE-AND-MEDIA.md: 최근 스타일 가중치 반감기 후보, 파일별 발화 묶기 주의, 기본 Unicode 이모지 허용/커스텀 이모지·GIF·스티커 금지.
+- 원본 JSON/GitHub 업로드 없음. 구현 및 학습 시험 미실시.
