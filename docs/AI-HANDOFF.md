@@ -49,3 +49,9 @@
 - 구현 방식: 당사자 수동 선택의 관계별 **대화 스타일 선호도**, 닉네임/호칭, 장난 허용 범위. Discord API 메시지로 관계를 자동 추정/점수화하지 않는다.
 - DiscordChatExporter: 공식 **봇 토큰** 접근과 일반 유저 토큰 자동화는 별개. 새 일반 계정 self-bot도 금지. 내보내기 기술 가능 여부와 AI 학습 허가를 혼동 금지.
 - 구현되지 않음: UI, 관계 DB, DiscordChatExporter 연동, 데이터 학습.
+
+## 2026-10-18 최신 사용자 선호 및 정책 판단
+- 사용자는 수동으로 관계를 지정하는 것보다 **실제 대화내용에 따라 자동으로 자연스럽게 상대별 반응**하기를 원함.
+- 안전한 현재 구현 범위: 지정 스레드의 현재 대화에서 말투/분위기 임시 적응. API 기반 수년치 관계/친밀도 장기 프로파일 자동 추론은 개발자 정책 §16 때문에 제외.
+- Discord Developer Portal 공식 bot 계정 채택 방향. DiscordChatExporter의 공식 bot-token 지원은 사실이나, export된 API 메시지의 AI 훈련에는 Discord 명시적 허가가 필요함(§21).
+- 추가 설계: docs/RELATIONSHIP-PERSONALIZATION.md의 2026-10-18 보완 참고.
