@@ -9,14 +9,14 @@
 ```powershell
 $env:PYTHONPATH = "src"
 python -m unittest discover -s tests -v
-python -m echomate_studio.analyze "C:\\path\\messages1.json" "C:\\path\\messages2.json" --output "local_data\\report.json"
+python -m echomate_studio.analyze "C:\\data\\channel1.json" "C:\\data\\channel2.json" "C:\\data\\channel3.json" --output "local_data\\report.json"
 ```
 
-실제 경로에 맞춰 수정. 메시지 원문은 출력하지 않으며 소스 파일을 변경하지 않는다.
+**파일은 1개부터 원하는 만큼 공백으로 나열할 수 있다.** 예시의 3개를 모두 사용할 필요는 없다. 각 파일은 별도 채널이다. 같은 페르소나의 데이터라도 채널 간 발언을 하나의 그룹으로 합치지 않는다. 실제 경로에 맞춰 수정. 메시지 원문은 출력하지 않으며 소스 파일을 변경하지 않는다.
 
 ## 입력 계약
 - 최상위 JSON 배열, 레코드별 `ID`, `Timestamp`, `Contents`, `Attachments` 필수.
-- **파일 하나 = 채널 하나**로 분석한다. 다른 채널과 시간 가까운 발언을 혼합하지 않는다.
+- **파일 하나 = 채널 하나**로 분석한다. 파일 수는 고정하지 않는다. 다른 채널과 시간 가까운 발언을 혼합하지 않는다.
 - 단일 화자 기록이므로 가까운 메시지는 발화 묶음 *후보*일 뿐 상대방의 실제 발언을 복구한 것은 아니다.
 - 빈 본문, 순수 URL, 사용자 멘션, 커스텀 이모지, 미디어 링크는 텍스트 분석 대상에서 제외한다. Unicode 이모지와 원문의 구어체는 보존한다.
 - 타임스탬프에 타임존이 없다면 출처에 타임존이 없는 상태로 유지하고 임의로 변환하지 않는다.
