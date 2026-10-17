@@ -37,3 +37,9 @@
 - 신규 설계 docs/CONTINUOUS-ADAPTATION.md 작성 및 관련 문서 갱신.
 - 분리: 실시간 대화 톤(임시) / 명시적 본인 피드백으로 누적되는 스타일(지속) / 사용자 직접 선호. API 메시지에 기반한 장기 관계 프로파일링은 구현하지 않음.
 - 실제 코드/테스트 없음.
+
+## 2026-10-18 — DiscordChatExporter GUI 사용 설명
+- Windows v2.48.0의 로그인 화면 기준으로 공식 봇 토큰 생성·초대·최소 권한·스레드 표시·JSON 출력 절차 정리.
+- docs/DISCORDCHATEXPORTER-GUIDE.md 생성.
+- 보안: 토큰/GitHub 업로드 금지, 개인 계정 self-bot 금지, AI 모델 학습과 단순 백업 구분.
+- 실제 내보내기·코드 빌드·학습 테스트 미실시.
