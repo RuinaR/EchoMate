@@ -30,3 +30,13 @@
 - [ ] 가능 시 QLoRA 실험 및 성능 비교
 - [ ] 다중 페르소나, 데이터 삭제·재구축
 - [ ] 장시간 장애·성능 회귀 테스트
+
+## 2026-10-18 외부 프로젝트 분석으로 추가된 요구
+- [ ] Discord 공식 봇으로 지정 스레드 MVP, 컨텍스트 TTL·메시지 ID 중복 방지
+- [ ] Ollama 스트리밍/모델 시작·종료/지연시간·토큰 속도 통계
+- [ ] 페르소나 manifest + 검색 가능한 리스트 UI + 설정 전환 원자성
+- [ ] 관리자 권한 및 옵트인/아웃·삭제 명령, privacy-safe 진단 로그
+- [ ] 생성 큐 취소·stale 답변 차단·발언 상한·침묵 판단
+- [ ] 데이터 importer별 출처/학습 허가 상태 검사와 preview-only 모드
+- [ ] 외부 프로젝트 라이선스 검토, 오프라인 회귀 테스트
+- 조사 상세: [REFERENCE-PROJECTS.md](REFERENCE-PROJECTS.md), [DATA-ACQUISITION-OPTIONS.md](DATA-ACQUISITION-OPTIONS.md)
