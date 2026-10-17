@@ -54,3 +54,12 @@
 - 사용자 확인으로 입력 2개 JSON이 각각 단일 채널의 기록임을 문서화.
 - 신규 문서 docs/TEMPORAL-STYLE-AND-MEDIA.md: 최근 스타일 가중치 반감기 후보, 파일별 발화 묶기 주의, 기본 Unicode 이모지 허용/커스텀 이모지·GIF·스티커 금지.
 - 원본 JSON/GitHub 업로드 없음. 구현 및 학습 시험 미실시.
+
+## 2026-10-18 — EchoMate Studio 분석기 첫 구현
+- 코드: src/echomate_studio/__init__.py, src/echomate_studio/analyze.py
+- 테스트: tests/test_analyze.py (합성 데이터 5건 단위 테스트 통과), 본인 제공 대용량 JSON 2개 분석 성공
+- 문서: docs/STUDIO-QUICKSTART.md
+- 입력: 각 파일은 단일 채널, 총 304,997건, 파일 내부 메시지 ID 중복 0건.
+- URL/멘션/커스텀 이모지 제거 후 텍스트 후보 270,989건.
+- 기능은 개인정보를 제외한 *통계 분석*이며 모델 학습·RAG/QLoRA 구현 아님. Discord 정책상 학습 이용허가 판단도 하지 않음.
+- 주의: 메모리 내 전체 JSON 적재 방식은 향후 streaming으로 최적화 예정. 출처에 채널 ID 및 UTC 오프셋이 없어 임의 추정 금지.
