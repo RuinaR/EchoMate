@@ -56,3 +56,10 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - [Studio CLI 실행법](docs/STUDIO-QUICKSTART.md)
 
 과거 요구에만 해당하는 폐기 문서는 제거했다. 저장소 문서는 현행 기능·요구사항을 기준으로 유지한다.
+
+## 로컬 대화 생성 기준선 (2026-10-18)
+- `src/echomate_studio/ollama_client.py`: PC 로컬 Ollama API 클라이언트.
+- `src/echomate_studio/conversation.py`: 현 대화 문맥·스타일 프롬프트 및 텍스트 전용 출력 필터.
+- `src/echomate_studio/chat_probe.py`: Discord 연결 없이 로컬 모델에 단발 대화 시험.
+- `tests/test_conversation.py`: Ollama 호출을 모킹한 단위 테스트 6개 신규 작성. **Windows 실행 검증 전**.
+- 실행법: [LOCAL-BASELINE.md](docs/LOCAL-BASELINE.md). 실제 페르소나 학습 또는 Discord 연동은 여전히 미구현.
