@@ -1,0 +1,35 @@
+# Secrets / local runtime
+.env
+.env.*
+!.env.example
+*.token
+*.key
+local_data/
+data/
+models/
+checkpoints/
+*.sqlite
+*.sqlite3
+*.db
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
