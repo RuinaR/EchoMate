@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from echomate_studio.analyze import analyze_file, normalize_text
+from echomate_studio.analyze import analyze_file, normalize_text, iter_json_array
 
 
 class AnalysisTests(unittest.TestCase):
@@ -75,6 +75,38 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(len(channels), 3)
             self.assertEqual([item["total_records"] for item in channels], [1, 1, 1])
             self.assertEqual(len({item["source_label"] for item in channels}), 3)
+
+    def test_incremental_large_json_array(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "large.json"
+            items = [
+                {"ID": str(i), "Timestamp": "2026-10-01 01:00:00",
+                 "Contents": "가" * 280, "Attachments": ""}
+                for i in range(650)
+            ]
+            path.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+            self.assertEqual(len(list(iter_json_array(path))), 650)
+            self.assertEqual(analyze_file(path)["total_records"], 650)
+
+    def test_malformed_trailing_comma_and_junk(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "bad.json"
+            for value in ('[{"ID":1},]', '[{"ID":1}] garbage', '[{"ID":1}'):
+                path.write_text(value, encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    list(iter_json_array(path))
+
+    def test_single_channel_file_and_naive_timezone(self):
+        folder, path = self.write([
+            {"ID": "one", "Timestamp": "2026-10-01 01:00:00",
+             "Contents": "응 😂", "Attachments": ""}
+        ])
+        try:
+            report = analyze_file(path)
+            self.assertEqual(report["total_records"], 1)
+            self.assertEqual(report["text_records_after_filter"], 1)
+        finally:
+            folder.cleanup()
 
     def test_invalid_parameter(self):
         folder, path = self.write([])
