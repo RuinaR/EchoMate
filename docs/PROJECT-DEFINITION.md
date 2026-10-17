@@ -51,3 +51,8 @@ EchoMate는 친구들이 사용하는 Discord 서버의 특정 스레드에서 A
 - 본인 페르소나 단일 목표 유지. 미래 대화에 따라 현재 분위기와 상대별 반응이 변하는 적응 구조 요구.
 - 단기 SessionTone과 명시적 피드백 기반 지속 PersonaStyle을 분리한다. Discord API 대화 누적으로 장기 상대별 친밀도 점수를 자동 추론하는 기능은 정책 검토 없이 구현하지 않는다.
 - 상세: [CONTINUOUS-ADAPTATION.md](CONTINUOUS-ADAPTATION.md).
+
+## 2026-10-18 최신 결정 — Bot/Studio 분리
+- 봇은 **서버 표시 이름/프로필 사진 설정, 사전 제작 모델 로드, 대화 빈도·활동 채널/스레드 설정 및 자율 대화만** 담당.
+- 외부 DiscordChatExporter로 자료를 준비하고, 별도 EchoMate Studio가 허용된 파일을 분석·학습·버전 캐시·품질 검증. Bot에는 데이터 내보내기/학습 코드를 넣지 않는다.
+- 관련 최신 기준: [DEPLOYMENT-SEPARATION.md](DEPLOYMENT-SEPARATION.md). 과거 '봇에서 학습 파일 설정' 요구보다 이 결정이 우선.
