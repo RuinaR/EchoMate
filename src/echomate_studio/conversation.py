@@ -17,7 +17,7 @@ def sanitize_output(value: str) -> str:
         value = pattern.sub("", value)
     # Control codes (excluding line feeds/tabs) must not reach Discord.
     value = "".join(c for c in value if c in "\n\t" or ord(c) >= 32)
-    return value.strip()
+    return re.sub(r"[^\\S\\n]+", " ", value).strip()
 
 
 def build_messages(context: list[dict], *, style: str = "짧고 편안한 한국어 구어체",
