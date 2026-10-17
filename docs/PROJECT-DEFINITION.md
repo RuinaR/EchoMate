@@ -56,3 +56,9 @@ EchoMate는 친구들이 사용하는 Discord 서버의 특정 스레드에서 A
 - 봇은 **서버 표시 이름/프로필 사진 설정, 사전 제작 모델 로드, 대화 빈도·활동 채널/스레드 설정 및 자율 대화만** 담당.
 - 외부 DiscordChatExporter로 자료를 준비하고, 별도 EchoMate Studio가 허용된 파일을 분석·학습·버전 캐시·품질 검증. Bot에는 데이터 내보내기/학습 코드를 넣지 않는다.
 - 관련 최신 기준: [DEPLOYMENT-SEPARATION.md](DEPLOYMENT-SEPARATION.md). 과거 '봇에서 학습 파일 설정' 요구보다 이 결정이 우선.
+
+## 2026-10-18 입력·출력 세부 요구
+- 파일당 하나의 채널 기록. 채널별 연속 발언 후보를 복원하되 사이에 다른 화자가 있었는지 알 수 없다는 한계를 유지한다.
+- 최근 데이터의 스타일 가중치를 높인다(감쇠 반감기 A/B 검증).
+- 출력은 텍스트와 Discord 기본 Unicode 이모지만 허용. GIF/스티커/커스텀 이모지/첨부 미디어 사용 금지.
+- 상세: [TEMPORAL-STYLE-AND-MEDIA.md](TEMPORAL-STYLE-AND-MEDIA.md).
