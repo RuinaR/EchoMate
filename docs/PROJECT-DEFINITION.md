@@ -46,3 +46,8 @@ EchoMate는 친구들이 사용하는 Discord 서버의 특정 스레드에서 A
 - 단일 화자 메시지만 보유한 상태를 전제로 시작. 웹 검색을 통한 본인 발언 확인과 정식 데이터 패키지 신청 병행.
 - 초기 다중 페르소나 리스트박스 UI는 보류하고 실제 대화 품질과 로컬 데이터 분석을 우선한다.
 - 상세: [SINGLE-PERSONA-PLAN.md](SINGLE-PERSONA-PLAN.md). 이전 다중 페르소나 요구보다 이 결정이 우선한다.
+
+## 2026-10-18 추가 — 운영 중 적응
+- 본인 페르소나 단일 목표 유지. 미래 대화에 따라 현재 분위기와 상대별 반응이 변하는 적응 구조 요구.
+- 단기 SessionTone과 명시적 피드백 기반 지속 PersonaStyle을 분리한다. Discord API 대화 누적으로 장기 상대별 친밀도 점수를 자동 추론하는 기능은 정책 검토 없이 구현하지 않는다.
+- 상세: [CONTINUOUS-ADAPTATION.md](CONTINUOUS-ADAPTATION.md).
