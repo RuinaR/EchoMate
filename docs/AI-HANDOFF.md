@@ -47,3 +47,11 @@
 - 테스트 3개 추가: 대형 배열/청크 경계, 문법 오류 감지, 파일 1개 처리. **현재 9개 테스트로 증가; Windows 재실행 전 검증 미완료.**
 - 여전히 통계용 `(timestamp,length)`와 메시지 ID 집합을 RAM에 유지. 완전한 상수 메모리 아님.
 - 다음 조치: 사용자 Windows QA 결과, 원본 2개 JSON에 대한 `report-v2.json`과 기존 보고서 통계 대조.
+
+## 2026-10-18 — 로컬 Ollama 기준선 추가
+- 사용자 Windows 분석기 9개 단위 테스트 OK. `report-v2.json` 수치 및 SHA-256가 이전 `report.json`과 전부 일치함을 확인.
+- 새 코드: `ollama_client.py`, `conversation.py`, `chat_probe.py`; 새 모킹 테스트 `tests/test_conversation.py` 6개.
+- 현재 총 15개 테스트가 예정됨. **추가된 6개와 실제 Ollama 생성은 사용자 PC 검증 전**이며 실행 성공 단정 금지.
+- 모델 호출은 localhost 제한, 한 턴 현재 대화/설정된 짧은 스타일 지침을 사용. 원본 Discord 기록은 전달하지 않음. 학습·페르소나 모델·Discord 봇 코드 없음.
+- 다음 확인: `python -m unittest discover -s tests -v` / `python -m echomate_studio.chat_probe --model ... --message ...` 출력.
+- 이후 평가 세트/시간 계측, 명시적 스타일 프로필, 아티팩트 버전 관리 및 Discord Bot 순차 구현.
