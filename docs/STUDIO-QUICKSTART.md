@@ -30,3 +30,17 @@ python -m echomate_studio.analyze "C:\\data\\channel1.json" "C:\\data\\channel2.
 - EchoMate Bot과 독립 실행되는 Studio GUI 및 버전 캐시
 
 **주의:** Discord 데이터 패키지를 분석할 수 있는 것과 AI 학습에 이용할 수 있는 것은 별개이다. 자료의 사용 조건을 확인하기 전에는 모델 훈련이나 영속 RAG 생성에 투입하지 않는다.
+
+## 대용량 JSON 파서 v2 확인 (2026-10-18)
+- `analyze.py`는 JSON 배열을 스트리밍 처리한다. 전체 원문/첨부 URL을 통째로 메모리에 보관하지 않고 레코드 단위로 읽는다.
+- 파일별 메시지 ID, 시각, 본문 **길이**와 가중 통계 메타데이터는 정렬/중복 제거를 위해 메모리에 남는다. 따라서 메모리 소비가 완전한 상수는 아니다.
+- 입력 1개 이상 허용, 한 파일당 한 채널. 출력 포맷은 기존 `channels` 배열을 유지한다.
+- 증분 JSON 파싱 경계, 잘못된 JSON, 단일 파일 입력 회귀 테스트 추가. 원본 보고서와 동일한 통계가 나오는지 Windows에서 재확인 필요.
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m unittest discover -s tests -v
+python -m echomate_studio.analyze "C:\\Users\\user\\Desktop\\학습데이터\\messages1.json" "C:\\Users\\user\\Desktop\\학습데이터\\messages2.json" --output "local_data\\report-v2.json"
+```
+
+기존 `report.json`을 덮어쓰지 않는다. 숫자 변화가 있다면 신규/구버전 코드 차이 및 입력 변경 여부를 점검한다.
