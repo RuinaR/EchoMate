@@ -67,3 +67,9 @@
 - 신규 문서 docs/CONTINUOUS-ADAPTATION.md. 단기 실시간 톤 적응과 승인된 본인 피드백 기반 지속 스타일 갱신을 분리함.
 - Discord API 채팅으로 다른 사용자와의 장기 친밀도/관계 점수를 자동 추정하는 기능은 정책상 보류. 작성자 한 명만 학습한다는 이유로 Discord 정책이 면제되지는 않음.
 - 설계만 완료. 실제 모델 학습·Discord 수집 코드는 아직 없음.
+
+## 2026-10-18 — DiscordChatExporter 도입 절차
+- 사용자가 Windows GUI v2.48.0의 토큰 입력 화면에 도달함.
+- 공식 Discord Developer Portal의 Bot Token 방식으로 서버 관리자에게 초대를 요청하도록 안내함. 일반 개인 계정 토큰 추출은 지원하지 않음.
+- 신규 문서: docs/DISCORDCHATEXPORTER-GUIDE.md (설정, JSON, 스레드 포함, 개인정보/학습 허가 검증).
+- 실제 Discord 내보내기 및 모델 학습은 아직 수행되지 않음.
