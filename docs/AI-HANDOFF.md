@@ -73,3 +73,10 @@
 - 공식 Discord Developer Portal의 Bot Token 방식으로 서버 관리자에게 초대를 요청하도록 안내함. 일반 개인 계정 토큰 추출은 지원하지 않음.
 - 신규 문서: docs/DISCORDCHATEXPORTER-GUIDE.md (설정, JSON, 스레드 포함, 개인정보/학습 허가 검증).
 - 실제 Discord 내보내기 및 모델 학습은 아직 수행되지 않음.
+
+## 2026-10-18 최신 최우선 요구 — 운영 봇과 제작 스튜디오 분리
+- **Bot은 이름/프로필 사진, 저장된 로컬 모델 선택, 대화 빈도·활동 채널/스레드, 자율 대화만** 가진 경량 프로세스.
+- **Studio는 완전히 별도 도구**로 허용된 내보내기 파일로 페르소나 모델 제작·검증·버전 관리. DiscordChatExporter는 외부 도구로 사용.
+- 운영 중 Bot에서 데이터 수집·학습하지 않음. Model artifact는 읽기 전용 로드.
+- 최신 아키텍처: docs/DEPLOYMENT-SEPARATION.md. 이전의 봇 내 학습 UI/파이프라인은 보류.
+- Discord API 기반 AI 학습 정책 확인은 도구를 분리해도 여전히 필요. 코드는 아직 구현되지 않음.
