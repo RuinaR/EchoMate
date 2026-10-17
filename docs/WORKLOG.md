@@ -43,3 +43,9 @@
 - docs/DISCORDCHATEXPORTER-GUIDE.md 생성.
 - 보안: 토큰/GitHub 업로드 금지, 개인 계정 self-bot 금지, AI 모델 학습과 단순 백업 구분.
 - 실제 내보내기·코드 빌드·학습 테스트 미실시.
+
+## 2026-10-18 — Bot/Studio 프로세스 분리 결정
+- 사용자: EchoMate Bot을 표시 이름/프로필 사진·모델 로드·대화 빈도/대상 채널/스레드 기능으로 축소하고, DiscordChatExporter 파일을 이용하는 오프라인 학습 도구와 분리 요청.
+- docs/DEPLOYMENT-SEPARATION.md 신규, PROJECT-DEFINITION/ARCHITECTURE/ROADMAP/AI-HANDOFF 정합성 갱신.
+- 모델 아티팩트 형식, 캐시/검증/롤백, 봇 allowlist와 학습 분리 경계 명시.
+- 설계만 완료. Discord/학습 동작 테스트 미수행.
