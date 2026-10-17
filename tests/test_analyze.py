@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 
@@ -56,6 +57,24 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(analyze_file(path)["total_records"], 0)
         finally:
             folder.cleanup()
+
+    def test_cli_accepts_three_independent_channel_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            paths = []
+            for index in range(3):
+                path = root / f"channel_{index}.json"
+                record = {"ID": str(index + 1), "Timestamp": "2026-10-01 01:00:00",
+                          "Contents": f"채널 {index} 테스트", "Attachments": ""}
+                path.write_text(json.dumps([record], ensure_ascii=False), encoding="utf-8")
+                paths.append(str(path))
+            command = [sys.executable, "-m", "echomate_studio.analyze", *paths]
+            process = subprocess.run(command, capture_output=True, text=True,
+                                     check=True, env={**__import__("os").environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")})
+            channels = json.loads(process.stdout)["channels"]
+            self.assertEqual(len(channels), 3)
+            self.assertEqual([item["total_records"] for item in channels], [1, 1, 1])
+            self.assertEqual(len({item["source_label"] for item in channels}), 3)
 
     def test_invalid_parameter(self):
         folder, path = self.write([])
