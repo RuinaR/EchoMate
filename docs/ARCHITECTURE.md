@@ -38,3 +38,9 @@ configs/
 local_data/                # ignored
 models/                    # ignored
 ```
+
+## 2026-10-18 개정 아키텍처
+- 실행 경계: `EchoMate Bot` = Discord 공식 Bot Client + 모델 읽기 전용 Loader + Ollama + 스레드/채널 Allowlist + Autonomy Controller.
+- 제작 경계: `EchoMate Studio` = 외부 백업 파일 Importer + 출처·허가 게이트 + 단일 화자별 학습 + 비교 평가 + immutable 아티팩트/캐시.
+- 외부 DiscordChatExporter는 독립 도구이며 EchoMate가 수집을 자동 실행하지 않음.
+- 세부: [DEPLOYMENT-SEPARATION.md](DEPLOYMENT-SEPARATION.md).
