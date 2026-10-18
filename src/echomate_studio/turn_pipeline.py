@@ -13,6 +13,7 @@ from .dialogue_state import DialogueState
 from .participation import ParticipationPolicy, ContextAssessment, Decision, decide
 from .conversation import sanitize_output
 from .mention_reply import MentionPolicy, mentions_bot, permit_mention_reply
+from .engagement import EngagementPolicy, continue_engagement
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,11 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
                   rng=None, mention_policy: MentionPolicy | None = None,
                   bot_user_id: int | None = None,
                   latest_message_content: str | None = None,
-                  author_is_bot: bool = False, opted_out: bool = False) -> TurnResult:
+                  author_is_bot: bool = False, opted_out: bool = False,
+                  engagement_policy: EngagementPolicy | None = None,
+                  ongoing_engagement: bool = False,
+                  addressed_to_bot: bool = False,
+                  topic_continues: bool = False) -> TurnResult:
     version, context = state.recent_context(channel_id=channel_id, thread_id=thread_id, now=now)
     if not context or context[-1]["role"] != "user":
         return TurnResult(None, "no_recent_human_context", version)
@@ -48,7 +53,17 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
             seconds_since_last_reply=seconds_since_last_speech)
         if not directed:
             return TurnResult(None, reason, version)
-    if not directed:
+    continuing = False
+    if not directed and engagement_policy is not None:
+        continuing = continue_engagement(
+            engagement_policy, ongoing=ongoing_engagement,
+            seconds_since_last_bot_reply=seconds_since_last_speech,
+            addressed_to_bot=addressed_to_bot, topic_continues=topic_continues)
+        if continuing and (author_is_bot or opted_out or (
+            channel_id not in policy.allowed_channel_ids and
+            thread_id not in policy.allowed_thread_ids)):
+            return TurnResult(None, "engagement_outside_scope", version)
+    if not directed and not continuing:
         preliminary = decide(policy, ContextAssessment(False, True, True),
                              channel_id=channel_id, thread_id=thread_id,
                              is_bot_message=author_is_bot, opted_out=opted_out,
@@ -63,8 +78,8 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
         return TurnResult(None, "assessor_error", version)
     if not isinstance(assessment, ContextAssessment):
         return TurnResult(None, "invalid_assessment", version)
-    if assessment.is_sensitive_moment or (not directed and (
-            not assessment.has_useful_contribution or not assessment.interruption_is_appropriate)):
+    if assessment.is_sensitive_moment or not assessment.has_useful_contribution or (
+            not directed and not continuing and not assessment.interruption_is_appropriate):
         return TurnResult(None, "context_veto", version)
     if not state.is_current(channel_id=channel_id, thread_id=thread_id, version=version):
         return TurnResult(None, "stale_before_generation", version)
@@ -76,4 +91,4 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
         return TurnResult(None, "empty_response", version)
     if not state.is_current(channel_id=channel_id, thread_id=thread_id, version=version):
         return TurnResult(None, "stale_after_generation", version)
-    return TurnResult(reply[:1900], "direct_mention_ready" if directed else "ready", version)
+    return TurnResult(reply[:1900], "direct_mention_ready" if directed else ("engaged_ready" if continuing else "ready"), version)
