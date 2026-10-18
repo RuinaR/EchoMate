@@ -170,19 +170,24 @@ class Runtime:
             catalog['allowed_actions']=['SILENCE','REACTION'] if reaction_only else [k.value for k in Kind]
             proposed=parse_action(await self.backend.propose(context,catalog))
             if proposed.kind==Kind.SILENCE:return
-            if reaction_only and proposed.kind!=Kind.REACTION:return
+            if reaction_only and proposed.kind!=Kind.REACTION:
+                self.note('reaction_mode_veto');return
             action=proposed
             if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
                 answer=await self.backend.text(context,effective_character(cfg,event.content))
                 action=Action(action.kind,answer,action.asset)
-            if (event.guild,action.asset) in self.blocked_assets:return
+            if (event.guild,action.asset) in self.blocked_assets:
+                self.note('blocked_asset_veto');return
             permissions=await self.transport.permissions(event)
             # Catalog membership is re-fetched at send time to detect deleted assets.
             latest_catalog=await self.transport.catalog(event,self.cache)
-            if not validate_action(action,self.settings.get(),mode,permissions,latest_catalog,self.library,event.guild):return
-            if not await self.fresh(event,state,version,revision):return
+            if not validate_action(action,self.settings.get(),mode,permissions,latest_catalog,self.library,event.guild):
+                self.note('action_policy_veto');return
+            if not await self.fresh(event,state,version,revision):
+                self.note('stale_output_veto');return
             # Conservative at-most-once reservation: ambiguous HTTP failures are never replayed.
-            if not self.ledger.reserve(event,cfg["daily_limit"],cfg["cooldown"]):return
+            if not self.ledger.reserve(event,cfg["daily_limit"],cfg["cooldown"]):
+                self.note('duplicate_or_rate_veto');return
             try:
                 sent=await self.transport.execute(event,action,self.library,
                     lambda:self.fresh(event,state,version,revision))
