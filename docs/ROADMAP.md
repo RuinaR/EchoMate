@@ -419,3 +419,8 @@
 - [x] Gemma4 12B IT config-only probe ready_for_optional_load; type gemma4_unified; CUDA available; 15111 MiB free before load.
 - [ ] Explicit opt-in weights NF4 load and measure GPU allocation. Do not infer 12B fits from config preflight.
 - [ ] If successful: cached synthetic LoRA forward/backward/optimizer compatibility, memory and privacy-neutral diagnostics.
+
+## 2026-10-18 — Real 12B NF4 model load passed
+- [x] User Windows full 23.9GB Gemma4 IT checkpoint NF4 GPU load passed, 677 weights, 7381.7 MiB peak PyTorch allocated, 7621.0 MiB GPU free after.
+- [ ] Synthetic LoRA forward/backward/optimizer on 12B with cache-only weights; inspect peak VRAM.
+- [ ] Privacy-reviewed owner-data fine-tuning and baseline comparison (not started).
