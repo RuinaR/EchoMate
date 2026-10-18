@@ -113,3 +113,8 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - 대화 초대 의도 우선, 짧고 담백한 한국어 채팅체, 근거 없는 서비스 종료 주장 금지 프롬프트 수정 및 프로필 가이드 조정.
 - `chat_probe --timing`으로 생성 전체 소요시간 측정 가능. **품질/속도 개선은 아직 실제 Windows 재측정 전**.
 - 관련 조사: [PERSONA-RESEARCH-AND-QA.md](docs/PERSONA-RESEARCH-AND-QA.md).
+
+## 실제 말투 A/B 품질 실험
+- 단일 질문 1회 결과로 평가하지 않고, `python -m echomate_studio.ab_probe --profile local_data/style-profile.json --rounds 2`로 4개 합성 질문을 프로필 사용/미사용 교차순서로 비교 가능.
+- 결과는 `local_data/ab-results.json`에 저장되며 **대화 예시와 생성 응답**이 포함되므로 GitHub에 올리지 말 것.
+- 실제 품질 개선/속도 단축은 아직 Windows 반복 테스트 전.
