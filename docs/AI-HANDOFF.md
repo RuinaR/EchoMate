@@ -570,3 +570,8 @@
 ## 2026-10-18 — Windows distributed sampling regression green
 - User executed Windows unittest suite: 193 tests in 0.439s, OK. Confirms updated tokenizer mock and even-spread selection regression; this is not a fresh GPU run.
 - Screened real corpus remains NOT APPROVED pending rights and contextual privacy review. No first personal-data QLoRA completed. Next implement meaningful heldout evaluation of verified private, approved samples and compare baseline against adapter without cross-split leakage.
+
+## 2026-10-18 — Full QLoRA training path prepared, NOT EXECUTED
+- Added separate `tools/train_persona_gemma4_full.py`: 20..2000 one-pass steps, default 300, seq_len 128, sample spread across whole corpus, 16 heldout examples, eval every 25 steps, patience 5, saves `best/` adapter and optional adapter-only checkpoint snapshots every 100 steps. Writes aggregate metric JSON files only under local_data. These are WEIGHT snapshots, NOT exact optimizer-state resume.
+- Added fail-closed Windows entrypoint `tools/run_full_persona_training.ps1`: requires THREE explicit flags and pre-existing **reviewed** JSONL under ignored local_data, runs heuristic preflight before starting, uses unique output. Prior screened archive is labeled NOT APPROVED and must not be silently promoted.
+- Added 3 static regression tests; expected Windows suite 196, not executed yet. Full GPU and private-data persona training NOT executed. Third-party privacy and source-use rights remain outstanding; manual review/approval cannot be inferred from keyword filtering.
