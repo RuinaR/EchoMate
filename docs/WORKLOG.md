@@ -414,3 +414,7 @@
 
 ## 2026-10-18 — Gated first-persona QLoRA orchestration
 - Implemented ASCII PowerShell 5.1 synthetic short-message GPU smoke with unique local output; separate real private training runner with mandatory rights/privacy/training confirmations and fail-closed overlap/PII preflight. Private JSONL must already exist and be human reviewed; no automatic original export conversion. 2 static regression tests added, expected 188 on Windows (not tested yet). Existing 186 passed. No private training run yet.
+
+## 2026-10-18 — Short-example GPU synthetic integration green
+- User Windows 188/188 unit tests OK, 0.425s. Actual Gemma4 12B IT synthetic short-sample QLoRA 2-step trained, saved rank4 q/v LoRA. Uploaded checkpoint header: 176 FP32 tensors, 2,596,864 weights (~10.4 MB), as expected.
+- Report loss on SINGLE synthetic validation sample rose from 18.5799 to 18.6001; do not interpret successful execution as model quality gain. VRAM peak allocation 11163.6 MiB, free after 2893.5 MiB. Actual owner-message training not started.
