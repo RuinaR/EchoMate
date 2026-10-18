@@ -20,7 +20,7 @@ def parse_topic_continuity(value: str) -> bool:
         raise ValueError("invalid response type")
     response = value.strip()
     if response.startswith("```"):
-        response = re.sub(r"^\\s*```(?:json)?\\s*|\\s*```\\s*$", "", response, flags=re.I)
+        response = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", response, flags=re.I)
     payload = json.loads(response)
     if not isinstance(payload, dict) or set(payload) != {"topic_continues"} or type(payload["topic_continues"]) is not bool:
         raise ValueError("invalid topic response")
@@ -36,8 +36,8 @@ def assess_reply_topic(turns: list[Turn], *, model: str = "gemma3:12b",
     if target is None:
         return False
     # Model receives only bounded, local text from the actual referenced exchange.
-    prompt = (f"봇이 한 말: {target.content[:1000]}\\n"
-              f"사람이 답장한 말: {latest.content[:1000]}\\n"
+    prompt = (f"봇이 한 말: {target.content[:1000]}\n"
+              f"사람이 답장한 말: {latest.content[:1000]}\n"
               "같은 화제가 이어지는가?")
     try:
         raw = chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}],
