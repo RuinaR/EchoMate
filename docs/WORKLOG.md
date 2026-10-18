@@ -437,3 +437,6 @@
 - Updated Gemma4 trainer to choose deterministic evenly spread eligible examples rather than first N rows. Validation now averages up to min(8, max_steps) heldout examples, reducing dependence on one sentence; still a smoke experiment, not full quality evaluation.
 - Synthetic unit test for selection indices added. Last user test 192 OK before this change; expected 193 but Windows GPU and regression not yet run. No private owner-data training conducted.
 - Screened source ZIP remains NOT APPROVED. Optional short style set has no independently guaranteed chronological validation membership, so do not mix it into train until provenance / leakage review and applicable privacy rights are resolved.
+
+## 2026-10-18 — Prepared gated full training protocol
+- Separate longer Gemma4 12B QLoRA runner, checkpoints (adapter-only), validation average, best adapter, patience stop, JSON-only private metrics, and fail-closed PowerShell launcher. Added 3 tests. Last confirmed 193 Windows tests; now expected 196, Windows/GPU full-run not executed. No personal training executed. Training on screened-NOT-APPROVED archive remains blocked pending data permission and contextual review.
