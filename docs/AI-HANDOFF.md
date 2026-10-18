@@ -373,3 +373,8 @@
 ## 2026-10-18 — Synthetic Gemma QLoRA step prepared
 - Added tools/smoke_gemma4b_lora.py: explicit --allow-synthetic-step, use cached google/gemma-3-4b-it weights (local_files_only), NF4 PEFT q_proj/v_proj adapters, a tiny synthetic token sequence, a single forward/backward/AdamW optimizer step, aggregate VRAM/loss report only. No private chat data, no checkpoint writes. 3 preflight tests, expected 148 total; Windows unverified.
 - Warning: Gemma3 multimodal wrapper, PEFT task and gradient checkpointing compatibility remain unproven. Execution may fail; do not claim actual QLoRA works before observed successful run. Train-data permissions still unresolved.
+
+## 2026-10-18 — Real Gemma NF4 LoRA backward optimizer smoke SUCCESS
+- User Windows suite 152/152 OK (note 152, not expected earlier count 148). Local `gemma4b-lora-smoke.json`: status=ok; model google/gemma-3-4b-it; synthetic_only=true; seq_len=32; trainable_params=1,611,776; loss=2.49 (NOT quality score); peak_allocated=5660.7 MiB; free_after=8235.0 MiB. Full forward/loss/backward/AdamW optimizer step ran successfully on RTX 4070 Ti SUPER 16GB.
+- PyTorch gradient checkpoint emitted use_reentrant warning. Changed smoke tool prepare_model_for_kbit_training to explicit gradient_checkpointing_kwargs={use_reentrant:False}; this change needs Windows revalidation.
+- This establishes technical viability for tiny synthetic LoRA step, NOT final corpus training fit/quality. Next work: data rights and private content review, robust chronological splits and safe local-only training preparation, plus longer context/memory experiment as justified. No real-user text fine-tuning yet.
