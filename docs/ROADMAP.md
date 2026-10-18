@@ -408,3 +408,7 @@
 - [x] Separate synthetic NF4 LoRA backward probe with cached weights and static QA.
 - [ ] Windows 165 unit tests; Transformers Gemma4 compatibility preflight; NF4 download/load free VRAM check; synthetic LoRA optimizer step.
 - [ ] Approve private corpus safety/rights, comparative heldout study vs validated Gemma3 4B.
+
+## 2026-10-18 — Gemma4 isolated runtime
+- [x] Add separate .venv-gemma4 Windows setup, official multimodal loader, staged config and NF4 checks, and regression tests.
+- [ ] Run Windows tests, dependency import, config access, explicit NF4 loading; then synthetic LoRA step.
