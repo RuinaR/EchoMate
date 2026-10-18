@@ -201,3 +201,9 @@
 - `corpus_audit.py` added: per channel record counts, reverse ordering, repeated normalized messages, 10s adjacency, URL/mention/long-numeric/email candidate counts. Only aggregate counts, no raw strings, IDs, quotes or samples output. Regex corrected; `tests/test_corpus_audit.py` three synthetic tests.
 - Previously Windows 79 tests OK, new **82 expected**, Windows not yet run.
 - CRITICAL: user permission to inspect uploaded data is not a blanket claim of permission to train under Discord rules. Continue source/rights review. No fine-tuning or export yet. Direct corpus is available on current conversation mount, no need re-upload.
+
+## 2026-10-18 — Bot @멘션 응답 경로
+- 사용자가 @bot 멘션을 받으면 답하도록 추가 요청. `mention_reply.py`에서 정확한 Discord bot user ID와 `<@id>`/`<@!id>` 멘션을 검사하며 채널/스레드 허용 목록·opt-out·self-bot·쿨다운 반영.
+- `turn_pipeline` 명시적 멘션 분기는 자율 대화 확률이나 enabled 상태와 별개이지만 민감도, 범위, stale, 모델 오류는 차단. 오프라인 정책이며 Discord 송수신은 미구현.
+- 신규 테스트 9개로 사용자 마지막 79개 통과 기준 총 **88개 예상**. Windows 미검증.
+- corpus-audit.json: 채널1 244976 / text 223737 / distinct 156163 / repeated 78024, 채널2 60021 / text 47252 / distinct 36864 / repeated 12607. 공개 GitHub에 원본 미업로드.
