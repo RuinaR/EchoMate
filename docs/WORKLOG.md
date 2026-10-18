@@ -310,3 +310,6 @@
 
 ## 2026-10-18 — Real persona split audit QA
 - 155 tests OK, 2 exports analyzed: eligible instances 221883; train unique 164662, val unique 20356, cross split overlap 2130, clean val unique 18226. No raw messages/hashes in reports. Rights/privacy gate remains open.
+
+## 2026-10-18 — Persona research review
+- Compared primary LoRA/QLoRA/DoRA papers, memorization risks, and TRL/PEFT examples. Created docs/PERSONA-RESEARCH.md with EchoMate-specific baselines and experiment gate. No private message uploads or model training.
