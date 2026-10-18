@@ -11,6 +11,24 @@ from pathlib import Path
 
 MODEL_ID = "google/gemma-3-4b-it"
 
+def classify_error(exc):
+    """Categorize locally without putting sensitive URLs/tokens in reports."""
+    value = str(exc).lower()
+    if any(term in value for term in ("gated", "403", "access to model", "restricted repository",
+                                      "not authorized", "401", "unauthorized")):
+        return "model_access_not_granted"
+    if any(term in value for term in ("404", "repository not found", "not found on hugging face")):
+        return "model_repository_not_found_or_hidden"
+    if any(term in value for term in ("connection", "timeout", "ssl", "network", "proxy")):
+        return "network_or_tls_failure"
+    if any(term in value for term in ("no space left", "disk full", "not enough space")):
+        return "disk_space_failure"
+    if "out of memory" in value:
+        return "gpu_or_ram_out_of_memory"
+    if any(term in value for term in ("missing", "not installed", "cannot import", "dll load")):
+        return "missing_or_incompatible_dependency"
+    return "unclassified_load_error"
+
 def probe(*, allow_download=False, model_id=MODEL_ID, output=None):
     if model_id != MODEL_ID:
         raise ValueError("Only the reviewed Gemma 3 4B model is allowed")
@@ -31,7 +49,7 @@ def probe(*, allow_download=False, model_id=MODEL_ID, output=None):
             bnb_4bit_compute_dtype=torch.float16)
         model=Gemma3ForConditionalGeneration.from_pretrained(
             model_id,quantization_config=cfg,device_map={"":0},
-            torch_dtype=torch.float16,attn_implementation="sdpa")
+            dtype=torch.float16,attn_implementation="sdpa")
         torch.cuda.synchronize()
         free_after,_=torch.cuda.mem_get_info(0)
         result.update(status="ok",free_after_mib=round(free_after/1048576,1),
@@ -39,7 +57,7 @@ def probe(*, allow_download=False, model_id=MODEL_ID, output=None):
                       peak_allocated_mib=round(torch.cuda.max_memory_allocated(0)/1048576,1))
     except Exception as exc:
         result.update(status="failed",error_type=type(exc).__name__,
-                      reason="model_load_failed")
+                      reason="model_load_failed", failure_category=classify_error(exc))
     finally:
         del model
         gc.collect()
