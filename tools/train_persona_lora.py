@@ -48,7 +48,12 @@ def run(train,valid,out,*,max_steps=20,seq_len=128):
         ids=tokenizer(txt,add_special_tokens=True,truncation=True,max_length=seq_len)["input_ids"]
         if len(ids)>=8:train_samples.append(ids)
         if len(train_samples)>=max_steps:break
-    val_sample=next((ids for txt in validation if len(ids:=(tokenizer(txt,add_special_tokens=True,truncation=True,max_length=seq_len)["input_ids"])))>=8),None)
+    val_sample=None
+    for txt in validation:
+        candidate_ids=tokenizer(txt,add_special_tokens=True,truncation=True,max_length=seq_len)["input_ids"]
+        if len(candidate_ids)>=8:
+            val_sample=candidate_ids
+            break
     if not train_samples or val_sample is None:raise ValueError("Insufficient usable private texts")
     if tokenizer.pad_token_id is None:raise ValueError("Tokenizer must define padding")
     quant=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type="nf4",bnb_4bit_use_double_quant=True,bnb_4bit_compute_dtype=torch.float16)
