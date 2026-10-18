@@ -319,3 +319,6 @@
 
 ## 2026-10-18 — Private local LoRA runner
 - User 158 QA OK. Added offline Gemma3 4B NF4 LoRA training runner with explicit owner-data approval gate, private output paths, conservative step/token bounds and three unit tests. Expected 161 tests. No user data trained yet.
+
+## 2026-10-18 — Fix Windows training-runner import syntax
+- User reported 159 tests with one module-import SyntaxError (`tools/train_persona_lora.py` validation sample generator expression, unmatched `)`). Replaced with clear `for` loop and candidate length check. Source change committed, Windows rerun pending. Expected 161 passing cases with the three new tests imported.
