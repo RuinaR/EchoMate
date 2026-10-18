@@ -460,3 +460,9 @@
 - [x] Verify uploaded adapter header contains 176 float32 tensors, 2,596,864 scalar weights and expected q/v LoRA configuration.
 - [ ] Reload saved LoRA into cached Gemma4 12B base and run controlled safe inference; compare no-adapter path on same fixed prompt.
 - [ ] Review owner-data source rights and contextual privacy, near-duplicate/temporal leakage, then approved real-data training and held-out quality checks.
+
+## 2026-10-18 — Before private training readiness gates
+- [x] Code added for cached Gemma4 NF4 synthetic adapter reload baseline-vs-adapter loss probe and private JSONL aggregate-only overlap/privacy-hint audit.
+- [x] Three focused regression tests added.
+- [ ] Windows 180 unittests and GPU cached-adapter reload inference/loss comparison.
+- [ ] Human data-rights, contextual privacy and chronology review; quality holdout and memorization evaluation before genuine owner-data training.
