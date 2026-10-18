@@ -188,3 +188,9 @@
 - 그러나 ending_rates 전체 0.0: `style_diagnostics.py` 정규식이 raw string 안에서 `\\s`/`\\.`로 이중 이스케이프되어 정상 문장 끝을 감지하지 못한 것 확인. 정규식 교정하고 `tests/test_style_diagnostics.py` 3건 추가. 기존 76 + 신규 3 = 총 79개 예상, Windows 실행 전.
 - 튜닝 준비 보고서 status not_ready: rights_reviewed, owner_reviewed, training_data_screened, train_validation_split, compatible_base_weights_ready, qlora_environment_ready, baseline_quality_comparison_ready 모두 미완료. 실제 학습은 실행되지 않음.
 - 다음: 79개 테스트 및 사용자 원본 2개에서 style_diagnostics 재실행, 출력 확인. 데이터 사용 허가 판단 전 QLoRA 실학습은 보류.
+
+## 2026-10-18 — 사용자 원본 파일 직접 분석 허용 / 79개 검증
+- 사용자 Windows unittest **79개 모두 OK**. 정상화된 ending_rates: 질문 0.1098, 감탄 0.0021, 마침표 0.0525, 웃음 0.0389, 울음 0.005, 말줄임 0.0235. 최근 가중 12자 이하 0.8694.
+- 사용자가 **본인 메시지 원본 2개는 어시스턴트가 직접 검토해도 됨**, 단 GitHub 업로드 금지를 명시적으로 허용함. 대화 파일 검색으로 `messages1.json`(약 32.3MB), `messages2.json`(약 8.8MB) 현재 대화 파일에 존재함을 확인. 사용자 재업로드 요구하지 말 것.
+- 공개 GitHub에는 원본/발언 인용문/비공개 학습·평가 코퍼스를 올리지 않고, 개인 식별 콘텐츠의 로그 출력/커밋 방지. `.gitignore`에 messages*.json, 파생 JSONL 학습 파일, 모델 산출물 제외 추가. 이미 추적 중인 파일은 .gitignore만으로 막히지 않으므로 별도 git status/repo 확인 필요.
+- 사용자 허락은 파일 검토 및 저장소 비공개 원칙에 관한 것이며 Discord 데이터 학습 사용 허가의 법적 확인을 대체하지 않음. 실제 QLoRA 미실행.
