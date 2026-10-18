@@ -343,3 +343,9 @@
 ## 2026-10-18 — NF4 physical GPU smoke test verified
 - User Windows 143 unit tests OK. Local `tools/verify_nf4_gpu.py` status=ok: RTX 4070 Ti SUPER; quant_type=nf4; output shape=[2,128]; peak PyTorch allocated=0.08 MiB; reported free after=15073 MiB. This is only tiny synthetic kernel memory, not Gemma model memory or QLoRA VRAM readiness.
 - GPU CUDA 12.8, torch 2.9.1 cu128, PEFT/TRL/bitsandbytes imports and simple NF4 kernel verified. Next: inspect Gemma 3 base model access/license and gated weights, determine safe model loading/memory testing before persona training. Discord private data source training rights and sensitive review remain blockers. No weight download/training done.
+
+## 2026-10-18 — Gemma 3 4B opt-in real weight loading probe
+- User Windows 143 unittest OK, NF4 CUDA real probe OK on RTX 4070 Ti SUPER: peak allocated 0.08 MiB for *tiny synthetic* operation, 15073 MiB free after. Tiny result not indicative of full-model fit.
+- Official Hugging Face model `google/gemma-3-4b-it` is gated: individual must review/accept Gemma license and authenticate locally. This cannot be bypassed or presumed accepted.
+- Added `tools/probe_gemma4b_load.py` opt-in `--allow-download` model load using Gemma3ForConditionalGeneration, bitsandbytes NF4 and GPU VRAM report to ignored local_data. No Discord data, no training, no upload. Without flag: report not_run; tests/test_probe_gemma4b_load.py 2 tests. New Windows unittest expected 145, not yet verified.
+- Model download is multi-GB. User should first visit https://huggingface.co/google/gemma-3-4b-it and accept terms, then authenticate using `.venv-train\\Scripts\\hf.exe auth login` if offered in venv, avoiding pasting tokens into chat or terminal logs. **Do not run --allow-download without acceptance and explicit consent.** Model loading success != training or VRAM headroom for gradients.
