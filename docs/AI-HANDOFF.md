@@ -456,3 +456,9 @@
 - Extended `tools/smoke_gemma4_12b_lora.py` with opt-in 1..3 sequential optimizer steps and `--tokenizer-smoke` to exercise official tokenizer on a fixed synthetic Korean sentence; retains local cached weights, no user messages, failure stage/error class only. Three synthetic/no-download unit tests added in `tests/test_gemma4_extended_synthetic.py`.
 - Prior 168 Windows tests passed; new expected count 171 if tests discovered. Neither new tests nor extended GPU run has been independently executed on user's Windows device; do not report success yet.
 - Immediate next: run 171 unittests; 2 optimizer steps at seq32 with `--tokenizer-smoke`, inspect local JSON. Limit GPU concurrency; stop if OOM. Actual Discord corpus training still requires reviewed local dataset and rights confirmation.
+
+## 2026-10-18 — Windows Gemma4 tokenizer + two-step QLoRA success
+- User Windows unittest: 171/171 OK (0.606s).
+- User Windows `.venv-gemma4\\Scripts\\python.exe tools/smoke_gemma4_12b_lora.py --allow-synthetic-step --seq-len 32 --steps 2 --tokenizer-smoke`: 677/677 cached weights loaded; `status=ok`, `synthetic_only=true`, `tokenizer_smoke=true`, 2 optimizer updates.
+- Private-free JSON: 2,596,864 trainable parameters; losses [22.9326, 22.8617]; peak_allocated_mib=11163.6; free_after_mib=2344.8. Loss decrease in repeated synthetic example is not heldout quality proof; longer sequences, realistic owner corpus, VRAM stability and memorization checks NOT verified.
+- Next: build strictly reviewed corpus readiness/preflight and a Gemma4-specific offline trainer with careful tokenization, data split, failure cleanup and evaluation. Do not silently train on owner Discord content. Protect `.venv-train` / Gemma3 fallback.
