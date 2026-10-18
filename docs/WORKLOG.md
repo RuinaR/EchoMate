@@ -397,3 +397,7 @@
 
 ## 2026-10-18 — 183 Windows regression tests green
 - User executed unittest suite following the global chronological split fix: **183 tests OK in 0.463s**. Confirms unit-level behavior, not a full private-data privacy clearance, corpus authorization, or live QLoRA training.
+
+## 2026-10-18 — Two-character style preservation opt-in
+- Extended local-only approved dataset builder to optionally retain two-character expressions (e.g. laughter reactions) while keeping global holdout duplicate protection. Default exclusion unchanged. One regression test added, expect Windows 184 tests. No owner-data training or corpus build.
+- Follow-up required: short records may fail trainer >=8-token sampling; do not equate corpus retention with model learning.
