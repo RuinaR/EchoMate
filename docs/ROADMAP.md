@@ -339,3 +339,9 @@
 - [ ] 147 Windows tests and categorized real model load result.
 - [ ] Verify Gemma model access accepted; determine OSError cause without exposing tokens or raw exception dumps.
 - [ ] Only after full loading and VRAM checks, attempt synthetic adapter training; personal data rights not verified.
+
+## 2026-10-18 HF Gemma access gate
+- [x] 147 Windows tests pass; real model load failure categorized access denial.
+- [x] Tiny authenticated config-only gated access probe implemented.
+- [ ] Browser acceptance on same account and fine-grained token scopes; 149 tests and config probe result.
+- [ ] Once granted, opt-in model load VRAM and synthetic adapter gradient QA. Discord corpus rights and privacy gating still pending.
