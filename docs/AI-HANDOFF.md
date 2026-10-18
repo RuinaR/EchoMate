@@ -534,3 +534,7 @@
 - User Windows unittest import failed before exercising trainer: literal backslash-n sequences injected into `tools/train_persona_gemma4.py` source (line 115), not a CUDA/model/data failure. Also found malformed multiline Python string in newly added short-sample regression test.
 - Corrected literal escaped source newlines in trainer, corrected short-sample JSONL fixture string to Python `\\n` escapes, and added AST parse regression test for trainer.
 - Last confirmed Windows 184/184 suite green before this commit; current expected suite 186 tests (1 previous short-selection test newly discoverable plus 1 added syntax guard). Windows verification pending. Never commit or train on original Discord files without separate review.
+
+## 2026-10-18 — Windows 186 test suite green; owner training not started
+- User Windows: Ran 186 tests in 0.448s, OK. Short-token unit regression now passes.
+- Next: synthetic GPU short-selection test, private-data use rights and contextual privacy review, chronological dataset audit, then explicit first local owner-data QLoRA run. No private training yet. Never commit messages or private adapters.
