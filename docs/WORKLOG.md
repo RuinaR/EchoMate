@@ -262,3 +262,6 @@
 
 ## 2026-10-18 QLoRA GPU mock regression
 - Windows 134 tests, 1 test_gpu_query failure checking last subprocess mock call timeout. Test now checks matching NVIDIA query call, rerun required.
+
+## 2026-10-18 GPU QA
+- Windows 134 tests OK. Local GPU: RTX 4070 Ti SUPER, 16GB, 12.7GB free. Python 3.10.11, torch CPU-only, 5 training packages absent. Isolated CUDA environment needed. No training yet.
