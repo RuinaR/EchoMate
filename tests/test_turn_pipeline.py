@@ -68,16 +68,24 @@ class TurnPipelineTests(unittest.TestCase):
         self.assertEqual(result.reason, "engaged_ready")
         self.assertIsNotNone(result.reply)
 
-    def test_engagement_expires_or_changes_topic(self):
+    def test_engagement_context_over_time_and_topic_change(self):
         zero = ParticipationPolicy(enabled=True, allowed_channel_ids=frozenset({1}),
                                    opportunity_probability=0, cooldown_seconds=180)
         result = self.run_turn(policy=zero, seconds_since_last_speech=300,
             engagement_policy=EngagementPolicy(), ongoing_engagement=True,
             addressed_to_bot=True, topic_continues=True)
-        self.assertEqual(result.reason, "frequency_gate")
+        self.assertEqual(result.reason, "engaged_ready")
         result = self.run_turn(policy=zero, seconds_since_last_speech=5,
             engagement_policy=EngagementPolicy(), ongoing_engagement=True,
             addressed_to_bot=False, topic_continues=True)
+        self.assertEqual(result.reason, "cooldown")
+
+    def test_engagement_does_not_restart_without_evidence(self):
+        zero = ParticipationPolicy(enabled=True, allowed_channel_ids=frozenset({1}),
+                                   opportunity_probability=0, cooldown_seconds=180)
+        result = self.run_turn(policy=zero, seconds_since_last_speech=3,
+            engagement_policy=EngagementPolicy(), ongoing_engagement=False,
+            addressed_to_bot=True, topic_continues=True)
         self.assertEqual(result.reason, "cooldown")
 
     def test_engagement_still_respects_safety(self):
