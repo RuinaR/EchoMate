@@ -74,7 +74,7 @@ class TurnPipelineTests(unittest.TestCase):
         result = self.run_turn(policy=zero, seconds_since_last_speech=300,
             engagement_policy=EngagementPolicy(), ongoing_engagement=True,
             addressed_to_bot=True, topic_continues=True)
-        self.assertEqual(result.reason, "cooldown")
+        self.assertEqual(result.reason, "frequency_gate")
         result = self.run_turn(policy=zero, seconds_since_last_speech=5,
             engagement_policy=EngagementPolicy(), ongoing_engagement=True,
             addressed_to_bot=False, topic_continues=True)
@@ -83,7 +83,8 @@ class TurnPipelineTests(unittest.TestCase):
     def test_engagement_still_respects_safety(self):
         zero = ParticipationPolicy(enabled=True, allowed_channel_ids=frozenset({1}),
                                    opportunity_probability=0)
-        result = self.run_turn(policy=zero, engagement_policy=EngagementPolicy(),
+        result = self.run_turn(policy=zero, seconds_since_last_speech=5,
+            engagement_policy=EngagementPolicy(),
             ongoing_engagement=True, addressed_to_bot=True, topic_continues=True,
             assessor=lambda _: ContextAssessment(True, True, True))
         self.assertEqual(result.reason,"context_veto")
