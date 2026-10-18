@@ -373,3 +373,8 @@
 - User Windows unittest 176/176 OK (0.397s). Synthetic E2E .ps1 stopped during parsing, before training; PowerShell displayed corrupted Korean source and unterminated quote. This is a script encoding defect, NOT evidence of a Gemma4 training/GPU failure.
 - Changed tools/run_gemma4_synthetic_e2e.ps1 source to ASCII-only and reconstructs fixed synthetic Korean phrases from Base64 UTF-8 bytes. Generated JSONL remains UTF-8. No real owner messages used.
 - Added regression test test_powershell_51_source_is_ascii; expected suite now 177 tests, NOT yet Windows verified. Retry the same E2E command. Old output directory may exist from script parse failure only if an earlier run created it; do not overwrite any existing adapter automatically.
+
+## 2026-10-18 — Windows 177 tests and actual saved synthetic Gemma4 adapter
+- 177 unit tests passed in 0.402s. Windows PowerShell ASCII source script ran end-to-end (previous encoding error resolved).
+- Actual Gemma4 12B IT NF4 two-step private-free synthetic train and local adapter save completed; report: validation 23.6352 -> 23.6266, peak 11163.6 MiB, free 2454.3 MiB, 2,596,864 trainable params.
+- Uploaded adapter header independently inspected: 176 F32 tensors / 2,596,864 elements / approx 10.4MB; adapter_config LoRA rank 4, q/v projections, correct base. Not yet reloaded/inferred on GPU; this is not personal training or quality proof.
