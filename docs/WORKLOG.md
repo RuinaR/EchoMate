@@ -216,3 +216,8 @@
 - 사용자 97개 Windows 테스트 모두 OK. 최근 시간 간격만으로는 이어가기 판단하지 않는 상태.
 - 신규 engagement_evidence: 실제 `reply_to`가 봇 발언을 참조하는 경우만 이어가기 후보로 인정; 주제 연결성은 별도 입력 필요.
 - 턴 파이프라인 연동과 테스트 6개 추가. Windows 103개 QA 필요.
+
+## 2026-10-18 — 연속 대화 로컬 AI 판정 연결
+- Windows 기존 103개 테스트 OK.
+- 실제 bot reply 대상과 인간 답장의 주제 연속성을 로컬 Ollama JSON 분류로 평가하는 `topic_assessor.py` 추가; 잘못된 데이터/추론 장애 시 false.
+- 기존 TurnPipeline에 선택적 assessor 함수 주입, 신규 회귀 테스트 6개. 총 109개 예상, 사용자 Windows QA 전.
