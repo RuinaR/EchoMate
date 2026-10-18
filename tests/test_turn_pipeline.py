@@ -7,6 +7,7 @@ from echomate_studio.dialogue_state import DialogueState, Turn
 from echomate_studio.participation import ParticipationPolicy, ContextAssessment
 from echomate_studio.turn_pipeline import evaluate_turn
 from echomate_studio.mention_reply import MentionPolicy
+from echomate_studio.engagement import EngagementPolicy
 
 
 class TurnPipelineTests(unittest.TestCase):
@@ -56,6 +57,36 @@ class TurnPipelineTests(unittest.TestCase):
             mention_policy=allowed, bot_user_id=123,
             latest_message_content="<@123>", opted_out=True)
         self.assertEqual(result.reason, "opt_out")
+
+    def test_engaged_bypasses_autonomous_cooldown_and_probability(self):
+        zero = ParticipationPolicy(enabled=True, allowed_channel_ids=frozenset({1}),
+                                   opportunity_probability=0, cooldown_seconds=180)
+        result = self.run_turn(policy=zero, seconds_since_last_speech=5,
+            engagement_policy=EngagementPolicy(), ongoing_engagement=True,
+            addressed_to_bot=True, topic_continues=True,
+            assessor=lambda _: ContextAssessment(False, True, False))
+        self.assertEqual(result.reason, "engaged_ready")
+        self.assertIsNotNone(result.reply)
+
+    def test_engagement_expires_or_changes_topic(self):
+        zero = ParticipationPolicy(enabled=True, allowed_channel_ids=frozenset({1}),
+                                   opportunity_probability=0, cooldown_seconds=180)
+        result = self.run_turn(policy=zero, seconds_since_last_speech=300,
+            engagement_policy=EngagementPolicy(), ongoing_engagement=True,
+            addressed_to_bot=True, topic_continues=True)
+        self.assertEqual(result.reason, "cooldown")
+        result = self.run_turn(policy=zero, seconds_since_last_speech=5,
+            engagement_policy=EngagementPolicy(), ongoing_engagement=True,
+            addressed_to_bot=False, topic_continues=True)
+        self.assertEqual(result.reason, "cooldown")
+
+    def test_engagement_still_respects_safety(self):
+        zero = ParticipationPolicy(enabled=True, allowed_channel_ids=frozenset({1}),
+                                   opportunity_probability=0)
+        result = self.run_turn(policy=zero, engagement_policy=EngagementPolicy(),
+            ongoing_engagement=True, addressed_to_bot=True, topic_continues=True,
+            assessor=lambda _: ContextAssessment(True, True, True))
+        self.assertEqual(result.reason,"context_veto")
 
     def test_ready(self):
         result = self.run_turn()
