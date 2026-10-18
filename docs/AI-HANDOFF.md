@@ -467,3 +467,8 @@
 - Created `tools/train_persona_gemma4.py` separate from proven Gemma3 trainer. Cached `google/gemma-4-12B-it` NF4 base with multimodal auto loader, q/v rank4 PEFT, text-only owner single-speaker LM, 1..10 steps, seq16..64 (default 2/32), one held-out loss before/after update, saved private adapter and aggregate report.
 - Requires **three explicit gates** (`--approve-private-training --confirm-rights --confirm-privacy-review`) AND existing reviewed local_data JSONL train and validation. Never automatically extracts Discord exports or uses remote API/weight download; outputs only inside local_data. Pretraining single-speaker lines are not converted into fake Q&A.
 - Added `tests/test_train_persona_gemma4.py` (3 no-GPU unit tests): 171 previous Windows green; new expected 174, Windows/GPU training NOT verified. Validate actual external data rights, privacy, exact/near duplicate risk independently. Do not run approval flags until actual human review/authorization.
+
+## 2026-10-18 — User Windows 174 QA green; synthetic E2E trainer test prepared
+- User reported `Ran 174 tests in 0.681s OK`. Confirms new Gemma4 trainer validation unit tests, NOT its GPU training/saving path.
+- Added `tools/run_gemma4_synthetic_e2e.ps1` creating only fixed invented Korean single-speaker train/validation JSONL inside ignored local_data, then invoking the gated Gemma4 private trainer at 2 steps, seq32. The three flags in this script certify **only synthetic test inputs**, never user-data authorization. Script refuses to overwrite an existing adapter.
+- Two no-GPU script tests added. Expected Windows unittest count now 176; script's GPU E2E and adapter saving NOT YET EXECUTED.
