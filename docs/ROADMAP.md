@@ -297,3 +297,9 @@
 ## 2026-10-18 QLoRA environment verification
 - [ ] Re-run all 134 Windows tests after mock assertion adjustment.
 - [ ] Run local GPU report and assess CUDA/packages; no model training yet.
+
+## 2026-10-18 local persona training environment
+- [x] 134 Windows unittest OK; GPU diagnostic RTX 4070 Ti SUPER 16GB, torch CPU-only.
+- [x] .venv-train isolation, CUDA PyTorch setup with fail-fast tensor check and optional PEFT/TRL stack installation.
+- [ ] User Windows 137 unittest and CUDA bootstrap confirmation.
+- [ ] Verify training dataset rights, sensitive-data review, compatible Gemma base weight access, and adapter A/B.
