@@ -137,3 +137,9 @@
 - 새 모듈 stale_recovery.py: 생성 중 새 메시지 발생 시 유한 재평가, 기본 최대 2회, 불확실 시 침묵; 합성 테스트 5건 추가(Windows 아직 미실행).
 - 웹 검색은 필요한 경우만 opt-in 및 외부 전송 최소화. 페르소나 Style Profile v1부터 다음 작업 시작. docs/SEARCH-AND-PERSONA-PLAN.md 작성.
 - QLoRA/모델 학습 및 Discord/Web 실제 연결은 이 변경에 포함되지 않음.
+
+## 2026-10-18 — Style Profile v1 착수
+- Windows 기존 55개 unittest 모두 OK.
+- 로컬 JSON N개를 대상으로 최근 가중치 기반 말투 집계만 저장하는 Studio Style Profile 코드 추가.
+- Qwen 단발 대화 probe에 선택적 스타일 프로필 입력 옵션 추가. 회귀 테스트 3건 작성, Windows 미검증.
+- 원문 텍스트를 저장하거나 Ollama 학습에 넣는 기능 아님. 페르소나 품질 비교용 기준선.
