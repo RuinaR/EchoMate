@@ -42,6 +42,19 @@ class Gemma4PersonaTrainerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mod.validate(a,b,o,**flags)
 
+
+    def test_short_samples_are_opt_in_and_never_concatenated(self):
+        with tempfile.TemporaryDirectory() as d:
+            a,b,o=self.fixture(d)
+            a.write_text('{"text":"AA"}\n{"text":"longer distinct synthetic statement"}\n',encoding="utf-8")
+            class FakeTokenizer:
+                def __call__(self,text,**kwargs):
+                    return {"input_ids": [1,2,3,4] if text=="AA" else list(range(9))}
+            tok=FakeTokenizer()
+            self.assertEqual(mod.select_ids(a,tok,32,2),[list(range(9))])
+            self.assertEqual(mod.select_ids(a,tok,32,2,min_tokens=3),
+                             [[1,2,3,4],list(range(9))])
+
     def test_schema_strict_and_no_model_import(self):
         with tempfile.TemporaryDirectory() as d:
             a,b,o=self.fixture(d)
