@@ -1,62 +1,69 @@
 # Windows Discord Bot 실행과 검증
 
-2026-10-19. 공식 Bot 계정만 사용한다. 모델 품질 확정/운영 승격과 테스트 연결은 별개다. 현재 잠정 rank8-60은 보존하며 실사용 품질은 미확정이다. 이 문서는 테스트 서버부터 연결하는 절차다.
+2026-10-19 최신 기준. 현재 모델은 rank8 q/k/v/o 60단계 잠정 후보이며 품질 승인은 별개다. 등록 미디어는 제거했고 기본 에셋과 실험 시각 분석을 분리했다.
+
+## 기존 설정이 있는 경우
+
+`EchoMate.cmd`를 더블 클릭하거나 `tools/start_echomate_app.ps1`을 실행한다. 앱은 사용자가 닫은 상태로 유지했다. 시작 전에도 공식 Bot REST로 초대된 서버/채널/활성 스레드 목록을 불러오며 본문/이미지는 수집하지 않는다. `봇 켜기`를 눌러야 모델/Gateway와 응답을 시작한다. 첫 모델 준비는 약35~40초다. [처음부터 따라 하는 테스트](TESTING-DISCORD-APP.md).
+
+1. **대화할 곳**에서 서버와 채널/활성 스레드를 선택한다. Ctrl+클릭으로 여러 곳을 선택하고 채팅/반응 규칙을 저장한다. 선택만으로 활성화되지 않는다. 부모 채널을 고르면 스레드 적용도 선택할 수 있다.
+2. **응답 방식**에서 글/이모지/Discord 기본 스티커를 고르고 **성격과 기분**에서 기분·성격·먼저 참여하는 정도·시간·모델을 조정한다. 변경은 재시작 없이 적용한다. 멘션 전용에서도 확인된 후속 대화는 이어가며, 새로운 참여에는 자연스럽게 대화에 참여를 고른다.
+3. **진행 상황**에서 단계/경과/대기/최근 답변 시간을 확인한다. 본문/토큰은 표시하지 않는다. 긴 기술 설명은 여전히 느릴 수 있다. Discord에는 작성 중 표시를 보내지만 이를 실제 속도 개선으로 세지 않는다.
+4. **실험 기능**은 이미지 분석 하나의 토글이다. 기본 OFF이며 과거 QA의 vision=true를 자동 계승하지 않는다. 응답 일시정지는 문맥을 유지하고, 봇 끄기는 모델/이력을 정리한다.
+
+패널·목록·버튼·토글은 Canvas로 직접 그렸다. 참고 구조/키보드/접근성 제한은 [DESKTOP-UI](DESKTOP-UI.md)를 확인한다. 앱과 CLI의 중복 실행은 파일 잠금으로 차단한다. 별도 QA 도구는 먼저 종료하고 시작한다. 로컬 앱은 bootstrap을 읽을 수 있는 같은 Windows 계정이 권한 경계다. 공개 HTTP 관리 포트는 열지 않는다.
 
 ## 최초 설정
 
-1. [Discord Developer Portal](https://discord.com/developers/applications)에서 Application/Bot을 만들고 Bot 탭의 **Message Content Intent**를 켠다. Presence/Members Intent는 필요 없다. 토큰은 채팅·스크린샷·명령줄 인자로 보내지 않는다.
-2. OAuth2 URL Generator에서 `bot`, `applications.commands`를 선택한다. 테스트 서버에서 View Channels, Send Messages, Read Message History를 허용한다. 반응은 Add Reactions, 미디어는 Attach Files, 스레드는 Send Messages in Threads를 추가한다. Administrator/Manage Messages/Manage Channels/외부 이모지·스티커 권한은 요청하지 않는다. 위 선택 권한을 모두 쓰는 비트 값은 `274878008384`다.
-3. Discord 설정 → 고급 → 개발자 모드를 켠 뒤 **자신의 사용자 ID**, 테스트 서버 ID, 테스트 텍스트 채널 ID를 복사한다. 닉네임으로 인증하지 않는다.
-4. 저장소 루트 PowerShell에서 `./tools/setup_discord_bot.ps1` 실행. 보안 입력 프롬프트에 공식 Bot Token을 넣는다. 생성되는 `local_data/bot/bootstrap.json`에 소유자·관리 서버·토큰·서명 키가 저장된다. Windows ACL 상속을 제거하고 현재 Windows 계정/SYSTEM만 허용한다. 설정 디렉터리를 다른 계정과 공유하지 않는다.
-5. `./tools/start_discord_bot.ps1` 실행. 공식 Gateway에 연결하고 등록한 관리 서버에만 슬래시 명령을 동기화한다. 설정 기본은 **정지**, 테스트 채널은 **멘션만**이다. `/echo panel`에서 활성화하거나 `/echo set key:enabled value:true`를 실행한다. 채널에 봇을 실제로 멘션해 시험한다. 일반 서버 전체를 자동 활성화하지 않는다.
+이미 설정했다면 bootstrap을 덮어쓰거나 setup을 다시 실행하지 않는다.
 
-기존 `.venv-gemma4`에 `configs/bot-requirements.txt`의 discord.py/aiohttp를 추가한다. 기존 torch/transformers를 무작정 업그레이드하지 않는다. 현재 검증 환경은 torch 2.9.1+cu128와 torchvision 0.24.1+cu128 조합이다. torchvision은 `python -m pip install torchvision==0.24.1 --index-url https://download.pytorch.org/whl/cu128 --no-deps`로 별도 설치한다. 모델은 캐시된 Gemma만 읽으며 실행 시 자동 다운로드하지 않는다.
+1. [Discord Developer Portal](https://discord.com/developers/applications)에서 공식 Application/Bot을 만들고 Message Content Intent를 켠다. Members/Presence Intent와 self-bot은 사용하지 않는다. 토큰을 채팅·명령줄 인자·스크린샷으로 보내지 않는다.
+2. OAuth2에서 bot/applications.commands를 고른다. View Channels, Send Messages, Read Message History, Add Reactions, Send Messages in Threads만 요청한다. 파일 첨부 기능은 제거돼 Attach Files가 필요 없다. Administrator/Manage 권한이나 외부 커스텀 에셋 권한을 요청하지 않는다.
+3. 개발자 모드에서 자신의 User ID, 테스트 서버 ID, 테스트 채널 ID를 복사한다. 닉네임으로 인증하지 않는다.
+4. PowerShell에서 `tools/setup_discord_bot.ps1`을 실행하고 공식 토큰을 보안 입력에 넣는다. local_data/bot/bootstrap.json의 ACL을 현재 Windows 계정/SYSTEM으로 제한한다. 토큰/서명 키/owner ID는 mutable 설정 밖에 있다.
+5. 앱 또는 `tools/start_discord_bot.ps1`로 연결한다. 기본은 정지와 테스트 채널 멘션 전용이다. 다른 서버/채널을 자동 활성화하지 않는다.
 
-토큰/서명 키/소유자는 슬래시 명령이나 mutable 설정으로 바꿀 수 없다. 로컬 bootstrap은 신뢰 경계다. 같은 Windows 계정을 통제하는 공격자로부터 비밀을 보호한다고 주장하지 않는다. 설정 파일을 직접 편집하면 서명 검사가 실패한다. 설정을 고치려면 정상 소유자 명령을 사용한다. 손상 파일은 백업 후 소유자가 로컬에서 복구하며 기존 모델/학습 파일을 삭제하지 않는다. bootstrap 재설정은 새 키를 만들기 때문에 기존 서명된 설정/미디어 승인을 자동 복구하지 않는다.
+기존 venv와 모델 캐시만 사용한다. configs/bot-requirements.txt 의존성과 현재 torch 2.9.1+cu128 / torchvision 0.24.1+cu128 조합을 유지하며 무작정 업그레이드하지 않는다. 실행 중 모델을 자동 다운로드하거나 학습하지 않는다. 같은 Windows 계정이 공격자에게 넘어간 상황의 비밀 보호는 보장하지 않는다. 설정을 직접 편집하면 HMAC 검사가 실패한다.
 
 ## 소유자 관리
 
-모든 `/echo` 명령과 패널 동작은 서버 측에서 소유자 ID 및 로컬 관리 서버를 확인한다. 응답은 ephemeral이다. 슬래시 명령 이름 자체를 모든 일반 사용자에게 숨긴다고 보장하지는 않는다. Discord 서버 설정 → Integrations에서 소유자에게만 명령 사용을 허용하면 발견 범위도 줄일 수 있다. 서버 관리자라는 이유만으로 소유자 검사를 통과하지 않는다.
+모든 `/echo` 명령/패널은 실제 Discord User ID와 등록된 관리 서버를 검사하고 ephemeral로 답한다. 서버 관리자 권한만으로 검사를 통과할 수 없다. GUI는 현재 초대 서버 목록에서 소유자가 직접 범위를 적용할 수 있으며, 슬래시 명령 등록은 bootstrap 관리 서버에 한정한다.
 
 | 명령/설정 | 용도 |
 |---|---|
-| `/echo panel` | 상태, 활성/중지, 7가지 기분 선택 |
-| `/echo set` | 설정 키/값. boolean은 true/false |
-| `mood` | 평온/기쁨/신남/우울/화남/피곤함/부끄러움 |
-| `warmth`, `cuteness`, `playfulness` | 0..100, 기본 75/40/20 |
-| `auto_mood` | 기본 false. true일 때 축하/휴식 표현에 한정한 일시적 연출; 사람 감정 추론/영구 프로필 아님 |
-| `model` | base/persona. 같은 GPU 모델에서 어댑터 활성/비활성. 임의 모델 경로 실행 금지 |
-| `text`, `reactions`, `stickers`, `media`, `vision` | 별도 토글. text 외 기본 false |
-| `activity` | quiet/normal/active/very_active. 적절성 검사 후 신규 참여 확률만 변경 |
-| `cooldown`, `engagement_seconds` | 기본 60초/600초. 대화 중임을 문맥으로 확인해야 지속 |
-| `media_probability`, `daily_limit` | 자동 미디어 제안 기회 기본 .05, 모든 출력 일일 상한 기본 100 |
-| `/echo guild` | 현재 관리 서버 활성/비활성 |
-| `/echo scope` | 현재 서버의 채널/스레드와 silent/mention/autonomous/reaction 선택 |
-| scope의 `inherit` | 부모 채널에서 명시적으로 true일 때만 미등록 하위 스레드 상속. 스레드의 명시적 silent가 우선 |
-| `/echo cache` | 현재 서버 캐시 삭제. refresh=true는 허용 채널+vision 활성 상태에서 실제 에셋 분석, offset으로 50개씩 갱신 |
-| `/echo media_add` | 소유자가 첨부한 승인 파일 검증·실제 분석 후 등록 |
-| `/echo media` | list/delete/tags/purpose/enabled/cooldown/guilds. 허용 서버 목록은 로컬 관리 서버에 한정 |
-| `/echo shutdown` | 안전한 종료. 다시 시작은 Windows 스크립트 사용 |
+| `/echo panel` | 활성/중지·상태·기분 |
+| `/echo set` | mood, warmth, cuteness, playfulness, auto_mood, model, text, reactions, stickers, vision, activity, cooldown, engagement_seconds, daily_limit, enabled |
+| `vision` | 실험 이미지 분석. 기본 OFF, 커스텀 에셋 전송 허용과 무관 |
+| `model` | 신뢰된 base/persona만. 임의 모델 코드/경로 실행 금지 |
+| `activity` | quiet/normal/active/very_active. 신규 참여 기회만 조절 |
+| `/echo guild`, `/echo scope` | 관리 서버 활성/범위. GUI는 채팅/반응을 독립 설정하며 legacy scope 명령은 공통 모드를 설정 |
+| `/echo cache` | 실험 시각 캐시 삭제/갱신. 허용 범위+실험 ON에서만 실제 분석. 기본 5개, limit 1~10/offset |
+| `/echo shutdown` | 안전 종료 |
 
-등록 파일은 최대 8MiB, 라이브러리 100개/128MiB, 기본 파일별 재사용 쿨다운 1시간이다. 수신 첨부/시각 캐시는 송신 승인으로 승격되지 않는다. 캐시된 에셋 이름만으로 시각적 의미를 추정하지 않는다. 커스텀 이모지·스티커는 **현재 서버 소유 에셋만**, 정상 권한/존재/시각 분석 확인 후 사용한다.
+`media_add`/`media` 명령과 등록/승인/파일 전송 코드는 제거했다. 기존 private 미디어 파일과 이전 실험 결과는 삭제하지 않았다.
 
-## 시각 기능과 자원 제한
+## 기본 에셋과 실험 시각 기능
 
-PNG/JPEG/GIF/WebP 및 Pillow에서 읽을 수 있는 APNG를 지원한다. 일반 첨부, 서버 커스텀 이모지/움직이는 이모지, PNG/APNG/GIF 서버 스티커, 검증한 Discord CDN 또는 Discord 이미지 프록시 임베드를 읽는다. **Lottie/JSON 스티커는 미지원**이며 이름만으로 이해한 척하지 않는다. 임의 외부 URL과 리다이렉트는 다운로드하지 않는다.
+일반 인식/사용은 Unicode 이모지와 Discord **STANDARD** 기본 스티커다. 기본 스티커는 공식 팩의 설명·태그로 구분하고 실제 픽셀을 봤다고 주장하지 않는다. 서버 **GUILD** 스티커와 커스텀/움직이는 이모지는 송신하지 않는다. 팩 조회 실패 시 보수적으로 비활성화한다. 사용 불가능한 스티커는 실패 후 반복 시도하지 않는다. 기본 스티커 실제 송신은 별도 Discord QA가 필요하다.
 
-8MiB/이미지 12MP/최대 변 8192/애니메이션 200프레임 및 전체 픽셀 작업량 48MP 제한. 서로 다른 최대 4프레임을 시간 순서로 샘플링하고 640px로 줄인다. 표본 밖의 움직임은 확정하지 않는다. 시각 분석은 기본 가중치를 사용하며 텍스트 어댑터와의 호환 시험은 별도 기록한다. structured JSON 실패/미완결/채널 제어 혼입이면 해당 분석은 실패로 처리한다.
+실험 ON에서만 일반 첨부/커스텀 에셋/PNG·GIF·WebP·APNG/임베드 픽셀을 분석한다. Lottie/JSON 픽셀 분석은 미지원이다. 공식 기본 스티커의 네이티브 전송과 로컬 Lottie 분석 지원은 별개다. 신뢰된 Discord CDN/프록시만 사용하고 임의 외부 URL/redirect는 금지한다. 8MiB, 12MP, 최대 변8192, 애니메이션200프레임/전체48MP 제한, 최대4프레임 시간 순서 샘플링·640px 축소. 불명확한 의미나 표본 밖 움직임을 확정하지 않는다. 실험을 켜도 커스텀 에셋이나 등록 파일을 전송할 수 없다.
 
-현재 모델 캐시에 modality processor 파일이 없으면 설치된 Gemma4Unified 구현의 기본 전처리와 캐시된 vision 크기 설정으로 로컬 구성한다. 별도 공개 processor artifact와 동등성은 미확인이다. 실제 GPU 결과/제약은 ML-EXPERIMENTS와 로컬 gpu-smoke 기록을 확인한다. 실제 사진·감정·스티커 이해 정확성은 합성 도형 성공만으로 검증되지 않는다.
+현재 캐시에 modality processor 파일이 없어 설치된 Gemma4Unified 기본값+vision 크기 설정을 이용했다. 별도 공식 artifact와 동등성/실제 사진·표정 정확성은 미확인이다. 실험 결과는 ML-EXPERIMENTS와 local_data에 보관한다.
 
-GPU 작업은 단일 worker로 직렬화하고 최대 12개 대기 요청만 받는다. 수신 이벤트는 추론 완료를 기다리지 않는다. 최대 32개 활성 대화, 대화당 100턴/1시간, 모델 입력 6,000토큰 상한. 새 메시지/권한·설정·스레드 변경은 낡은 출력을 폐기한다. GPU 85도, GPU 여유 512MiB 미만, RAM 여유 2GiB 미만이면 안전 중단한다. OOM은 추론을 비활성화하고 프로세스 재시작을 요구한다. 모델당 generate 최대 시간은 90초이며 한 대화 턴은 여러 판정/생성 호출을 포함할 수 있다.
+## 대화·지연·안정성
 
-SQLite 송신 예약은 이벤트 중복·쿨다운·일일 상한을 재시작 후에도 유지한다. Discord nonce를 메시지 ID로 고정한다. 애매한 HTTP 실패는 앱에서 재송신하지 않는다. 텍스트+반응은 Discord의 원자 트랜잭션이 아니므로 일부만 성공할 수 있다. 3회 연속 실패 시 안전 정지하고 문제 에셋 재사용을 차단한다. 에셋 수정 후 소유자 cache 명령/프로세스 재시작으로 재검토한다.
+명시적 멘션과 실제 이력에서 확인한 봇 메시지의 Discord 답장은 끼어들기 투표 없이 TEXT 1회 생성이 가능하다. 그 밖의 무멘션 참여/지속에는 문맥 판단을 유지한다. 텍스트는 Discord reply로 보내며 미응답 원래 멘션 ID를 보관해 같은 화자의 추가 메시지가 와도 원래 질문에 답장한다. 대상 삭제/새 문맥/권한 변경/설정 변경 시 낡은 출력은 취소한다. 작성 중 표시의 갱신도 취소하며 부분 모델 출력은 보내지 않는다.
+
+신규 참여 쿨다운 기본60초, 직접 멘션/확인된 지속은2초, 일일 상한100. 같은 화자의 실제 미응답 멘션은30초 내 추가 문맥에 한해 보존한다. 다른 사람의 발언을 멘션으로 추정하지 않는다. 대화당100턴/1시간·최대32채널이며 재시작 후 영구 기억을 보장하지 않는다. 기분 변경은 이력을 보존한다.
+
+단일 GPU worker/최대12 대기, 입력6000토큰, generate 최대90초. OOM/온도85도/여유VRAM512MiB 미만/RAM2GiB 미만은 안전 중단한다. 이벤트 수신은 추론 완료를 기다리지 않는다. 최신 상태/권한/범위/중복/영속 예약/nonce를 전송 직전에 재검사한다. 애매한 HTTP 실패는 재생하지 않는다. 3회 연속 실패는 안전 정지, 텍스트+반응은 원자적이지 않다.
 
 ## 단계별 실제 QA
 
-- A: 테스트 서버 로그인/ready, 소유자 명령 허용·다른 사용자 거절, 테스트 채널 멘션 송수신, 미허용 채널 무응답.
-- B: 명시적 멘션/답장/이어지는 질문, 새 메시지 도착 중 취소, 두 채널 동시 입력, 기분/활동 설정, 네트워크 재연결 후 과거 응답 미재생.
-- C: Unicode 반응만, 이름을 가린 커스텀 이모지/스티커의 실제 이미지 의미, 다중 프레임 GIF, 승인 미디어만 송신, 삭제 에셋 거절.
-- D: 권한 철회·보관/삭제 스레드, 다운로드 실패/잘못된 파일, 큐 상한, GPU OOM 시 침묵, 장시간 안정성.
+- A: 테스트 서버 연결/소유자·비소유자 권한/미허용 채널 차단/멘션 답장.
+- B: 무멘션 후속/다중 화자·채널/지연 원래 질문 reply/생성 취소/재연결.
+- C: Unicode 반응과 공식 기본 스티커. 커스텀 송신·등록 파일 전송 거절.
+- 실험: OFF에서 이미지 다운로드·분석 없음, ON에서 실제 픽셀/다중 프레임/오류 처리.
+- D: 권한 철회·보관/삭제·큐 상한·OOM 장애 주입·장기 안정성.
 
-외부 메시지는 테스트 서버/허용 채널에만 발송한다. 설정 도구 실행과 기본 정지 상태의 로그인만으로 실제 메시지 QA 성공을 선언하지 않는다. 실제 QA 기록은 CURRENT-STATUS/WORKLOG가 기준이다. 로그에는 토큰/메시지/URL 대신 최소 이벤트 코드만 남기며 `local_data/bot/diagnostics.json`, `performance.json`은 비공개다.
+모의 테스트/단일 GPU 성공을 실제 Discord 품질 승인이라고 보고하지 않는다. 최신 관측은 CURRENT-STATUS/WORKLOG, 비공개 상태와 성능은 local_data/bot에 있다. 운영 서버 발언은 명시적 사용자 허용 범위 밖으로 확대하지 않는다.

@@ -2,7 +2,7 @@
 
 로컬 AI를 사용하는 Discord 자율 대화 봇과 **독립된 오프라인 페르소나 제작 도구(Studio)**.
 
-> **최신 상태:** Studio 전처리·로컬 Gemma 4 학습/평가와 공식 Discord Bot 통합 구현. Windows 실행·소유자 관리·허용 범위·이미지/등록 미디어 안내는 [Discord Bot 실행법](docs/DISCORD-BOT.md). 모의 통합 테스트/GPU 검증과 실제 Discord QA 상태는 [현재 상태](docs/CURRENT-STATUS.md), 모델 품질 미확정 근거는 [ML 실험 기록](docs/ML-EXPERIMENTS.md)을 확인하세요. 아래 날짜별 기록의 Unicode 전용/미구현 표현은 당시 상태입니다.
+> **최신 상태:** `EchoMate.cmd`로 다크 관리 앱 실행. 서버·채널·스레드 선택, 캐릭터/활동, 처리 상태, Unicode/Discord 기본 스티커와 기본 OFF인 실험 시각 분석을 지원합니다. 등록 미디어 기능은 제거했습니다. [앱 안내](docs/DESKTOP-UI.md) · [Bot 실행법](docs/DISCORD-BOT.md) · [실제 검증 상태](docs/CURRENT-STATUS.md) · [모델 품질 미확정 근거](docs/ML-EXPERIMENTS.md). 아래 날짜별 기록은 당시 상태입니다.
 
 ## 제품 구성
 | 구성 | 책임 |

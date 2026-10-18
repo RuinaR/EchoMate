@@ -1,5 +1,34 @@
 # 작업 로그
 
+## 2026-10-19 — 최종 UX 문구·실행 흐름·직접 답장 지연 개선
+
+- 사용자가 앱을 닫았다고 알리며 직관적인 문구/UX로 정리, 응답 지연 개선 포함 작업 종료 후 테스트 방법 제공. 이후 앱을 다시 열지 않았다. 최신 소스 커밋 `f366aab`(앞선 다크/에셋 제거 `76b2ccc`), 문서 최종 커밋은 `git log -1`로 확인하며 GitHub push는 없다.
+- UI: 대화할 곳/응답 방식/성격과 기분/진행 상황/실험 기능 5화면. 채널 미선택 저장 차단, 준비 중/실행 중 중복 시작 차단, 봇 켜기와 응답 허용 연결, 일시정지와 종료 구분, 초/분/% 단위, 긴 목록 이름 말줄임, 빈 상태와 저장 실패 안내, 부모 채널에서만 스레드 적용, 반응 기능 OFF 안내. Canvas 버튼 Tab/Enter 포커스도 보완했다.
+- 문맥/지연: 실제 이력에 연결된 Discord 봇 답장도 명시적 요청으로 처리해 끼어들기 판단을 생략한다. 나머지 무멘션 대화는 의미 판단 유지. 작성 중 표시는 별도 비동기 작업으로 갱신하고 완료/취소 시 종료한다. 부분 텍스트는 전송하지 않는다. GUI의 응답 일시정지는 현재 생성만 취소하고 기존 문맥은 보존하며 멈춘 동안 메시지는 받지 않는다. 봇 끄기는 모델/연결/이력을 정리하고 enabled=false를 저장한다.
+- 실제 GPU: gpu-explicit-reply-2의 합성 멘션6.593초/직접 후속 답장3.969초, 각1호출/모의 TEXT1건. 앞선ID1은 합성 후속 시각을 실제 봇 답변보다 과거로 지정해 후속이 ingest에서 거절된 도구 오류였다. 0초를 개선으로 세지 않고 파일을 보존한 뒤 올바른 시간 순서/seed2026의 새ID2로 재시험했다. 단일 짧은 문항이며 실제 Discord 지연/일반 품질 보장은 아니다.
+- 검증: 전체260개 OK(9.002초), 5화면 렌더링/설정/재개 시 중복 모델 방지/종료 저장/직접 답장/입력 표시 수명/원래 reply 대상/기존 회귀 포함. 최신 명령은 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`, 로그는 local_data/discord-integration-20261019/ux-tests-release.log. compileall도 실행했다. GPU/실제 네트워크/합성 테스트를 구분한다.
+- 인수인계: TESTING-DISCORD-APP에 실행·멘션·무멘션·지연 원래 질문 reply·기본 에셋·실험 OFF/ON·중지·미허용 채널 검증 순서를 작성했다. AI-HANDOFF/CURRENT-STATUS/ARCHITECTURE/DISCORD-BOT/DESKTOP-UI/ML-EXPERIMENTS/README를 갱신한다. 새 UI 사용자 조작, 실제 최신 typing/reply/기본 스티커 송신 및 장기 QA는 남아 있다. 기존 rank8-60 잠정 모델 보존, 추가 학습/운영 승격/외부 클라우드/유료 API 없음.
+
+## 2026-10-19 — 최신 사용자 변경: 다크 UI·기본 에셋 전용·원래 질문 답장
+
+- 요청: 등록 미디어 제거, 커스텀/기타 이미지 분석은 실험 옵션 하나로 기본 OFF, 정상 인식/송신은 Unicode/Discord 기본 스티커, 초대 서버 채널·스레드 목록 UI, 직접 그린 세련된 다크 스타일, 추가 지연 개선, 늦은 응답의 원래 질문 reply.
+- 구현: `desktop_ui.py` Canvas 목록/선택/스크롤/버튼/토글/칩과 4개 페이지. 모델 로딩 전 REST 메타데이터 조회, 초대 서버 전체 표시/활성 스레드/Ctrl 다중 선택/독립 채팅·반응 규칙. 기존 컨트롤 UI는 교체했다. Obsidian/LM Studio 공식 안내의 사이드바·로딩 상태 구분을 참고하고 자산/코드/앱을 복제·설치하지 않았다(DESKTOP-UI 참조).
+- 제거: media.py와 media_add/media 명령 및 파일 송신 경로 삭제. 구 MEDIA/TEXT_MEDIA 제안은 최종 검증에서 거절한다. 기존 private 파일은 보존했다. 관련 폐기 기능 테스트를 제거/거절 회귀로 대체했으며 원래 217개 테스트는 유지한다. 공식 StandardSticker만 전송, 커스텀 반응 금지, 실험 분석 ON도 송신을 확대하지 않는다. HMAC 인증 후 asset_policy=2 마이그레이션으로 과거 vision=true를 계승하지 않는다.
+- 속도: 명시적 멘션의 끼어들기 판단을 생략해 TEXT 1회 생성. 무멘션 의미 판단/안전 실행기는 유지한다. GPU fast-3 잡담 6.125초/1호출, 기술 후속37.891초/2호출. 앞선 단일 출력과 달라 보편 개선/품질 향상으로 선언하지 않는다. 긴 출력 지연은 남아 있다. CPU thread8/4 교차 생성14.359/14.500/14.438/14.468초(모두86토큰)로 이득 없어 변경하지 않았다.
+- 답장: 원래 미응답 멘션 ID와 최신 문맥 이벤트 ID를 분리한다. SDK fetch_message/reply 대상은 원래 ID, 취소·중복 예약은 최신 상태로 검증한다. 텍스트가 항상 reply이므로 지연 시에도 대상이 연결된다. 원래 대상 삭제 시 안전 실패한다.
+- 검증: 전체259개 OK(7.035초), compileall. Canvas 합성 창 시각/선택·저장/소유자·범위/마이그레이션/제거 명령/기본 에셋 제한/원래 reply 대상 회귀. 공식 Bot REST로14팩/361기본 스티커, 초대2서버의57채널(음성/카테고리 포함 raw 수)/36활성 스레드 메타데이터 조회 확인. 실제 본문 수집/송신 없이 수행했다. 최신 다크 앱은 GPU 미로딩/봇 정지 상태로 열었다. 새 UI 사용자 조작과 새 실제 답장·기본 스티커 송신은 미확인이다.
+- 산출물/보호: local_data/discord-integration-20261019의 fast-3/threads-1/테스트/메타데이터 QA/합성 UI 확인 파일. 실제 토큰/owner/guild ID와 공개 대상 대조, private 파일 Git 미추적 확인 후 소스·비식별 문서만 로컬 커밋. GitHub push 없음. 상세 모델 품질 승격 없음/추가 학습0단계. 후속은 AI-HANDOFF 첫 절과 DESKTOP-UI/DISCORD-BOT을 읽는다.
+
+## 2026-10-19 — 사용자 지연 지적 대응: Windows GUI와 문맥 지속
+
+- 요청: 느린 응답 개선, 채팅/이모지의 활동 서버·채널·스레드와 기분/활동 빈도를 GUI로 관리, 처리 상태 표시, 멘션 없는 참여·지속.
+- 보존: 기존 로컬 수정/217개 private 실험 파일과 어댑터/평가를 덮어쓰지 않았다. 모델 학습/승격 없음. 기존 설정 서명을 검증 후 읽고, 기존 mention/reaction/silent/autonomous 범위는 명시적 GUI 저장 전 그대로 유지한다.
+- 변경: `desktop.py`, `instance.py`, `EchoMate.cmd`, GUI 시작 스크립트, `settings.py` 선택적 독립 반응 범위, `inference.py` compact 참여+지속 판단, `runtime.py` TEXT planner 생략/단계 상태/완료 시간/후속 2초 간격, `character.py` 상황별 길이 지침. 실제 발언/이벤트 메타데이터 분리와 embed 억제/프레임 디코드 offloop 등 앞선 미커밋 수정도 보존했다. `test_bot_desktop.py`, 통합 테스트와 `verify_bot_latency.py` 추가.
+- 검증: `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q` 258개 OK(9.471초); `compileall` 성공. Tk 위젯·범위 저장·비허용 서버/설정 거절·중복 프로세스 잠금, 합성 창 캡처 후 시각 확인. 합성 GPU에서 이미지 32.7→20.7초, 잡담 10.985→5.859초, 기술 후속 84.437→79.500초. 개념 질문 중복 억제 별도 지침은 28.797초. 표본/출력/지침 차이를 ML-EXPERIMENTS에 명시했으며 보편 성능/품질 향상으로 선언하지 않는다.
+- 실제 Discord: 이전 세션 TEXT 6건/REACTION 1건 성공. 해당 세션을 안전 종료/GPU 해제 후 GUI를 열어 기존 허용 테스트 서버 Gateway 연결 확인. 자동 범위 확대 없음. 새 GUI 조작과 무멘션 대화의 실사용 결과는 사용자 확인 대기이며 모의 테스트로 대신하지 않는다.
+- 비공개 산출물: `local_data/discord-integration-20261019/`의 fast GPU 결과/소스 사본/테스트 로그/합성 GUI 캡처. 운영 GUI 상태는 `local_data/bot/desktop-status.json`, 성능은 종료 시 `desktop-performance.json`. 토큰/본문/에셋 원문을 공개 문서에 포함하지 않는다.
+- 미확인: 반복 성능 분포·사람의 말투/정확성 평가, 등록 미디어/GIF/서버 에셋 실사용 전체 QA, 비소유자 실계정/네트워크 재연결/장시간 운영. 모델은 기존 rank8-60 잠정 후보 유지. 소스·비식별 문서만 로컬 커밋하며 push하지 않는다.
+
 ## 2026-10-18 — Phase 0 초기화
 - 요청: GitHub `RuinaR/EchoMate` 초기 구조, 프로젝트 정의, AI 작업 지침, 인수인계 문서화.
 - 결정: 최초 대상 사용자 본인/단일 화자 메시지. 로컬 Ollama. 지정 스레드. 확장형 페르소나.
@@ -490,3 +519,20 @@
 - 최종 보존 확인: 시작 시 217개 private 파일의 크기/mtime 전부 동일, 기존 어댑터/학습·검증 자료/스타일 집계 SHA 동일, holdout 추론 3소스 해시 동일. 종료 후 GPU 38도, 사용 2,481MiB/여유 13,581MiB 확인. 추가 GPU 작업 종료.
 - 공개 대상은 진단 소스와 AI-HANDOFF/CURRENT-STATUS/ML-EXPERIMENTS/WORKLOG 비식별 문서다. 추적/신규 135경로의 홈 경로/일반 키·토큰 패턴 검출 없음과 원문/결과 미포함을 검토했다. `git ls-files local_data` 비어 있음. 자동 검사가 권한/개인정보 검수의 충분조건은 아니다. 로컬 커밋만 사용, GitHub push 없음. 실제 최신 문서 커밋은 `git log -1`, 상태는 `git status --short`로 확인한다.
 - 다음: 블라인드 개인 말투 평가 후, 소비한 holdout을 회귀용으로 은퇴시키고 별도 개발 자료에서 의도/채널 처리 개선 검토. 실제 응답 감독 자료는 허가된 범위에서만 설계한다. 새 최종 자료를 고정하기 전 이번 결과를 재튜닝 점수로 재사용하지 않는다. 비공개 경로 `local_data/quality-v3-20261018/`; 이전 체크포인트/선정 기록 그대로 보존.
+
+
+## 2026-10-19 — 공식 Discord Bot/로컬 멀티모달 통합
+
+- 시작 Git `4224877`, 작업 트리 깨끗함 확인. README/PROJECT-DEFINITION/ARCHITECTURE/AI-HANDOFF/CURRENT-STATUS/ML-EXPERIMENTS/WORKLOG 및 기존 참여·상태·멘션·취소/반응 소스를 읽었다. 기존 단계의 217개 비공개 산출물은 크기/mtime 보존 검사 통과. Studio/기존 QLoRA/평가 코드와 모델을 변경하지 않았다.
+- 최신 사용자 요구에 따라 과거 Unicode/텍스트 전용·thread 전용 계획을 승인된 서버/채널/스레드와 사전 승인 미디어로 확장했다. PROJECT-DEFINITION/ARCHITECTURE에 변경 근거와 현재 경계를 추가했다. 관리자는 소유자 ID와 일치하지 않으면 설정 권한이 없다. 테스트 연결은 품질 미확정 모델의 운영 승격과 다르다.
+- 새 `src/echomate_bot`: 서명된 원자 설정·소유자 ID bootstrap, 7가지 기분/성격/기본 비활성 자동 연출, 공식 Gateway/ephemeral 명령·패널, allowlist·명시적 스레드 상속, 기존 participation/mention/engagement/DialogueState 재사용, 단일 GPU 큐·최신 상태 취소, 행동 검증/영속 송신 예약/nonce/쿨다운·일일 한도·안전 중단, 실제 시각 분석과 서버 격리 캐시, 서명·해시·범위로 승인된 별도 미디어 라이브러리.
+- 추가 파일: `configs/bot-requirements.txt`, setup/start PowerShell, `verify_bot_multimodal.py`, `verify_bot_pipeline.py`, `verify_discord_live.py`, `tests/test_bot_integration.py`, `docs/DISCORD-BOT.md`. README와 6개 주요 문서 갱신. 모든 원문·캐시·가중치·토큰·실제 서버 식별자는 local_data만 사용한다.
+- 무료 discord.py 2.7.1/aiohttp 3.14.5 설치. 첫 일반 환경 pip는 DNS 제한으로 실패했고 제한 밖에서 설치했다. 기존 torch 2.9.1+cu128를 유지하며 torchvision 0.24.1+cu128만 추가했다. modality processor 설정 파일이 기존 캐시에 없어 설치된 Gemma4Unified 기본값과 cached vision config로 image-only 경로를 구성했다. 별도 공식 processor artifact와 동등성은 미검증이다.
+- 제한 환경의 Windows asyncio loopback 시작이 멈춰 실제 GPU/네트워크 이전의 이번 테스트 프로세스만 정리했다. 제한 밖에서 합성 테스트와 실제 GPU/공식 연결을 각각 실행했다. 새 클라우드 GPU/유료 API/새 학습 데이터/추가 학습 없음.
+- GPU `gpu-smoke`: 실제 시각 생성 뒤 JSON 포장 파싱 실패. 정확한 JSON 코드 블록만 허용하도록 보완하고 `gpu-smoke-2`에 실패/성공 분리. base/persona × PNG/GIF/기술 텍스트 6조건 완료, 전체 166.4초, peak 7,819.6MiB. 도형/색/위치와 2프레임 이동을 확인했고 실제 사진/감정/스티커 의미 품질을 증명하지 않는다. 추가 모델 다운로드 없음.
+- GPU 통합 `gpu-pipeline`: 소스 사본 절대 경로 결합 오류로 GPU 전 실패, 원본 미변경 확인 후 상대 경로로 수정. `gpu-pipeline-2` 69.2초(로딩 포함)/모의 전송 1건. `gpu-pipeline-3` cold 준비35.9초 + 이벤트31.5초, heartbeat511회/최대 간격0.094초. `gpu-pipeline-release` cold36.2초 + 이벤트32.7초, heartbeat531회/최대 간격0.078초, 실제 GPU 4호출과 모의 전송 완료. 실행마다 소스/설정/진행/실패를 local_data에 보존. 실제 Discord 송신과 구분한다.
+- 실제 사용자 설정 후 테스트 서버 연결 허용을 받았다. `live-qa`: 공식 Gateway ready/등록한 관리 서버 1개 확인, 소유자 권한 검사 허용3회와 실제 메시지 수신1건, 송신0. `live-qa-2`: 재접속/수신2건, 생성 중 새 메시지에 의한 취소1회, 송신0. 출력 종류 거절 시 진단이 없던 부분과 비활성 종류를 모델 후보에서 제외하지 않던 부분을 보완했다. 실제 메시지 본문을 인용하지 않았다.
+- 같은 화자가 멘션 후 추가 메시지를 보내면 이전 생성은 취소되지만 새 메시지에 멘션이 없어 미처리 요청이 사라지는 실제 통합 문제를 확인했다. 최신 테스트 채널 메시지 최대4개의 멘션 여부/나이/봇 여부만 읽어 진단했으며 본문/ID는 저장·출력하지 않았다. 실제 관측한 미처리 멘션만 동일 화자·다른 대상 멘션 없음·30초 이내에 유지해 최신 문맥으로 재처리하도록 수정했다. 다른 사람/다른 대상의 메시지에는 상속하지 않는다. 원문에 멘션을 가짜로 덧붙이거나 학습 예시를 만들지 않았다. 수정 후 `live-qa-3` 실제 송신 재검증 중이며 최종 관측은 아래 후속 기록이 우선한다.
+- 단위/모의 통합 회귀: 원자 저장에서 실제 Windows 일시적 교체 잠금 1회 실패를 관측해 제한 재시도/이전 파일 보존을 추가하고 예외 주입으로 검증. 패널 버튼 이름이 View.stop을 가리던 충돌도 수정했다. 최종 `$env:PYTHONPATH='src'; .\.venv-gemma4\Scripts\python.exe -m unittest discover -s tests -q` → **243개 OK, 6.627초**. 본문 비파괴 검사, owner/컴포넌트 인증, scope/스레드, 중복·취소/권한·설정 철회, 독립 반응, 캐시/파일·설정 변조, 큐 상한/취소, OOM 예외 주입을 포함한다. 실제 GPU 메모리를 고갈시키지 않고 OOM 안전 비활성화를 검증했다.
+- 소스 커밋: `baeb0b1` 통합, `faab6f4` 출력 폐기 진단, `c9ea53c` 행동 후보 필터/실제 QA 소스 보존, `7b4802a` 미처리 멘션 유지. 문법/whitespace 검사와 공개 소스의 홈 경로/일반 키 패턴 미검출, local_data 추적 파일0 확인. private bootstrap은 사용자 로컬 입력/Windows ACL로 생성됐으며 Git 스테이징하지 않았다. GitHub push 없음.
+- 미확인: 일반 사용자 실계정 거절, 실제 권한 철회/네트워크 단절, 다중 채널/미디어 실제 송신, 실제 OOM/장시간 안정성, 개인 말투 사람 평가. Lottie 미지원, 모델은 Gemma base/persona 선택만 제공한다. 빈도/모델 loss/모의 성공을 실사용 품질 승인으로 해석하지 않는다.
