@@ -178,3 +178,10 @@
 - [ ] Windows 총 76개 테스트, style-diagnostics.json, tuning-readiness.json 검증.
 - [ ] Discord 공식 개인 데이터 패키지 AI 학습의 허용 범위 확인 후 허가된 텍스트만 학습/검증 분리.
 - [ ] Gemma 3 호환 학습용 가중치 및 저메모리 QLoRA 환경 확보, 학습 전후 맥락/환각/말투 QA.
+
+## 2026-10-18 실제 데이터 통계 회귀
+- [x] 사용자 Windows 76개 테스트 통과, 로컬 원본 304,997건 스타일 길이 구간 분석.
+- [x] Ending 값 전부 0 오류의 원인 정규식 이중 이스케이프 수정.
+- [x] Ending 인식 및 원문 누출 방지 테스트 3개 추가.
+- [ ] Windows 총 79개 테스트, corrected style-diagnostics 재실행.
+- [ ] 미세조정 권한 및 데이터 안전성 확인 후 학습 파이프라인 착수.
