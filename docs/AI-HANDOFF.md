@@ -339,3 +339,7 @@
 - Added `tools/verify_nf4_gpu.py`: synthetic torch/bitsandbytes NF4 Linear4bit CUDA operation, checks finite output and reports peak allocated/free MiB in ignored `local_data/nf4-gpu-probe.json`. No internet, model files or personal Discord text. Failure is nonzero exit.
 - Added three unit tests. Expected Windows unittest total 143, NOT YET confirmed. Run `.venv-train\\Scripts\\python.exe tools\\verify_nf4_gpu.py` after `git pull` and share report.
 - Passing tiny NF4 would verify kernel basics, NOT full Gemma 3 4B QLoRA trainability or VRAM fit. Real training data source rights and human privacy review remain outstanding.
+
+## 2026-10-18 — NF4 physical GPU smoke test verified
+- User Windows 143 unit tests OK. Local `tools/verify_nf4_gpu.py` status=ok: RTX 4070 Ti SUPER; quant_type=nf4; output shape=[2,128]; peak PyTorch allocated=0.08 MiB; reported free after=15073 MiB. This is only tiny synthetic kernel memory, not Gemma model memory or QLoRA VRAM readiness.
+- GPU CUDA 12.8, torch 2.9.1 cu128, PEFT/TRL/bitsandbytes imports and simple NF4 kernel verified. Next: inspect Gemma 3 base model access/license and gated weights, determine safe model loading/memory testing before persona training. Discord private data source training rights and sensitive review remain blockers. No weight download/training done.
