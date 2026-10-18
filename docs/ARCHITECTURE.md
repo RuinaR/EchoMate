@@ -49,3 +49,9 @@ models/                    # ignored
 - 제작 경계: `EchoMate Studio` = 외부 백업 파일 Importer + 출처·허가 게이트 + 단일 화자별 학습 + 비교 평가 + immutable 아티팩트/캐시.
 - 외부 DiscordChatExporter는 독립 도구이며 EchoMate가 수집을 자동 실행하지 않음.
 - 세부: [DEPLOYMENT-SEPARATION.md](DEPLOYMENT-SEPARATION.md).
+
+## 반응(reaction) 엔진
+- 대화 텍스트 발언 제어기와 반응 엔진을 분리하고 각각 대상 채널/스레드 allowlist, 사용 여부, 빈도 제어를 독립 유지.
+- Reaction Gate: 이벤트 중복/자기 메시지/다른 봇/opt-out/별도 allowlist/쿨다운/확률 검사 후 Unicode 기본 이모지만 선택.
+- 실질적인 채팅 내용에 따른 이모지 선택은 추후 문맥 판단기로 추가; 현재 `reactions.py`는 선택 가능 여부와 기본 이모지 집합 결정만 담당.
+- 실제 Discord API의 Add Reactions 권한, HTTP rate limit 준수, 반복 반응 방지 및 로그 테스트는 Bot 연결 단계에서 검증.
