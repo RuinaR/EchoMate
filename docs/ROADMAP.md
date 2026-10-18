@@ -402,3 +402,9 @@
 - [x] Local private-data LoRA runner and bounded approval flags, three tests.
 - [ ] Verify 161 Windows tests; strengthen privacy, near-duplicate and temporal validation criteria.
 - [ ] Build approved private corpus only after meaningful source and sensitive content review; run small LoRA and fixed-set A/B.
+
+## 2026-10-18 — 12B model experiment
+- [x] Gemma4 12B official repo verified; small config preflight and explicit opt-in NF4 load probe implemented.
+- [x] Separate synthetic NF4 LoRA backward probe with cached weights and static QA.
+- [ ] Windows 165 unit tests; Transformers Gemma4 compatibility preflight; NF4 download/load free VRAM check; synthetic LoRA optimizer step.
+- [ ] Approve private corpus safety/rights, comparative heldout study vs validated Gemma3 4B.
