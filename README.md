@@ -184,3 +184,8 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 
 ## Persona training environment bootstrap (not model training)
 - Windows: `.\tools\setup_persona_training.ps1` creates ignored `.venv-train` using Python 3.10, installs CUDA PyTorch 2.9.1 from official cu128 index, and verifies a CUDA tensor operation; existing Python stays unchanged. Optional `-SkipTorchInstall -InstallTrainingLibraries` installs training toolchain only after CUDA check and pip dependency validation. Requires compatible NVIDIA driver and internet, potentially multi-GB downloads. No private data accessed or model trained; training rights and model access are separate gates.
+
+## Optional Gemma 3 4B model load and VRAM diagnostic
+- The official `google/gemma-3-4b-it` Hugging Face weights require accepting Google's Gemma license at https://huggingface.co/google/gemma-3-4b-it and local HF auth. Never paste credentials into GitHub or chat.
+- `./.venv-train/Scripts/python.exe tools/probe_gemma4b_load.py` performs **no download** and reports `not_run`.
+- Only after agreeing to the terms, logging in locally, and deciding to download several GB, run `./.venv-train/Scripts/python.exe tools/probe_gemma4b_load.py --allow-download`. Produces `local_data/gemma4b-vram.json`. This tests 4-bit loading only, not real fine-tuning or dataset permission.
