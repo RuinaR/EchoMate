@@ -37,7 +37,8 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
                   engagement_policy: EngagementPolicy | None = None,
                   ongoing_engagement: bool = False,
                   addressed_to_bot: bool = False,
-                  topic_continues: bool = False) -> TurnResult:
+                  topic_continues: bool = False,
+                  topic_assessor: Callable[[list], bool] | None = None) -> TurnResult:
     version, context = state.recent_context(channel_id=channel_id, thread_id=thread_id, now=now)
     if not context or context[-1]["role"] != "user":
         return TurnResult(None, "no_recent_human_context", version)
@@ -59,6 +60,11 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
         # Resolve explicit reply-to-bot chains from the same channel/thread.
         # Semantic topical continuity still needs a separate contextual signal.
         _, turns = state.snapshot(channel_id=channel_id, thread_id=thread_id, now=now)
+        if topic_assessor is not None and turns and turns[-1].reply_to:
+            try:
+                topic_continues = topic_assessor(turns) is True
+            except Exception:
+                topic_continues = False
         evidence = derive_engagement(turns, topic_continues=topic_continues)
         if evidence.addressed_to_bot:
             ongoing_engagement = evidence.ongoing_engagement
