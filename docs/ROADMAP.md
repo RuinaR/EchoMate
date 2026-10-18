@@ -381,3 +381,8 @@
 - [x] Cross-split duplicate texts measured (2,130); validation candidates remaining after overlap removal: 18,226.
 - [ ] Rights and privacy-review clearance before any real message-based QLoRA.
 - [ ] Ensure final approved corpus deduplication actually enforces the split, not just audit estimates.
+
+## 2026-10-18 — Owner-approved style retention
+- [x] Retain health, sexual and aggressive expressions as stylistic content, without category-level automatic exclusion.
+- [x] Differentiate official owner Data Package from API-obtained content under Discord Developer Policy §21.
+- [ ] Keep identity/secret/third-party privacy filters, and maintain separate runtime response boundaries.
