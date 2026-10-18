@@ -501,3 +501,8 @@
 ## 2026-10-18 — Short-sample syntax QA
 - [x] Repair invalid literal escaped newlines in Gemma4 trainer and malformed new short sample unit fixture; add Python AST syntax test.
 - [ ] User Windows unittest 186/186 pass, followed by safe synthetic-only GPU test for short sample optimizer path (not yet done).
+
+## 2026-10-18 — First local persona training execution readiness
+- [x] Scripted synthetic short-message E2E and gated single-command private JSONL preflight -> first 2-step Gemma4 QLoRA run. Includes 2 regression tests.
+- [ ] Windows unittest 188 pass; synthetic GPU short-example run.
+- [ ] Review data rights, other-participant context and actual local train/validation JSONL; run first private owner-model training with explicit manual confirmation after preflight.
