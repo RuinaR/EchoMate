@@ -47,3 +47,10 @@ Discord의 지정된 채널·스레드에서, 선택한 페르소나의 말투·
 - 품질: 기본 LLM 대비 페르소나 스타일 유사성 향상과 대화 문맥 적합성 검증.
 
 참조: [아키텍처](ARCHITECTURE.md), [분리 구조](DEPLOYMENT-SEPARATION.md), [데이터 규칙](TEMPORAL-STYLE-AND-MEDIA.md), [인수인계](AI-HANDOFF.md).
+
+## 2026-10-18 추가 확정: 메시지 이모지 반응
+- EchoMate Bot이 사람의 메시지에 자율적으로 **Discord 기본 Unicode 이모지 반응(reaction)**을 달 수 있어야 한다.
+- **일반 텍스트 발언과 완전히 별개의 활성화 토글·활동 채널/스레드 allowlist·반응 빈도(확률/쿨다운)** 설정.
+- 자기 메시지·다른 봇·수신 거부 사용자·미허용 채널에는 반응 금지.
+- Discord 커스텀 서버 이모지·스티커·GIF·파일은 사용하지 않는다.
+- 현재 구현된 것은 Discord 네트워크 호출 전 단계의 순수 정책 게이트 `echomate_studio.reactions`; 실제 Discord 반응 API 연동은 추후 Bot 개발 단계.
