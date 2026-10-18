@@ -286,3 +286,10 @@
 - [x] 185,608 records marked for human review, NOT cleared for training.
 - [ ] Verify training rights, review sensitive data, prepare local QLoRA and A/B tests.
 - [ ] Implement mutually exclusive emoji reaction vs text response and Discord integration.
+
+## 2026-10-18 — Persona QLoRA local environment
+- [x] User confirmed 131 Windows unittest OK.
+- [x] Read-only GPU/package diagnostic CLI, 3 unit tests.
+- [ ] User Windows 134 tests + qlora-environment report.
+- [ ] Model rights and local data training permission assessment; private training data review.
+- [ ] Prove CUDA/bitsandbytes/transformers/PEFT compatibility, memory feasibility before actual Gemma QLoRA.
