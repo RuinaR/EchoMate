@@ -280,3 +280,9 @@
 - [x] Windows 123 tests OK.
 - [x] Aggregate-only privacy/duplicate eligibility audit implemented.
 - [ ] Windows 126 tests and local report; verify data usage rights; prepare QLoRA environment.
+
+## 2026-10-18 — Confirmed persona QA and reaction replies
+- [x] Windows unittest 126/126, local 304,997-message audit complete.
+- [x] 185,608 records marked for human review, NOT cleared for training.
+- [ ] Verify training rights, review sensitive data, prepare local QLoRA and A/B tests.
+- [ ] Implement mutually exclusive emoji reaction vs text response and Discord integration.
