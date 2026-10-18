@@ -378,3 +378,7 @@
 - 177 unit tests passed in 0.402s. Windows PowerShell ASCII source script ran end-to-end (previous encoding error resolved).
 - Actual Gemma4 12B IT NF4 two-step private-free synthetic train and local adapter save completed; report: validation 23.6352 -> 23.6266, peak 11163.6 MiB, free 2454.3 MiB, 2,596,864 trainable params.
 - Uploaded adapter header independently inspected: 176 F32 tensors / 2,596,864 elements / approx 10.4MB; adapter_config LoRA rank 4, q/v projections, correct base. Not yet reloaded/inferred on GPU; this is not personal training or quality proof.
+
+## 2026-10-18 — Before owner-data training: adapter reload + corpus gates
+- Implemented cached-only Gemma4 NF4 synthetic adapter reload comparison with explicit GPU flag; separate private JSONL exact-overlap/heuristic near-duplicate/identifier audit. Three mocked/static no-GPU tests added. All aggregate reports remain local_data; no messages or tokens in reports.
+- Prior Windows suite: 177 OK and 2-step synthetic adapter save verified. New suite expected 180, GPU reload and real-corpus inspection are UNVERIFIED. A heuristic-clean corpus does not mean approved, legally cleared or safe to train.
