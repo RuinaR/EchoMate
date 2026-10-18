@@ -322,3 +322,9 @@
 - User verified Windows unittest 134 OK. Actual local report: Windows Python 3.10.11; RTX 4070 Ti SUPER 16GB (16376 MiB total, 12746 MiB free); torch 2.6.0+cpu and transformers 5.9.0, remaining five training dependencies absent.
 - Added tools/setup_persona_training.ps1: creates .venv-train isolated Python 3.10, installs PyTorch CUDA 12.8 wheel torch==2.9.1, verifies CUDA calculation before optional -InstallTrainingLibraries. No private corpus or base weights used. tools/verify_training_cuda.py and three mocked tests added; expected 137 tests Windows QA pending. .gitignore now excludes .venv-train.
 - Run PowerShell: `.\tools\setup_persona_training.ps1`, optionally later `-SkipTorchInstall -InstallTrainingLibraries`. Driver/PyTorch wheel compatibility to confirm from results. Do not claim actual CUDA works yet. No persona model trained; training rights review still outstanding.
+
+## 2026-10-18 — CUDA setup verified in user Windows
+- User Windows `Ran 137 tests ... OK` confirmed.
+- `.venv-train` creation succeeded. PyTorch 2.9.1+cu128 installed, CUDA runtime 12.8, actual tensor operation succeeded on NVIDIA RTX 4070 Ti SUPER. PyTorch emitted warning `No module named numpy`; this warning did NOT fail CUDA test.
+- Updated optional training library installation to include `numpy>=1.26,<3`, `pip check`, and import smoke test for NumPy, Torch, Transformers, PEFT, TRL, Accelerate, bitsandbytes, datasets.
+- Next Windows step: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`; `.\tools\setup_persona_training.ps1 -SkipTorchInstall -InstallTrainingLibraries`. Confirm output before any model download; training data permissions/manual review remain pending. No training performed.
