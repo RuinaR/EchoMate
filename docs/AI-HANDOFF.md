@@ -406,3 +406,6 @@
 
 ## 2026-10-18 dataset builder
 - Added double-gated local-only single-speaker JSONL corpus builder, three synthetic regression tests. Holdout strings excluded from training. No real private messages processed into training dataset. 158 Windows tests expected, not yet confirmed.
+
+## 2026-10-18 — Windows 158 tests confirmed
+- User ran `python -m unittest discover -s tests -v`: 158 tests OK. `persona_dataset.py` synthetic approval, chronological split and leakage tests passed. Actual private data corpus export and QLoRA on owner data remain NOT executed. Next: contextual privacy/near-duplicate review and measured adapter evaluation.
