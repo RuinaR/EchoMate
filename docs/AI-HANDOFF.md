@@ -566,3 +566,7 @@
 - Updated Gemma4 trainer to choose deterministic evenly spread eligible examples rather than first N rows. Validation now averages up to min(8, max_steps) heldout examples, reducing dependence on one sentence; still a smoke experiment, not full quality evaluation.
 - Synthetic unit test for selection indices added. Last user test 192 OK before this change; expected 193 but Windows GPU and regression not yet run. No private owner-data training conducted.
 - Screened source ZIP remains NOT APPROVED. Optional short style set has no independently guaranteed chronological validation membership, so do not mix it into train until provenance / leakage review and applicable privacy rights are resolved.
+
+## 2026-10-18 — Windows distributed sampling regression green
+- User executed Windows unittest suite: 193 tests in 0.439s, OK. Confirms updated tokenizer mock and even-spread selection regression; this is not a fresh GPU run.
+- Screened real corpus remains NOT APPROVED pending rights and contextual privacy review. No first personal-data QLoRA completed. Next implement meaningful heldout evaluation of verified private, approved samples and compare baseline against adapter without cross-split leakage.
