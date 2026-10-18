@@ -16,7 +16,6 @@ from echomate_bot.character import instruction,needs_rewrite
 from echomate_bot.actions import Action,Kind,parse_action,validate_action
 from echomate_bot.runtime import Runtime,Event
 from echomate_bot.vision import VisualCache,frames,validate_url
-from echomate_bot.media import MediaLibrary
 from echomate_bot.inference import visible
 from echomate_studio.participation import ContextAssessment
 from echomate_studio.implicit_address import ImplicitAddress
@@ -57,7 +56,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.settings.set_scope(1,2,3,'mention')
         self.settings.set(1,'enabled',True)
         self.backend=FakeBackend();self.transport=FakeTransport()
-        self.cache=VisualCache(self.root/'cache.sqlite3');self.library=MediaLibrary(self.settings,self.root/'library')
+        self.cache=VisualCache(self.root/'cache.sqlite3');self.library=None
         self.runtime=Runtime(self.settings,self.backend,self.transport,self.cache,self.library,ledger_path=self.root/'ledger.sqlite3')
     async def asyncTearDown(self):
         await self.runtime.close();self.temp.cleanup()
@@ -71,6 +70,32 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         d=json.loads(self.settings.path.read_text(encoding='utf-8'));d['data']['enabled']=False
         self.settings.path.write_text(json.dumps(d),encoding='utf-8')
         with self.assertRaises(PermissionError):Settings(1,self.settings._key.decode(),self.settings.path)
+
+    async def test_legacy_authenticated_settings_reset_experimental_vision_and_remove_media(self):
+        import hashlib,hmac
+        from echomate_bot.settings import canonical
+        legacy=self.settings.get();legacy.pop('asset_policy');legacy.update(vision=True,media=True,media_probability=.5)
+        envelope=dict(data=legacy,signature=hmac.new(self.settings._key,canonical(legacy),hashlib.sha256).hexdigest())
+        self.settings.path.write_text(json.dumps(envelope),encoding='utf-8')
+        migrated=Settings(1,self.settings._key.decode(),self.settings.path)
+        self.assertFalse(migrated.get()['vision']);self.assertFalse(migrated.get()['media'])
+        self.assertEqual(migrated.get()['asset_policy'],2)
+        migrated.set(1,'vision',True)
+        self.assertTrue(Settings(1,self.settings._key.decode(),self.settings.path).get()['vision'])
+
+    async def test_standard_only_catalog_and_removed_media_commands(self):
+        from echomate_bot.discord_app import EchoClient,DiscordTransport
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        import discord
+        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
+            client=EchoClient(self.settings,self.backend,[2])
+        standard=discord.StandardSticker(state=None,data=dict(id='1',name='Wave',description='A greeting',format_type=1,pack_id='10',sort_value=0,tags='hello,wave',type=1))
+        client.standard_stickers={1:standard,2:SimpleNamespace(id=2,tags=['hello'])}
+        self.assertEqual(set(client.standard_catalog('안녕')),{'1'})
+        group=client.tree.get_commands(guild=discord.Object(2))[0]
+        self.assertIsNone(group.get_command('media_add'));self.assertIsNone(group.get_command('media'))
+        self.assertFalse(validate_action(Action(Kind.REACTION,asset='<:fake:123456789>'),dict(DEFAULTS,reactions=True),'autonomous',dict(view=True,react=True),dict(reactions={'<:fake:123456789>':'x'}),None,2))
     async def test_transient_windows_replace_lock_preserves_atomic_settings(self):
         from unittest.mock import patch
         original=Path.replace;attempts=[]
@@ -120,7 +145,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-3')
         # Default new-conversation cooldown stays 60 seconds. This is a follow-up.
         await self.runtime.ingest(self.event(id=11,content='그럼 다음 단계는?'));await self.settle()
-        self.assertEqual(len(calls),2);self.assertEqual(len(self.transport.sent),2)
+        self.assertEqual(len(calls),1);self.assertEqual(len(self.transport.sent),2)
         self.assertFalse(self.runtime.progress)
         self.assertEqual(len(self.runtime.latencies),2)
         with self.assertRaises(ValueError):parse_turn_assessment('0 1 1 1 1 extra')
@@ -149,6 +174,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event(id=11,content='이 내용도 함께 봐 줘'))
         self.backend.wait.set();await self.settle()
         self.assertEqual([e.id for e,a in self.transport.sent],[11])
+        self.assertEqual(self.transport.sent[0][0].response_to,10)
         self.assertEqual(self.runtime.pending_mentions,{})
         self.assertTrue(self.backend.catalog['directed_to_bot'])
     async def test_pending_mention_never_transfers_to_other_speaker(self):
@@ -240,18 +266,9 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
             await self.settle()
             download.assert_not_awaited()
         self.assertIn('시각 분석 비활성화',self.backend.calls[0][-1]['content'])
-    async def test_inbound_asset_not_approved_and_media_tamper_denied(self):
-        image=BytesIO();Image.new('RGB',(12,12),'red').save(image,format='PNG');data=image.getvalue()
-        with self.assertRaises(PermissionError):await self.library.register(2,data,2,'tag','purpose',self.cache,self.backend)
-        mid=await self.library.register(1,data,2,'tag','purpose',self.cache,self.backend)
-        with self.assertRaises(PermissionError):self.library.resolve(mid,8)
-        path=self.library.resolve(mid,2);path.write_bytes(b'changed')
-        with self.assertRaises(PermissionError):self.library.resolve(mid,2)
-    async def test_model_cannot_bypass_media_probability_even_with_valid_approved_id(self):
-        image=BytesIO();Image.new('RGB',(12,12),'red').save(image,format='PNG')
-        mid=await self.library.register(1,image.getvalue(),2,'tag','purpose',self.cache,self.backend)
-        self.settings.set(1,'media',True);self.settings.set(1,'media_probability',0)
-        async def propose(context,catalog):return json.dumps(dict(kind='MEDIA',text='',asset=mid))
+    async def test_removed_media_cannot_be_reenabled_or_proposed(self):
+        with self.assertRaises(ValueError):self.settings.set(1,'media',True)
+        async def propose(context,catalog):return json.dumps(dict(kind='MEDIA',text='',asset='retired-asset'))
         self.backend.propose=propose
         await self.runtime.ingest(self.event());await self.settle()
         self.assertFalse(self.transport.sent)
@@ -263,7 +280,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import AsyncMock,patch
         from types import SimpleNamespace
         import discord
-        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.MediaLibrary',return_value=self.library),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
+        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
             client=EchoClient(self.settings,self.backend,[2])
         response=SimpleNamespace(is_done=lambda:False,send_message=AsyncMock())
         intruder=SimpleNamespace(user=SimpleNamespace(id=4),guild_id=2,response=response)
@@ -284,7 +301,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         image=BytesIO();Image.new('RGB',(12,12),'red').save(image,format='PNG')
         await self.cache.analyze(2,'emoji:5',image.getvalue(),self.backend)
         self.settings.set(1,'vision',True)
-        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.MediaLibrary',return_value=self.library),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
+        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
             client=EchoClient(self.settings,self.backend,[2])
         i=SimpleNamespace(user=SimpleNamespace(id=1),guild_id=2,channel_id=3,channel=SimpleNamespace(),guild=SimpleNamespace(emojis=[],stickers=[]),
             response=SimpleNamespace(defer=AsyncMock(),send_message=AsyncMock()),followup=SimpleNamespace(send=AsyncMock()))
@@ -304,7 +321,8 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         checks=iter([True,True,False])
         async def fresh():return next(checks)
         with self.assertRaises(ValueError):
-            await transport.execute(self.event(),Action(Kind.TEXT_REACTION,'내용','👍'),self.library,fresh)
+            await transport.execute(replace(self.event(),response_to=6),Action(Kind.TEXT_REACTION,'내용','👍'),self.library,fresh)
+        channel.fetch_message.assert_awaited_once_with(6)
         current.reply.assert_awaited_once()
         current.add_reaction.assert_not_awaited()
         self.assertEqual(current.reply.call_args.kwargs['nonce'],10)
@@ -318,7 +336,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.settings.get()['mood'],'평온')
         with self.assertRaises(ValueError):self.settings.set(1,'warmth',101)
         with self.assertRaises(ValueError):self.settings.set(1,'model','untrusted_remote')
-        self.settings.set(1,'media_probability',1)
+        with self.assertRaises(ValueError):self.settings.set(1,'media_probability',1)
         with self.assertRaises(ValueError):self.settings.set(1,'media_probability',2)
     async def test_visual_presence_reaches_assessment_without_fabricating_user_text(self):
         captured=[]

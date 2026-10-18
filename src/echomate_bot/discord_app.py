@@ -11,7 +11,6 @@ from .actions import Kind
 from .runtime import Event,Runtime
 from .settings import ROOT,MOODS,scope
 from .vision import VisualCache,download,validate_url
-from .media import MediaLibrary
 
 
 def assets_from_message(message):
@@ -58,34 +57,23 @@ class DiscordTransport:
     async def catalog(self,event,cache):
         channel=self.channel(event)
         if not channel:return dict(reactions={},stickers={})
-        member=await channel.guild.fetch_member(self.bot_id)
-        descriptions=cache.descriptions(event.guild)
         reactions={"🙂":"가벼운 동의", "🎉":"축하", "👍":"동의", "😮":"놀람"}
-        stickers={}
-        for emoji in channel.guild.emojis:
-            key="emoji:"+str(emoji.id)
-            if emoji.available and (not emoji.roles or any(role in member.roles for role in emoji.roles)) and key in descriptions:
-                reactions[str(emoji)]=descriptions[key]
-        for sticker in channel.guild.stickers:
-            key="sticker:"+str(sticker.id)
-            if sticker.available and key in descriptions and sticker.format in (discord.StickerFormatType.png,discord.StickerFormatType.apng,discord.StickerFormatType.gif):
-                stickers[str(sticker.id)]=descriptions[key]
+        stickers=self.client.standard_catalog(event.content)
         return dict(reactions=reactions,stickers=stickers)
     async def execute(self,event,action,library,fresh):
+        if action.kind in {Kind.MEDIA,Kind.TEXT_MEDIA}:raise ValueError('Media output removed')
+        if action.kind in {Kind.REACTION,Kind.TEXT_REACTION} and '<' in action.asset:raise ValueError('Custom emoji disabled')
         channel=self.channel(event)
         if not channel or not await fresh():raise ValueError("Stale output")
-        current=await channel.fetch_message(event.id)
+        current=await channel.fetch_message(event.response_to or event.id)
         if not await fresh():raise ValueError("Stale output")
         sent=None
-        if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
+        if action.kind in {Kind.TEXT,Kind.TEXT_REACTION}:
             kwargs=dict(content=action.text,allowed_mentions=discord.AllowedMentions.none(),mention_author=False,nonce=event.id,suppress_embeds=True)
-            if action.kind==Kind.TEXT_MEDIA:
-                kwargs["file"]=discord.File(library.resolve(action.asset,event.guild))
             sent=await current.reply(**kwargs)
-        elif action.kind==Kind.MEDIA:
-            sent=await channel.send(file=discord.File(library.resolve(action.asset,event.guild)),allowed_mentions=discord.AllowedMentions.none(),nonce=event.id)
         elif action.kind==Kind.STICKER:
-            sticker=next(s for s in channel.guild.stickers if str(s.id)==action.asset and s.available)
+            sticker=self.client.standard_stickers.get(int(action.asset))
+            if not isinstance(sticker,discord.StandardSticker):raise ValueError('Only standard stickers')
             sent=await channel.send(stickers=[sticker],allowed_mentions=discord.AllowedMentions.none(),nonce=event.id)
         if action.kind in {Kind.REACTION,Kind.TEXT_REACTION}:
             if not await fresh():raise ValueError("Stale reaction")
@@ -123,7 +111,8 @@ class EchoClient(discord.Client):
         super().__init__(intents=intents,allowed_mentions=discord.AllowedMentions.none(),max_messages=None,
                          member_cache_flags=discord.MemberCacheFlags.none())
         self.settings=settings;self.backend=backend;self.admin_guilds=admin_guilds
-        self.tree=app_commands.CommandTree(self);self.cache=VisualCache();self.library=MediaLibrary(settings)
+        self.tree=app_commands.CommandTree(self);self.cache=VisualCache();self.library=None
+        self.standard_stickers={}
         self.runtime=Runtime(settings,backend,DiscordTransport(self),self.cache,self.library)
         self.owner_tasks=set()
         self.shutdown_lock=asyncio.Lock()
@@ -141,7 +130,20 @@ class EchoClient(discord.Client):
 
     def status_text(self):
         cfg=self.settings.get()
-        return f"활성 {cfg['enabled']} / 안전 중단 {self.runtime.stopped} / 모델 {cfg['model']} / 기분 {cfg['mood']} / 활동 {cfg['activity']} / GPU 대기 {self.backend.pending} / 미디어 {len(self.library.records)}"
+        return f"활성 {cfg['enabled']} / 안전 중단 {self.runtime.stopped} / 모델 {cfg['model']} / 기분 {cfg['mood']} / 활동 {cfg['activity']} / GPU 대기 {self.backend.pending} / 실험 시각 분석 {cfg['vision']}"
+
+    def standard_catalog(self,content):
+        hints=[]
+        for text,tags in [('안녕','hello wave'),('축하','congratulations celebrate'),('고마','thank'),('잘 자','sleep goodnight'),('웃','laugh')]:
+            if text in content:hints.extend(tags.split())
+        ranked=[]
+        for sticker in self.standard_stickers.values():
+            if not isinstance(sticker,discord.StandardSticker):continue
+            tags=' '.join(sticker.tags).lower()
+            score=sum(h in tags for h in hints)
+            if score:ranked.append((score,sticker))
+        ranked.sort(key=lambda row:(-row[0],row[1].id))
+        return {str(s.id):dict(official_description=(s.description or '')[:180],official_tags=s.tags[:12],source='Discord standard metadata; not pixel analysis') for _,s in ranked[:8]}
 
     def install_commands(self):
         client=self
@@ -152,7 +154,7 @@ class EchoClient(discord.Client):
         async def panel(i:discord.Interaction):
             await i.response.send_message(self.status_text(),view=OwnerPanel(self),ephemeral=True)
         @group.command(name="set",description="기분·성격·모델·기능 설정")
-        @app_commands.choices(key=[app_commands.Choice(name=k,value=k) for k in ("enabled","text","reactions","stickers","media","vision","mood","warmth","cuteness","playfulness","auto_mood","activity","cooldown","engagement_seconds","media_probability","daily_limit","model")])
+        @app_commands.choices(key=[app_commands.Choice(name=k,value=k) for k in ("enabled","text","reactions","stickers","vision","mood","warmth","cuteness","playfulness","auto_mood","activity","cooldown","engagement_seconds","daily_limit","model")])
         async def setting(i:discord.Interaction,key:str,value:str):
             defaults=self.settings.get()
             if key not in defaults or key=="guilds":raise ValueError("Unknown setting")
@@ -208,32 +210,6 @@ class EchoClient(discord.Client):
                     except (ValueError,RuntimeError,OSError):self.runtime.note("owner_asset_refresh_failed")
             finally:self.owner_tasks.discard(task)
             if not self.is_closed():await i.followup.send(f"실제 이미지 분석 {processed}개 완료. 다음 offset은 {offset+limit}이야.",ephemeral=True)
-        @group.command(name="media_add",description="승인할 미디어를 실제 시각 분석 후 라이브러리에 등록")
-        async def media_add(i:discord.Interaction,file:discord.Attachment,tags:str,purpose:str):
-            if file.size>8*1024**2:raise ValueError("File limit")
-            await i.response.defer(ephemeral=True)
-            task=asyncio.current_task();self.owner_tasks.add(task)
-            try:mid=await self.library.register(i.user.id,await download(str(file.url)),i.guild_id,tags,purpose,self.cache,self.backend)
-            finally:self.owner_tasks.discard(task)
-            await i.followup.send("등록 완료: "+mid,ephemeral=True)
-        @group.command(name="media",description="등록 미디어 목록·삭제·활성화·태그·허용 서버 관리")
-        async def media_manage(i:discord.Interaction,operation:str,media_id:str="",value:str=""):
-            self.settings.authorize(i.user.id)
-            if operation=="list":
-                text="\n".join(mid+" / "+str(r['enabled'])+" / "+r['tags'] for mid,r in self.library.records.items()) or "등록 미디어 없음"
-            elif operation=="delete":self.library.delete(i.user.id,media_id);text="삭제했어."
-            elif operation in {"tags","purpose","enabled","cooldown","guilds"}:
-                parsed=value
-                if operation=="enabled":
-                    if value not in {"true","false"}:raise ValueError("Invalid enabled flag")
-                    parsed=value=="true"
-                elif operation=="cooldown":parsed=int(value)
-                elif operation=="guilds":
-                    parsed=[int(x) for x in value.split(",")]
-                    if set(parsed)-set(self.admin_guilds):raise ValueError("Guild not locally approved")
-                self.library.edit(i.user.id,media_id,**{operation:parsed});text="저장했어."
-            else:raise ValueError("Unknown operation")
-            await i.response.send_message(text[:1900],ephemeral=True)
         @group.command(name="shutdown",description="안전하게 종료")
         async def shutdown(i:discord.Interaction):
             await i.response.send_message("종료할게.",ephemeral=True)
@@ -247,6 +223,9 @@ class EchoClient(discord.Client):
             else:await i.followup.send("처리하지 못했어. 설정과 파일 지원 범위를 확인해 줘.",ephemeral=True)
 
     async def setup_hook(self):
+        try:
+            self.standard_stickers={s.id:s for pack in await self.fetch_premium_sticker_packs() for s in pack.stickers if isinstance(s,discord.StandardSticker)}
+        except discord.HTTPException:self.runtime.note('standard_sticker_catalog_unavailable')
         for guild in self.admin_guilds:await self.tree.sync(guild=discord.Object(guild))
 
     async def on_ready(self):self.runtime.note("gateway_ready")
@@ -259,9 +238,10 @@ class EchoClient(discord.Client):
         parent=message.channel.parent_id if isinstance(message.channel,discord.Thread) else None
         cfg=self.settings.get()
         if scope(cfg,message.guild.id,message.channel.id,parent)=="silent":return
+        standard=tuple(dict(id=str(s.id),official_description=(s.description or '')[:180],official_tags=s.tags[:12]) for item in message.stickers if (s:=self.standard_stickers.get(item.id)))
         await self.runtime.ingest(Event(message.id,message.guild.id,message.channel.id,message.author.id,
             message.content,message.created_at,parent=parent,reply_to=message.reference.message_id if message.reference else None,
-            assets=assets_from_message(message)))
+            assets=assets_from_message(message) if cfg['vision'] else (),standard_stickers=standard))
 
     async def on_raw_message_delete(self,payload):self.runtime.invalidate(payload.channel_id)
     async def on_raw_message_edit(self,payload):self.runtime.invalidate(payload.channel_id)

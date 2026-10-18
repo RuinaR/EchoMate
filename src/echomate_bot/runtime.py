@@ -1,7 +1,7 @@
 """Transport-independent integration of existing participation/continuity policies."""
 from __future__ import annotations
 import asyncio
-from dataclasses import dataclass,field
+from dataclasses import dataclass,field,replace
 from datetime import datetime,timezone
 import json
 import random
@@ -34,6 +34,8 @@ class Event:
     bot:bool=False
     assets:tuple=()
     opted_out:bool=False
+    standard_stickers:tuple=()
+    response_to:int|None=None
 
 
 class Ledger:
@@ -61,7 +63,7 @@ class Ledger:
 
 class Runtime:
     def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None):
-        self.settings=settings;self.backend=backend;self.transport=transport;self.cache=cache;self.library=library
+        self.settings=settings;self.backend=backend;self.transport=transport;self.cache=cache;self.library=None
         self.ledger=Ledger(ledger_path);self.rng=rng or random.Random()
         self.states={};self.tasks={};self.seen={};self.blocked_assets=set();self.failures=0
         self.pending_mentions={}
@@ -113,10 +115,14 @@ class Runtime:
         state=self.states.setdefault(event.channel,DialogueState(limit=100,max_age_seconds=3600))
         metadata=json.dumps(dict(visual_inputs=len(event.assets),kinds=sorted({a.split(':')[0] for a,_ in event.assets}),
             analysis_state='not_analyzed',vision_enabled=self.settings.get()['vision'])) if event.assets else None
+        if event.standard_stickers:
+            details=json.loads(metadata) if metadata else {}
+            details['standard_stickers_official_metadata']=event.standard_stickers
+            metadata=json.dumps(details,ensure_ascii=False)
         if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None,context_metadata=metadata)):return
         request_content=None
         if mentions_bot(event.content,self.transport.bot_id):
-            self.pending_mentions[event.channel]=(event.author,event.timestamp,event.content)
+            self.pending_mentions[event.channel]=(event.author,event.timestamp,event.content,event.id)
         else:
             pending=self.pending_mentions.get(event.channel)
             if (pending and pending[0]==event.author and 0<=(event.timestamp-pending[1]).total_seconds()<=30
@@ -124,6 +130,7 @@ class Runtime:
                 # Reprocess an actual unanswered mention with newer same-author
                 # context. Never invent a mention or infer a third party's intent.
                 request_content=pending[2]
+                event=replace(event,response_to=pending[3])
             else:self.pending_mentions.pop(event.channel,None)
         old=self.tasks.get(event.channel)
         if old:old.cancel()
@@ -157,7 +164,13 @@ class Runtime:
                 _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
                 if not any(t.is_bot for t in turns):return
             evidence=None
-            if hasattr(self.backend,'assess_turn'):assessment,evidence=await self.backend.assess_turn(context)
+            if direct and text_mode!='silent' and getattr(self.backend,'fast_text_path',False):
+                # A verified explicit request does not need an interruption vote.
+                # Response safety and deterministic send checks still apply.
+                from echomate_studio.participation import ContextAssessment
+                assessment=ContextAssessment(False,True,True)
+                self.note('explicit_request_no_interruption_vote')
+            elif hasattr(self.backend,'assess_turn'):assessment,evidence=await self.backend.assess_turn(context)
             else:assessment=await self.backend.classify(context)
             if assessment.is_sensitive_moment:return
             continuing=False
@@ -209,12 +222,11 @@ class Runtime:
             elif event.assets:
                 context=[*context,dict(role='user',content='[시각 분석 비활성화: 실제 이미지 내용을 확인하지 못함. 이름으로 의미 추측 금지.]')]
             catalog=await self.transport.catalog(event,self.cache)
-            catalog["media"]={mid:dict(analysis=r["analysis"],tags=r["tags"],purpose=r["purpose"]) for mid,r in self.library.records.items()
-                if r["enabled"] and event.guild in r["guilds"]}
+            catalog["media"]={}
+            catalog['stickers']={key:value for key,value in catalog['stickers'].items() if (event.guild,key) not in self.blocked_assets}
             # Denied modes are also hidden from the model's candidate catalog.
             if not cfg["reactions"] or not reaction_permitted:catalog["reactions"]={}
             if not cfg["stickers"]:catalog["stickers"]={}
-            if not cfg["media"] or self.rng.random()>=cfg["media_probability"]:catalog["media"]={}
             allowed=['SILENCE']
             if cfg['text'] and not reaction_only:allowed.append('TEXT')
             if catalog['reactions']:
@@ -222,9 +234,6 @@ class Runtime:
                 if cfg['text'] and not reaction_only:allowed.append('TEXT_REACTION')
             if not reaction_only:
                 if catalog['stickers']:allowed.append('STICKER')
-                if catalog['media']:
-                    allowed.append('MEDIA')
-                    if cfg['text']:allowed.append('TEXT_MEDIA')
             catalog['allowed_actions']=allowed
             catalog['directed_to_bot']=direct or continuing
             self.stage(event,'action',started)
@@ -268,12 +277,10 @@ class Runtime:
                     lambda:self.fresh(event,state,version,revision))
                 self.ledger.completed(event,"sent")
                 self.pending_mentions.pop(event.channel,None)
-                if action.kind in {Kind.MEDIA,Kind.TEXT_MEDIA}:self.library.used(action.asset)
                 bot_content=action.text
                 output_metadata={}
                 if action.asset:
-                    description=(self.library.records[action.asset]['analysis'] if action.kind in {Kind.MEDIA,Kind.TEXT_MEDIA} else
-                                 latest_catalog.get('stickers' if action.kind==Kind.STICKER else 'reactions',{}).get(action.asset,''))
+                    description=latest_catalog.get('stickers' if action.kind==Kind.STICKER else 'reactions',{}).get(action.asset,'')
                     if isinstance(description,dict):
                         description={k:([str(v)[:100] for v in value[:3]] if isinstance(value,list) else str(value)[:180]) for k,value in description.items()}
                     output_metadata=dict(kind=action.kind.value,asset=action.asset,visual_observation_candidate=description)
@@ -281,7 +288,7 @@ class Runtime:
                     output_metadata['visual_input_summaries']=[dict(asset=v['asset'],observation={k:([str(s)[:60] for s in value[:2]] if isinstance(value,list) else str(value)[:100]) for k,value in v['result'].items()}) for v in visual]
                 if sent or action.kind==Kind.REACTION:
                     state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(sent) if sent else 'reaction:'+str(event.id),str(self.transport.bot_id),bot_content,
-                        datetime.now(timezone.utc),is_bot=True,reply_to=str(event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
+                        datetime.now(timezone.utc),is_bot=True,reply_to=str(event.response_to or event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
                 self.failures=0
                 self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
             except Exception:

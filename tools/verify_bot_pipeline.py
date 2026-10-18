@@ -12,7 +12,6 @@ from unittest.mock import patch
 from echomate_bot.settings import Settings
 from echomate_bot.inference import LocalBackend
 from echomate_bot.runtime import Runtime,Event
-from echomate_bot.media import MediaLibrary
 from echomate_bot.vision import VisualCache
 
 
@@ -38,7 +37,7 @@ async def run(root):
     settings=Settings(1,secrets.token_hex(32),root/'settings.json')
     settings.set_scope(1,2,3,'mention');settings.set(1,'enabled',True);settings.set(1,'vision',True)
     backend=LocalBackend();transport=Transport()
-    runtime=Runtime(settings,backend,transport,VisualCache(root/'cache.sqlite3'),MediaLibrary(settings,root/'library'),ledger_path=root/'sent.sqlite3')
+    runtime=Runtime(settings,backend,transport,VisualCache(root/'cache.sqlite3'),None,ledger_path=root/'sent.sqlite3')
     cold_started=time.monotonic();await backend.ready();startup_seconds=round(time.monotonic()-cold_started,1)
     ticks=0;running=True;max_gap=0
     async def heartbeat():

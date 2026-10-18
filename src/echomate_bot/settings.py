@@ -15,7 +15,7 @@ ACTIVITY = {"quiet": .05, "normal": .2, "active": .45, "very_active": .7}
 DEFAULTS = dict(enabled=False, text=True, reactions=False, stickers=False, media=False,
                 vision=False, mood="평온", warmth=75, cuteness=40, playfulness=20,
                 auto_mood=False, activity="normal", cooldown=60, engagement_seconds=600,
-                media_probability=.05, daily_limit=100, model="persona", guilds={})
+                media_probability=0., daily_limit=100, model="persona", guilds={},asset_policy=2)
 
 
 def private_path(value):
@@ -52,6 +52,7 @@ def positive_id(value):
 def validate(cfg):
     if set(cfg) != set(DEFAULTS):
         raise ValueError("Unknown settings; owner identity cannot be configured here")
+    if cfg['asset_policy']!=2 or cfg['media'] or cfg['media_probability']!=0:raise ValueError('Registered media is removed')
     for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood"):
         if type(cfg[key]) is not bool:
             raise ValueError("Boolean required")
@@ -120,7 +121,11 @@ class Settings:
             actual = hmac.new(self._key, canonical(envelope["data"]), hashlib.sha256).hexdigest()
             if not hmac.compare_digest(actual, envelope["signature"]):
                 raise PermissionError("Settings integrity failure; start disabled and repair locally")
-            self._cfg = validate(envelope["data"])
+            verified=envelope['data']
+            if 'asset_policy' not in verified:
+                # Authenticate first; previous QA vision opt-in must not enable the new experiment.
+                verified=dict(verified,asset_policy=2,vision=False,media=False,media_probability=0.)
+            self._cfg = validate(verified)
 
     def authorize(self, user_id):
         if type(user_id) is not int or user_id != self.owner_id:
@@ -141,7 +146,7 @@ class Settings:
         self.revision += 1
 
     def set(self, user_id, key, value):
-        if key == "guilds" or key not in DEFAULTS:
+        if key in {"guilds","asset_policy","media","media_probability"} or key not in DEFAULTS:
             raise ValueError("Use scope commands")
         self.change(user_id, lambda cfg: cfg.update({key: value}))
 

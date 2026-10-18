@@ -14,7 +14,6 @@ import time
 from echomate_bot.inference import LocalBackend
 from echomate_bot.runtime import Runtime,Event
 from echomate_bot.settings import Settings,private_path
-from echomate_bot.media import MediaLibrary
 from echomate_bot.vision import VisualCache
 
 
@@ -53,7 +52,7 @@ async def run(root,variants=('old','fast')):
             settings.set_scope(1,2,3,'mention');settings.set(1,'enabled',True)
             transport=Transport()
             runtime=Runtime(settings,OldBackend(backend) if variant=='old' else backend,transport,
-                VisualCache(directory/'cache.sqlite3'),MediaLibrary(settings,directory/'library'),ledger_path=directory/'sent.sqlite3')
+                VisualCache(directory/'cache.sqlite3'),None,ledger_path=directory/'sent.sqlite3')
             prompts=['<@999> 안녕, 오늘 뭐 하고 있었어?','그럼 파이썬에서 리스트 얕은 복사랑 깊은 복사가 어떻게 달라?']
             for index,prompt in enumerate(prompts):
                 if index:

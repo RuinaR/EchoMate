@@ -41,10 +41,10 @@ class DesktopWidgets(unittest.TestCase):
             root=tk.Tk();root.withdraw();controller=Controller()
             try:
                 app=DesktopApp(root,controller)
-                app.snapshot=dict(cfg=settings.get(),servers=[])
-                app.servers={'test':dict(id=2,channels=[dict(id=3,label='test-channel',thread=False)])}
-                app.guild_var.set('test');app.update_channels();app.reload_settings()
-                app.save_scope();app.save_settings();root.update_idletasks()
+                app.snapshot=dict(cfg=settings.get(),servers=[dict(id=2,label='test',enabled=True,channels=[dict(id=3,label='test-channel',thread=False)])],
+                    connected=False,phase='test',error='',notice='')
+                app.refresh_lists();app.channel_list.select_index(0,False)
+                app.save_scope();app.set_value('activity','normal');root.update_idletasks()
                 self.assertEqual(controller.commands[0][1]['text_mode'],'autonomous')
                 self.assertEqual(controller.commands[0][1]['reaction_mode'],'silent')
                 self.assertTrue(controller.commands[0][1]['inherit'])
