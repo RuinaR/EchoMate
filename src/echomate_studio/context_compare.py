@@ -39,7 +39,7 @@ def quality_hints(scenario: dict, reply: str) -> list[str]:
         return ["empty_reply"]
     if scenario.get("must_contain") and scenario["must_contain"] not in reply:
         flags.append("missing_known_fact")
-    if scenario.get("unknown_time") and re.search(r"(?:오전|오후|저녁|새벽)?\s*(?:[0-9]{1,2}|[한두세네다섯여섯일곱여덟아홉열])\s*시", reply):
+    if scenario.get("unknown_time") and re.search(r"(?<![가-힣])(?:오전|오후|저녁|새벽)?\s*(?:[0-9]{1,2}|[한두세네다섯여섯일곱여덟아홉열])\s*시(?:에|쯤|경|부터|까지|로|였|야|다|\b)", reply):
         flags.append("fabricated_time_candidate")
     if re.search(r"[\u3400-\u4dbf\u4e00-\u9fff]", reply):
         flags.append("hanzi_present")
