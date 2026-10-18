@@ -434,3 +434,8 @@
 - [x] Add explicit synthetic tokenizer smoke and bounded 1..3 optimizer updates to cached Gemma4 12B QLoRA test tool; 3 regression tests written.
 - [ ] Windows unittest suite now expected 171, then seq32 two-step tokenizer smoke; observe VRAM and classify failures; no large-context claim yet.
 - [ ] Human-reviewed private corpus permission/privacy/leakage gates, approved fine-tune and held-out study remain open.
+
+## 2026-10-18 — Two-step Gemma4 tokenizer test verified
+- [x] Windows 171 unittests OK; Gemma4 official tokenizer, fixed synthetic Korean input, 2 NF4 LoRA optimizer steps OK (seq32), peak PyTorch 11,163.6 MiB, free after 2,344.8 MiB.
+- [ ] Validate longer context/multiple diverse synthetic samples, measured OOM headroom.
+- [ ] Implement Gemma4-specific private corpus training path with leakage/privacy checks, tokenizer-safe text formatting and rigorous held-out comparison; do not start private dataset training automatically.
