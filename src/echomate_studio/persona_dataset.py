@@ -28,19 +28,24 @@ def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
             raise ValueError("input must be outside output folder")
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ValueError("Refusing to overwrite existing private corpus output")
-    # Collect chronological cutoffs without retaining private message text.
-    thresholds=[]
+    # Global UTC cutoff, not independent per-channel cutoffs:
+    # no older/younger cross-channel time interleaving across the split.
+    timestamps=[]
     for p in paths:
-        times=[t for r in iter_json_array(p) if isinstance(r,dict)
-               if (t:=timestamp_of(r)) is not None]
-        if not times:
-            raise ValueError("no valid timestamps")
-        times.sort()
-        thresholds.append(times[min(len(times)-1,int(len(times)*(1-validation_fraction)))])
+        for record in iter_json_array(p):
+            if isinstance(record,dict):
+                stamp=timestamp_of(record)
+                if stamp is not None:
+                    timestamps.append(stamp)
+    if not timestamps:
+        raise ValueError("no valid timestamps")
+    timestamps.sort()
+    cutoff=timestamps[min(len(timestamps)-1,int(len(timestamps)*(1-validation_fraction)))]
+    del timestamps
     # Always prioritize validation membership: remove any text present in held-out
     # time spans from training, including duplicates across channels.
     heldout=set()
-    for p,cutoff in zip(paths,thresholds):
+    for p in paths:
         for r in iter_json_array(p):
             if not isinstance(r,dict) or (t:=timestamp_of(r)) is None or t<cutoff:
                 continue
@@ -89,6 +94,7 @@ def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
     # No raw strings, hashes, IDs or timestamp values in the report.
     report={"status":"built_local_only","counts":dict(counts),
             "validation_overlap_removed_from_training":True,
+            "global_chronological_cutoff":True,
             "objective":"single_speaker_language_modeling_not_chat_sft",
             "limits":["Filtered text can still contain private context",
                       "Rights and privacy flags represent user review, not proof of legal permission"]}
