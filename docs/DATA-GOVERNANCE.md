@@ -25,3 +25,10 @@
 - https://support.discord.com/hc/en-us/articles/360004957991-Your-Discord-Data-Package
 - https://support.discord.com/hc/en-us/articles/360004027692-Requesting-a-Copy-of-your-Data
 - https://support-dev.discord.com/hc/en-us/articles/8563934450327-Discord-Developer-Policy
+
+## 2026-10-18 — Training rights and corpus gate clarification
+- Discord Developer Policy section 21 explicitly disallows AI/ML training on message content obtained through Discord APIs without Discord's express permission: https://support-dev.discord.com/hc/en-us/articles/8563934450327-Discord-Developer-Policy
+- Official Discord personal Data Package contains the account holder's own messages and timestamps, per https://support.discord.com/hc/en-us/articles/360004957991-Your-Discord-Data-Package . That separate acquisition route does NOT automatically establish authorization to train an AI model; verify current conditions before enabling actual corpus export or fine-tuning.
+- Current owner permission covers offline aggregate diagnostics, not publication of original/private messages. Never put raw messages, redacted snippets, identifiers, tokenized samples or training examples in public GitHub. Independently assess privacy exposure of other people, including contextual details in own messages.
+- Single-speaker corpus is not an interlocutor Q&A dataset. Do not synthesize false dialogue labels from adjacent self-messages. Prefer controlled style/completion objectives only after source clearance and human review.
+- `persona_split_audit.py` produces only aggregate candidate counts, using per-file chronological last ~10% validation and ephemeral text hashes for cross-split overlap checks. This is a diagnostic, NOT a training sample writer, approval or proof of privacy clearance. Exact split and duplicates must be checked again on any eventual approved dataset.
