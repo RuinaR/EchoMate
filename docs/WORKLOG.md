@@ -243,3 +243,6 @@
 ## 2026-10-18 — 페르소나 학습 상태 재정리 / SQLite 잠금 QA
 - 페르소나 학습은 아직 실제 파인튜닝 미시작. 기존 것은 원본 분석, 통계/프로필, 로컬 Gemma 추론 및 품질 평가. 이후 진행의 우선순위를 실제 가중치 학습 검증으로 재설정함.
 - Windows 사용자 로그: 123 tests 중 1 ERROR, `old.db` 임시폴더 삭제시 WinError32; DB 연결을 contextlib.closing으로 명시 종료하도록 수정, 재검증 필요.
+
+## 2026-10-18 — Windows 임시 SQLite 테스트 파일 잠금 수정
+- Windows 123개 중 1 ERROR 재발. 테스트 자체의 sqlite3.connect 컨텍스트가 커넥션을 닫지 않아 old.db 임시 파일 삭제 실패. closing + 명시 commit으로 수정, 재검증 대기.
