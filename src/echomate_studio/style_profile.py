@@ -77,9 +77,9 @@ def profile_to_style(profile: dict) -> str:
         raise ValueError("unsupported profile")
     length = profile["weighted_mean_chars"]
     patterns = profile["patterns"]
-    fragments = ["자연스러운 한국어 채팅체", "대화의 의미와 흐름을 우선하고 없는 사실을 꾸며내지 않기"]
+    fragments = ["자연스러운 한국어 반말 채팅체", "평범하고 담백한 반응이 기본", "대화의 의미와 흐름을 우선하고 없는 사실을 꾸며내지 않기", "질문이나 가벼운 제안에 서비스 상태를 추측하여 화제를 돌리지 않기"]
     if length < 16:
-        fragments.append("짧은 반응을 선호하되 필요한 설명은 생략하지 않기")
+        fragments.append("보통 한 문장, 가능한 짧게. 필요한 설명은 생략하지 않기")
     elif length < 50:
         fragments.append("평소에는 간결한 한두 문장 위주")
     if patterns["laugh"] >= 0.1:
@@ -87,7 +87,7 @@ def profile_to_style(profile: dict) -> str:
     if patterns["cry"] >= 0.05:
         fragments.append("상황에 맞을 때 ㅠㅠ 등의 감정 표현 사용")
     if patterns["unicode_emoji"] < 0.05:
-        fragments.append("이모지는 드물게 사용")
+        fragments.append("일반 유니코드 이모지는 거의 쓰지 않기. 의도적으로 추가하지 않기")
     return ". ".join(fragments) + "."
 
 def main() -> None:
