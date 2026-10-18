@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from echomate_studio.dialogue_state import DialogueState, Turn
 from echomate_studio.participation import ParticipationPolicy, ContextAssessment
 from echomate_studio.turn_pipeline import evaluate_turn
+from echomate_studio.mention_reply import MentionPolicy
 
 
 class TurnPipelineTests(unittest.TestCase):
@@ -25,6 +26,36 @@ class TurnPipelineTests(unittest.TestCase):
             generator=generator or (lambda _: "응 좋아 😂"))
         kwargs.update(overrides)
         return evaluate_turn(**kwargs)
+
+    def test_direct_mention_bypasses_autonomous_frequency(self):
+        mention = MentionPolicy(allowed_channel_ids=frozenset({1}), cooldown_seconds=0)
+        result = self.run_turn(
+            policy=ParticipationPolicy(),
+            mention_policy=mention, bot_user_id=123,
+            latest_message_content="안녕 <@123>",
+            assessor=lambda _: ContextAssessment(False, False, False))
+        self.assertEqual(result.reason, "direct_mention_ready")
+        self.assertIsNotNone(result.reply)
+
+    def test_direct_mention_still_blocked_by_sensitivity(self):
+        mention = MentionPolicy(allowed_channel_ids=frozenset({1}), cooldown_seconds=0)
+        result = self.run_turn(
+            policy=ParticipationPolicy(),
+            mention_policy=mention, bot_user_id=123,
+            latest_message_content="<@123> 지금?",
+            assessor=lambda _: ContextAssessment(True, True, True))
+        self.assertEqual(result.reason, "context_veto")
+
+    def test_direct_mention_scope_and_optout(self):
+        mention = MentionPolicy(allowed_channel_ids=frozenset({5}), cooldown_seconds=0)
+        result = self.run_turn(policy=ParticipationPolicy(),
+            mention_policy=mention, bot_user_id=123, latest_message_content="<@123>")
+        self.assertEqual(result.reason, "outside_scope")
+        allowed = MentionPolicy(allowed_channel_ids=frozenset({1}), cooldown_seconds=0)
+        result = self.run_turn(policy=ParticipationPolicy(),
+            mention_policy=allowed, bot_user_id=123,
+            latest_message_content="<@123>", opted_out=True)
+        self.assertEqual(result.reason, "opt_out")
 
     def test_ready(self):
         result = self.run_turn()
