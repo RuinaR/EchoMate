@@ -221,3 +221,7 @@
 - Windows 기존 103개 테스트 OK.
 - 실제 bot reply 대상과 인간 답장의 주제 연속성을 로컬 Ollama JSON 분류로 평가하는 `topic_assessor.py` 추가; 잘못된 데이터/추론 장애 시 false.
 - 기존 TurnPipeline에 선택적 assessor 함수 주입, 신규 회귀 테스트 6개. 총 109개 예상, 사용자 Windows QA 전.
+
+## 2026-10-18 — 109 테스트 통과 및 Gemma 주제판정 실측 준비
+- Windows 109개 unittest 모두 OK.
+- 실제 Ollama를 대상으로 6가지 합성 답장/대화 전환 상황에서 topic_continues 성능을 측정하는 CLI와 2개 테스트 추가. 111개 Windows QA 및 `local_data/topic-qa.json` 실측 대기.
