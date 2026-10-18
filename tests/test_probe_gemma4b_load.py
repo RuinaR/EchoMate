@@ -14,3 +14,10 @@ class GemmaLoadProbeTests(unittest.TestCase):
     def test_reject_unreviewed_model_id(self):
         with self.assertRaises(ValueError):
             module.probe(model_id="untrusted/other-model")
+
+    def test_gated_access_error_redacted(self):
+        exc=OSError("403 GatedRepoError token=private-secret")
+        self.assertEqual(module.classify_error(exc),"model_access_not_granted")
+    def test_network_and_unclassified(self):
+        self.assertEqual(module.classify_error(OSError("SSL timeout")),"network_or_tls_failure")
+        self.assertEqual(module.classify_error(OSError("unexpected")),"unclassified_load_error")
