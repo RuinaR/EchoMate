@@ -496,3 +496,9 @@
 - Uploaded private-free report: synthetic_only=true, sample_count=2; base-disabled losses [23.795, 22.2657], saved adapter losses [23.7906, 22.196], free_after_mib=7585.0. Both losses decreased on fixed synthetic examples, but this is not blind evaluation, natural conversation quality, or personal style proof. GPU inference/reload path is verified.
 - Model infrastructure milestone: NF4 base load, rank4 q/v synthetic backward, two updates, checkpoint save, checkpoint reload and adapter-on/off loss comparison all completed on Windows RTX 4070 Ti SUPER.
 - Remaining gate BEFORE real owner-message training: review lawful source/use and third-party privacy, improve near duplicate and sensitive context screening, construct local-only approved chronological corpus, audit train/val leakage and sample representativeness, then deliberate owner approval. DO NOT call training ready solely from this synthetic test.
+
+## 2026-10-18 — Private corpus safety hardening before real training
+- Added refusal to overwrite an existing nonempty `local_data/persona-dataset` output in `persona_dataset.py`; prevents accidental erasure of previously prepared confidential JSONL.
+- Expanded `gemma4_corpus_preflight.py` bounded near-duplicate bucket to compare text suffix as well as prefix (detects samples with altered openings); still not exhaustive or a substitute for source/permission/context privacy review.
+- Two new no-GPU regression tests check no-overwrite and changed-prefix near-duplicate flagging. Previously 180 Windows tests OK; expected 182 after this change, not executed on Windows. No actual private data used, no training started.
+- Last technical GPU test verified cached synthetic adapter reload with base vs LoRA losses. Remaining human gates: source use rights, third-party contextual privacy, chronological split/provenance and near-duplicate audit on reviewed private data.
