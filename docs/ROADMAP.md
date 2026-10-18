@@ -476,3 +476,8 @@
 - [x] Prevent replacing nonempty existing local private dataset folder.
 - [x] Expand bounded near-duplicate screening from prefix-only to prefix+suffix and add two regression tests.
 - [ ] Windows 182 tests and local corpus review audit when authorized; independently verify source rights, contextual privacy and chronological provenance before invoking Gemma4 private training.
+
+## 2026-10-18 — Global multi-file chronological holdout
+- [x] Verify user previous 182 tests pass; inspect private owner exports with aggregate-only outputs.
+- [x] Replace per-file train/validation boundaries with global UTC timestamp cutoff; add 1 synthetic regression test (expect 183 Windows tests).
+- [ ] Windows 183 tests; approved local data review, contextual privacy, near duplicates and legal/terms assessment before any real-message training.
