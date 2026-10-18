@@ -265,3 +265,6 @@
 
 ## 2026-10-18 GPU QA
 - Windows 134 tests OK. Local GPU: RTX 4070 Ti SUPER, 16GB, 12.7GB free. Python 3.10.11, torch CPU-only, 5 training packages absent. Isolated CUDA environment needed. No training yet.
+
+## 2026-10-18 CUDA persona bootstrap
+- User 134 Windows tests OK. GPU RTX 4070 Ti SUPER 16GB, torch CPU-only. Added isolated Python 3.10 environment PowerShell setup, CUDA tensor verification, optional training libraries, 3 tests. Expected 137 tests; user GPU result pending. No dataset or model weights involved.
