@@ -361,3 +361,9 @@
 - [x] Opt-in synthetic LoRA one-step tool with cached 4B NF4 weights.
 - [ ] Windows 148 tests and --allow-synthetic-step CUDA outcome.
 - [ ] Evaluate stability, data rights and training set privacy before personal message training.
+
+## 2026-10-18 — First complete synthetic LoRA step verified
+- [x] Windows 152/152 tests OK and synthetic Gemma3 4B NF4 LoRA optimizer step OK.
+- [x] Recorded peak PyTorch GPU allocation 5660.7 MiB for length32 and 1,611,776 trainable params.
+- [ ] Verify explicit gradient checkpoint setting on Windows and run longer synthetic sequence VRAM stress when needed.
+- [ ] Resolve source permission and privacy review; train/validation chronological split; actual local-only adapter tuning followed by measured baseline vs adapter comparison.
