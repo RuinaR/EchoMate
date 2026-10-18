@@ -349,3 +349,8 @@
 - Official Hugging Face model `google/gemma-3-4b-it` is gated: individual must review/accept Gemma license and authenticate locally. This cannot be bypassed or presumed accepted.
 - Added `tools/probe_gemma4b_load.py` opt-in `--allow-download` model load using Gemma3ForConditionalGeneration, bitsandbytes NF4 and GPU VRAM report to ignored local_data. No Discord data, no training, no upload. Without flag: report not_run; tests/test_probe_gemma4b_load.py 2 tests. New Windows unittest expected 145, not yet verified.
 - Model download is multi-GB. User should first visit https://huggingface.co/google/gemma-3-4b-it and accept terms, then authenticate using `.venv-train\\Scripts\\hf.exe auth login` if offered in venv, avoiding pasting tokens into chat or terminal logs. **Do not run --allow-download without acceptance and explicit consent.** Model loading success != training or VRAM headroom for gradients.
+
+## 2026-10-18 — Real Gemma 4B model load failed after 145 QA
+- User Windows tests 145 OK, no-download probe not_run expected. HF CLI `auth whoami` succeeded; canceled `auth login` with KeyboardInterrupt (not a login failure).
+- `--allow-download` failed OSError, 15111 MiB VRAM free before loading. Old diagnostic hid exception detail. Failure cannot yet be attributed to HF gating, network, cache, or compatibility.
+- Updated probe to classify exception into safe categories with no original exception strings or credentials, and changed deprecated `torch_dtype` to `dtype`; added 2 tests (147 expected, Windows unverified). User should verify access acceptance to google/gemma-3-4b-it and rerun probe once to share `failure_category`. No proof of successful download or QLoRA training yet.
