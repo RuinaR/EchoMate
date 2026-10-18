@@ -506,3 +506,10 @@
 ## 2026-10-18 — Windows 182 test suite GREEN
 - User reported `Ran 182 tests in 0.439s` and `OK` after JSONL newline test correction. Previous regression failure resolved.
 - Owner supplied two private Discord export files for local review only; never commit raw texts, derived private data or train adapters to GitHub. No owner-data model training yet.
+
+## 2026-10-18 — Private corpus global holdout fix and owner-export aggregate inspection
+- User confirmed Windows unittest 182/182 OK (0.439s) immediately before this change. New code now expected 183 tests; Windows rerun pending.
+- Updated `src/echomate_studio/persona_dataset.py`: use a single global UTC chronological cutoff across all provided Discord export files instead of per-file cutoff. Exact text appearing in heldout spans is still excluded from training. Added a synthetic two-channel uneven-history regression test.
+- Inspected two user-authorized private original exports locally only; 244976 and 60021 records, all with timestamps. Global ~90th percentile timestamp of the combined 304997 records: 2026-04-26 06:56:16 UTC. Before filtering raw timeline split: messages1 pre/heldout 243549/1427 and messages2 30948/29073. Total raw heldout 30500, ~10%. These aggregate metrics reveal strong file-level temporal skew; independent per-file split would not be a global future holdout. No texts, IDs, hashes, exports or derived datasets published.
+- Short messages: length <3: 54927 and 14395; lengths 3..7: 113624 and 23460. Corpus candidate filter still excludes <3 and basic PII hints; do not claim these are all safe or should all be trained.
+- No real training, approved dataset build, or private adapter generation yet. Independent source rights/consent and contextual privacy review still required.
