@@ -553,3 +553,7 @@
 
 ## 2026-10-18 — 190-test privacy classifier fix awaiting Windows verification
 - Windows 190 suite had one failed classifier test: raw URL-only text was normalized to empty before identifier scan. Regexes for URL and secret markers also had excess backslash escaping. Corrected both: identify sensitive raw patterns before normalization and use single regex escapes. No model failure and no owner-data training. Re-run Windows 190 tests.
+
+## 2026-10-18 — Windows privacy classifier regression verified
+- User Windows unittest result: 190 tests, 0.430s, OK. Fix for raw URL/mention/secret detection ordering and regex escaping is unit-test verified.
+- Real personal Discord QLoRA remains unstarted. Next gate: locally reviewed corpus with third-party contextual privacy screening and rights assessment; no raw files or derived private adapters in GitHub.
