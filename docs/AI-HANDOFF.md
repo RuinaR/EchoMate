@@ -264,3 +264,11 @@
 - `reminders.py`: 제한된 한국어 상대시간 명령(시간/분, 최대 7일)을 결정론적으로 추출, 요청 원본 Message ID를 UNIQUE 처리, 사용자 본인 Discord ID·길드·채널·UTC due_at를 로컬 SQLite에 저장, 재시작 복구. claim_due 선점으로 중복 수신/발송 방지, 실패는 failed 종결(중복 방지 우선, 강제종료 시 누락 가능). 메시지 원문은 DB에 저장하지 않음. `.gitignore` *.db,*.sqlite3 이미 제외.
 - `tests/test_reminders.py`: 명령 파싱, 범위 제한, 재시작 복구, 중복 수신/선점, 실패 후 자동 재시도 금지 테스트 4건. 총 **118개 예상**, Windows 확인 전.
 - 실제 Discord Gateway에서 신뢰할 수 있는 author ID/channel/guild 검사, 봇 권한, allowed_mentions 제한, 발송 워커 및 앱 재시작 스케줄러 연결은 **아직 미구현**. 실제 멘션이 간다고 주장하면 안 됨.
+
+## 2026-10-18 — 예약 조회·선택 취소·전체 취소 및 기존 DB 마이그레이션
+- 사용자 Windows **118 tests OK** 확인.
+- `ReminderStore.list_pending(guild_id, requester_id, limit)`은 해당 서버/요청자 소유의 pending 예약만 ID·채널·UTC 실행시각으로 반환; `cancel(guild_id, requester_id, reminder_id)`는 pending만 원자적으로 cancelled; `cancel_all`도 본인/서버 pending만 변경.
+- `reminder_commands.py`는 `내 예약 확인`, `예약 목록`, `예약 1 취소`, `내 예약 전부 취소` 등의 제한된 한국어 명령을 오프라인 파싱. 먼저 허용 채널 확인. 결과는 구조화된 status이며 Discord 안내 메시지 전송은 아직 미연결.
+- 기존 SQLite 테이블 CHECK에 `cancelled`가 없으므로 ReminderStore 초기화 시 이전 테이블을 트랜잭션으로 재구성해 기존 항목을 보존하는 마이그레이션 추가.
+- `tests/test_reminder_management.py` 5개(소유자/서버 범위, 선택/전체취소, claimed 불가, 구형DB 보존) 추가. 기존 118+5=**123개 예상**, Windows 새 버전 미검증.
+- 중요: claimed 이후의 취소는 불가, 발송 도중 프로그램 종료 시 누락 가능; 중복 발송 방지가 우선인 임시 설계. 공식 Discord 발송 워커/취소 명령 연결/안전한 allowed_mentions, 토큰·원본 비공개 관리 등 작업 남음.
