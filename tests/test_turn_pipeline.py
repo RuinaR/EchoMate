@@ -97,6 +97,23 @@ class TurnPipelineTests(unittest.TestCase):
             assessor=lambda _: ContextAssessment(True, True, True))
         self.assertEqual(result.reason,"context_veto")
 
+    def test_reply_reference_drives_engagement_without_manual_flags(self):
+        from datetime import timedelta
+        state = DialogueState()
+        state.append(channel_id=1, thread_id=None,
+                     turn=Turn("botmsg", "bot", "그거 괜찮겠다", self.now, is_bot=True))
+        state.append(channel_id=1, thread_id=None,
+                     turn=Turn("humanmsg", "human", "그럼 이건?", self.now,
+                               reply_to="botmsg"))
+        zero = ParticipationPolicy(enabled=True, allowed_channel_ids=frozenset({1}),
+                                   opportunity_probability=0, cooldown_seconds=180)
+        result = self.run_turn(state=state, policy=zero, seconds_since_last_speech=10,
+                               engagement_policy=EngagementPolicy(), topic_continues=True)
+        self.assertEqual(result.reason, "engaged_ready")
+        result = self.run_turn(state=state, policy=zero, seconds_since_last_speech=10,
+                               engagement_policy=EngagementPolicy(), topic_continues=False)
+        self.assertEqual(result.reason, "cooldown")
+
     def test_ready(self):
         result = self.run_turn()
         self.assertEqual(result.reply, "응 좋아 😂")
