@@ -36,7 +36,7 @@ class ReminderStore:
                 requester_id INTEGER NOT NULL,
                 due_at TEXT NOT NULL,
                 state TEXT NOT NULL DEFAULT 'pending'
-                    CHECK(state IN ('pending','claimed','sent','failed'))
+                    CHECK(state IN ('pending','claimed','sent','failed','cancelled'))
             )""")
 
     def _connect(self):
@@ -82,6 +82,33 @@ class ReminderStore:
         with self._connect() as db:
             return db.execute("UPDATE reminders SET state=? WHERE id=? AND state='claimed'",
                               ("sent" if sent else "failed",reminder_id)).rowcount == 1
+
+    def list_pending(self, *, guild_id: int, requester_id: int, limit: int = 20) -> list[dict]:
+        """Only return this user's pending reminders within this guild."""
+        if any(type(v) is not int or v <= 0 for v in (guild_id, requester_id)) or not 1 <= limit <= 100:
+            raise ValueError("invalid list scope or limit")
+        with self._connect() as db:
+            rows = db.execute("""SELECT id,channel_id,due_at FROM reminders
+                WHERE guild_id=? AND requester_id=? AND state='pending'
+                ORDER BY due_at,id LIMIT ?""",(guild_id,requester_id,limit)).fetchall()
+        return [dict(zip(("id","channel_id","due_at"), row)) for row in rows]
+
+    def cancel(self, *, guild_id: int, requester_id: int, reminder_id: int) -> bool:
+        """Atomically cancel pending reminder only. Claimed reminders cannot be canceled."""
+        if any(type(v) is not int or v <= 0 for v in (guild_id, requester_id, reminder_id)):
+            raise ValueError("invalid cancellation scope")
+        with self._connect() as db:
+            return db.execute("""UPDATE reminders SET state='cancelled'
+                WHERE id=? AND guild_id=? AND requester_id=? AND state='pending'""",
+                (reminder_id,guild_id,requester_id)).rowcount == 1
+
+    def cancel_all(self, *, guild_id: int, requester_id: int) -> int:
+        if any(type(v) is not int or v <= 0 for v in (guild_id, requester_id)):
+            raise ValueError("invalid cancellation scope")
+        with self._connect() as db:
+            return db.execute("""UPDATE reminders SET state='cancelled'
+                WHERE guild_id=? AND requester_id=? AND state='pending'""",
+                (guild_id,requester_id)).rowcount
 
 def reminder_text(requester_id: int) -> str:
     if type(requester_id) is not int or requester_id <= 0:
