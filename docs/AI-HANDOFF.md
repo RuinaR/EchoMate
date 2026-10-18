@@ -306,3 +306,10 @@
 - User ran Python unittest suite: **131 tests, OK**. All five new reaction_reply tests pass.
 - Offline text/reaction/silent choice verified. Semantic emoji selection and real Discord API sending remain unimplemented; never imply these work in Discord already.
 - Next top priority remains permission-aware persona fine-tuning preparation and local QLoRA feasibility. Current persona audit: 304,997 messages, 185,608 human-review candidates; training NOT started.
+
+## 2026-10-18 — QLoRA 학습 환경 진단 시작
+- 사용자 Windows **131 tests OK** 확인, reaction/text/silent 오프라인 테스트 모두 정상. 실제 Discord API와 학습 가중치 업데이트는 아직 미연결.
+- 신규 `qlora_environment.py`: Python, Windows/OS, torch/transformers/peft/trl/accelerate/bitsandbytes/datasets 패키지 설치 버전 확인 및 옵션 nvidia-smi GPU 정보 조회. 설치/다운로드/학습/개인 메시지 접근 없음.
+- tests/test_qlora_environment.py 신규 3개, 예상 **134개 Windows unittest**. Python 버전과 CUDA 가능 여부는 사용자 Windows 보고서로 확인 필요.
+- 후보 기반은 Gemma3 4B 모델이며 학습 가능한 HF base weights 및 게이트 접근·약관 검토가 필요. Ollama GGUF는 직접 QLoRA 대상 아님. 권한/민감자료 검토 전 개인 메시지 학습셋 생성 및 훈련 시작 금지.
+- CLI: `python -m echomate_studio.qlora_environment --gpu` -> `local_data/qlora-environment.json`.
