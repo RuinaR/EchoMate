@@ -107,3 +107,9 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - 길이/웃음/울음/질문/감탄/기본 Unicode 이모지 사용률 등 집계값만 출력. 원문·특정 단어·ID는 프로필 파일에 포함하지 않음.
 - `chat_probe --profile local_data/style-profile.json`으로 로컬 Qwen 프롬프트에 집계형 말투 지침 반영.
 - **이는 모델 가중치를 변경하는 학습이 아니라 프롬프트 기반 스타일 기준선**. 정책/사용 허가 확인 전 데이터 원문을 학습셋으로 변환하지 않음.
+
+## 2026-10-18 응답 품질 문제 개선
+- 사용자 Windows 58개 테스트 모두 OK이지만 실제 페르소나 응답에서 메이플스토리가 종료됐다는 거짓 주장/과도한 설명/격식 말투 발생. 이는 품질 실패로 분류.
+- 대화 초대 의도 우선, 짧고 담백한 한국어 채팅체, 근거 없는 서비스 종료 주장 금지 프롬프트 수정 및 프로필 가이드 조정.
+- `chat_probe --timing`으로 생성 전체 소요시간 측정 가능. **품질/속도 개선은 아직 실제 Windows 재측정 전**.
+- 관련 조사: [PERSONA-RESEARCH-AND-QA.md](docs/PERSONA-RESEARCH-AND-QA.md).
