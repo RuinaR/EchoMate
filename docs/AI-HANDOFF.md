@@ -538,3 +538,8 @@
 ## 2026-10-18 — Windows 186 test suite green; owner training not started
 - User Windows: Ran 186 tests in 0.448s, OK. Short-token unit regression now passes.
 - Next: synthetic GPU short-selection test, private-data use rights and contextual privacy review, chronological dataset audit, then explicit first local owner-data QLoRA run. No private training yet. Never commit messages or private adapters.
+
+## 2026-10-18 — First private training runner ready (not executed)
+- Last user Windows unit suite 186/186 OK. Added ASCII-only `tools/run_gemma4_short_synthetic_e2e.ps1` for opt-in short-token synthetic-only GPU training with unique local output. Added `tools/run_first_persona_training.ps1`, requires THREE explicit confirmation switches, existing locally reviewed private train+validation JSONL, invokes corpus preflight and fail-stops on audit flags before 2-step Gemma4 QLoRA. Neither script sends data or adapters to GitHub.
+- Two static regression tests added; expected Windows suite 188 (not run), synthetic short GPU run and private first-persona training NOT RUN. These scripts don't generate/approve private corpus automatically. A zero-flag heuristic preflight is NOT proof of rights, consent, or contextual privacy. Private owner exports never published.
+- Next: user Windows `git pull`, unittest 188, run short synthetic GPU script. Only after actual human review/legitimate use rights and ready private local JSONL, run first training script with deliberate flags. Do not claim trained persona until GPU completion and eval.
