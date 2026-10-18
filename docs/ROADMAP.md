@@ -391,3 +391,9 @@
 - [x] Research bibliography and EchoMate-specific persona experiment protocol in docs/PERSONA-RESEARCH.md.
 - [ ] Local approved owner-only LM corpus, near-duplicate and privacy checks.
 - [ ] Holdout baseline vs adapter evaluation and 16GB longer-context VRAM test.
+
+## 2026-10-18 — Single-speaker private dataset implementation
+- [x] Research-informed local-only, explicit-approval JSONL corpus tool implemented.
+- [x] Exact holdout-leak prevention (held-out strings omitted from training), 3 synthetic tests.
+- [ ] Windows 158 tests and source privacy/right review before enabling local personal corpus generation.
+- [ ] Near-duplicate and contextual PII checks, private baseline/adapter evaluation, actual LoRA training only after gates.
