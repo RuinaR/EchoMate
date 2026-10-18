@@ -136,3 +136,9 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - `context_compare.py` 추가: 약속 시각 미제공, 9시 확정, 10시 변경, 웃음 맞장구의 합성 다중 턴 입력을 두 모델에 동일 비교.
 - 실행: `python -m echomate_studio.context_compare --models "qwen3.5:9b-q4_K_M" "gemma3:12b" --profile "local_data/style-profile.json"`
 - 리포트 `local_data/context-comparison.json`은 생성 텍스트 포함하므로 비공개·로컬 유지. 테스트 추가 4개, 총 70개 예상(Windows 검증 전).
+
+## 실제 페르소나 미세조정 준비 (2026-10-18)
+- 목표: 적법하게 사용 가능한 본인 작성 메시지로 Gemma 3 LoRA/QLoRA 어댑터를 **로컬에서** 실험하고, 기본 모델 대비 검증 후 채택. 현재 실제 학습 실행 전.
+- `python -m echomate_studio.style_diagnostics <채널JSON들> --output local_data/style-diagnostics.json`: 원문/고유 표현을 저장하지 않는 집계형 스타일 분석.
+- `python -m echomate_studio.tuning_readiness --source-kind official-personal-data-package`: 학습 권한 및 안전성 준비 게이트 리포트. `--permission-confirmed`는 독립적으로 학습 권한을 확인하기 전에는 사용하지 말 것.
+- 메시지 학습셋·원본·어댑터 및 개인정보는 GitHub에 커밋 금지. 학습 가능한 Hugging Face 기반 가중치는 Ollama 설치 모델과 별개.
