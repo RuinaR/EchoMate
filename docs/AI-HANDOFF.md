@@ -247,3 +247,8 @@
 - 신규 `src/echomate_studio/topic_qa.py`: 개인 메시지 원본을 포함하지 않는 합성 Discord 대화 6건(보스 시간·변경·주제 전환·사냥 후속·타인 대화·짧은 맞장구), 로컬 Gemma 3 12B의 topic_assessor 실제 판정/소요시간/정답 여부를 `local_data/topic-qa.json`으로 기록.
 - `tests/test_topic_qa.py` 2건 추가, **111개 예상**. 실제 Ollama QA 및 Windows 신규 테스트 미검증. 이 6건만으로 실제 운용 안정성 단정 금지.
 - 원본 메시지와 비공개 학습셋 GitHub 업로드 금지, 개인 정보 제거 원칙 유지.
+
+## 2026-10-18 — 실제 Gemma 주제 판정 6/6 및 111 unittest 확인
+- 사용자 Windows `python -m unittest discover -s tests -v`: **111 tests OK**.
+- 사용자 로컬 `python -m echomate_studio.topic_qa --model gemma3:12b`: 합성 6개 중 **6개 정답**, `boss_time_reply` 9.306s 최초 요청, 이후 0.249~0.285s (외부 호출 없는 다른 사람 답장 경로 0.0s). 성공 사례: 시간 제안/변경, 주제 전환, 게임 후속, 타인에 대한 답장 제외, 짧은 `ㅇㅋ`.
+- 근거는 표본 6개일 뿐 실전 정밀도/재현율 보장하지 않음. 다음 우선순위: 여러 사람이 말하는 복합 상황, 주제 전환, 답장 없는 구어체 후속, 부정사례를 평가하는 테스트 확장 후 Discord Gateway 연동. 개인정보/사용자 원본은 GitHub 업로드 금지.
