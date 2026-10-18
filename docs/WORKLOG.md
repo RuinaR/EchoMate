@@ -277,3 +277,6 @@
 
 ## 2026-10-18 — QLoRA 140 QA pass and NF4 GPU probe
 - Confirmed 140 Windows unit tests OK and isolated training stack imported fully. Added synthetic GPU NF4 Linear4bit operation probe with privacy-safe memory summary, 3 mocked unit tests. Next: 143 tests and native NF4 result, no model downloaded/trained.
+
+## 2026-10-18 — NF4 actual GPU smoke QA
+- User Windows 143 tests OK. Tiny synthetic bitsandbytes NF4 CUDA operation success on RTX 4070 Ti SUPER, max PyTorch allocated 0.08 MiB, free GPU memory after 15073 MiB. Not a full-model VRAM benchmark.
