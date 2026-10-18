@@ -25,9 +25,9 @@ class ConversationTests(unittest.TestCase):
 
     def test_chat_prompt_prioritizes_invitation_without_fabricating_facts(self):
         system = build_messages([{"role": "user", "content": "오늘 메이플 할래?"}])[0]["content"]
-        self.assertIn("서비스 종료", system)
-        self.assertIn("초대", system)
-        self.assertIn("한 줄", system)
+        self.assertIn("현실 사실", system)
+        self.assertIn("질문의 의도", system)
+        self.assertIn("짧은 한 문장", system)
 
     def test_invalid_context(self):
         with self.assertRaises(ValueError):
