@@ -497,3 +497,7 @@
 - [x] Add opt-in standalone >=3 token-ID short-example sampling; no fake chat concatenation; default >=8 unchanged.
 - [x] Add pure-Python synthetic selection test.
 - [ ] Windows 185 unittest run and synthetic GPU comparison for opt-in short examples before use with approved private data.
+
+## 2026-10-18 — Short-sample syntax QA
+- [x] Repair invalid literal escaped newlines in Gemma4 trainer and malformed new short sample unit fixture; add Python AST syntax test.
+- [ ] User Windows unittest 186/186 pass, followed by safe synthetic-only GPU test for short sample optimizer path (not yet done).
