@@ -67,6 +67,13 @@ class ResponsePolicyV3Tests(unittest.TestCase):
         self.assertFalse(result["speak"])
         self.assertFalse(result["parse_valid"])
 
+    def test_native_reasoning_channel_and_tools_never_enter_visible_answer(self):
+        from persona_bounded_reasoning import visible_final
+        self.assertEqual(visible_final("보이는 답변<turn|>"),"보이는 답변")
+        for raw in ("<|channel>thought\n비공개 생각<channel|>답변", "<|tool_call>payload<tool_call|>"):
+            with self.assertRaises(ValueError):
+                visible_final(raw)
+
 
 if __name__=="__main__":
     unittest.main()

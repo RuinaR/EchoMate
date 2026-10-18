@@ -376,6 +376,12 @@ def run(root, stage, name, pilot_cases=None, pilot_v3_only=False, batch_policies
             original = next(r for r in results if r["case"]==case["id"] and r["system"]==component)
             results.append({**original, "system":"hybrid_v3", "derived_from":component,
                             "note":"Deterministic intent routing; cached identical component, not extra GPU sample."})
+            # Pilot showed v3 benefits on brief/empathy but verbosity/accuracy
+            # regressions elsewhere. Preserve v2 there; do not infer gold labels.
+            conservative="r8_60_"+("v3" if strategy.intent in ("reaction","empathy") else "v2")
+            source_row=next(r for r in results if r["case"]==case["id"] and r["system"]==conservative)
+            results.append({**source_row,"system":"selective_v3","derived_from":conservative,
+                "note":"Pilot-frozen selective policy; same preserved rank8 adapter, no extra GPU sample."})
             exp.write_json(out/"responses.json", dict(metadata=metadata, results=results))
             exp.write_json(out/"progress.json", dict(status="running", completed_cases=i+1,
                 total_cases=len(cases), responses=len(results), seconds=round(time.monotonic()-started,1),
@@ -462,6 +468,28 @@ def report(root, name):
     exp.write_json(out/"balanced.key.json",key)
     from persona_report import render_blind
     render_blind(blind_path)
+    # Focused pairs isolate weight/policy effects; no additional model sampling.
+    for stem,pair in (("same-policy",("base_v3","r8_60_v3")),
+                      ("same-weight",("r8_60_v2","r8_60_v3")),
+                      ("candidate-vs-provisional",("r8_60_v2","selective_v3"))):
+        focused, identities = [], []
+        pair_rng=random.Random(99822)
+        for i,case in enumerate(cases):
+            options=[r for r in data["results"] if r["case"]==case["id"] and r["system"] in pair]
+            if len(options)!=2:
+                continue
+            pair_rng.shuffle(options)
+            for j,row in enumerate(options):
+                code="%02d-%s" % (i,chr(65+j))
+                focused.append(dict(id=code,prompt=case["context"],response=row["response"] or "[침묵]",
+                    ratings={k:None for k in ("style","length","korean","context","factuality","privacy","bot_suitability")}))
+                identities.append(dict(id=code,system=row["system"]))
+        path=out/(stem+".blind.json")
+        if path.exists():
+            raise FileExistsError("Preserve existing focused human review")
+        exp.write_json(path,focused)
+        exp.write_json(out/(stem+".key.json"),identities)
+        render_blind(path)
     print(json.dumps(summary, ensure_ascii=False))
 
 
