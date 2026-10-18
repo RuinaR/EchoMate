@@ -12,7 +12,7 @@ class OllamaError(RuntimeError):
 
 def chat(messages: list[dict], *, model: str = "qwen3.5:9b-q4_K_M",
          base_url: str = "http://127.0.0.1:11434", timeout: float = 120.0,
-         temperature: float = 0.7, max_tokens: int = 180) -> str:
+         temperature: float = 0.7, max_tokens: int = 512) -> str:
     if not messages or any(m.get("role") not in {"system", "user", "assistant"} or
                            not isinstance(m.get("content"), str) for m in messages):
         raise ValueError("messages must be nonempty chat role/content objects")
@@ -21,7 +21,7 @@ def chat(messages: list[dict], *, model: str = "qwen3.5:9b-q4_K_M",
     if not 0 <= temperature <= 2 or max_tokens < 1:
         raise ValueError("invalid generation parameters")
     body = json.dumps({
-        "model": model, "messages": messages, "stream": False,
+        "model": model, "messages": messages, "stream": False, "think": False,
         "options": {"temperature": temperature, "num_predict": max_tokens},
     }).encode("utf-8")
     req = Request(base_url.rstrip("/") + "/api/chat", data=body,
@@ -34,4 +34,8 @@ def chat(messages: list[dict], *, model: str = "qwen3.5:9b-q4_K_M",
     answer = obj.get("message", {}).get("content")
     if not isinstance(answer, str):
         raise OllamaError("Ollama returned no text response")
+    if not answer.strip():
+        reason = obj.get("done_reason", "unknown")
+        has_thinking = bool(obj.get("message", {}).get("thinking"))
+        raise OllamaError(f"Ollama returned empty content (done_reason={reason}, thinking_only={has_thinking})")
     return answer
