@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -48,7 +49,8 @@ class ReminderManagementTests(unittest.TestCase):
     def test_legacy_schema_migrates_without_losing_data(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/"old.db"
-            with sqlite3.connect(p) as db:
+            # sqlite3 connection context commits but does not close on Windows.
+            with closing(sqlite3.connect(p)) as db:
                 db.execute("""CREATE TABLE reminders (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     source_message_id TEXT NOT NULL UNIQUE,
@@ -60,6 +62,7 @@ class ReminderManagementTests(unittest.TestCase):
                     CHECK(state IN ('pending','claimed','sent','failed')))""")
                 db.execute("INSERT INTO reminders(source_message_id,guild_id,channel_id,requester_id,due_at) VALUES(?,?,?,?,?)",
                     ("legacy",1,20,100,NOW.isoformat()))
+                db.commit()
             store=ReminderStore(p)
             self.assertEqual(len(store.list_pending(guild_id=1,requester_id=100)),1)
             self.assertTrue(store.cancel(guild_id=1,requester_id=100,reminder_id=1))
