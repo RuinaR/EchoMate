@@ -359,3 +359,7 @@
 - All 171 unit tests passed in 0.606s on Windows.
 - Actual Gemma4 NF4 LoRA (seq32, 2 optimizer updates, official tokenizer with fixed synthetic Korean text): status OK, losses 22.9326 and 22.8617; 2,596,864 trainable; peak 11,163.6 MiB; free_after 2,344.8 MiB.
 - No real Discord messages used or exported. Two consecutive synthetic updates demonstrate execution feasibility, not model quality or 16GB long-context fitness. Next: controlled Gemma4 trainer implementation, private corpus review, holdout, OOM safety.
+
+## 2026-10-18 — Gemma4 private QLoRA runner implemented; execution pending
+- Added opt-in local-only Gemma4 12B-it text language model fine-tuning tool, saved private adapter, one-sample validation before/after (not quality evaluation), strict private paths, model cache-only loading, triple approval gate, 1..10 steps at max64 tokens. Existing Gemma3 code unchanged.
+- Three static/validation tests added. Previously reported 171 tests OK; expected 174 after code change. No actual Discord training, new GPU runner verification, or privacy clearance claimed.
