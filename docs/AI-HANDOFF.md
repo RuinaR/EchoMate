@@ -114,3 +114,12 @@
 - `tests/test_style_profile.py` 3건 신규 작성, 총 58건 예상(Windows 검증 전).
 - **기존 Qwen 모델 가중치 학습/QLoRA 아님**. 통계형 프로필 프롬프트의 품질 평가 다음 작업.
 - 실행: `python -m echomate_studio.style_profile "C:\\Users\\user\\Desktop\\학습데이터\\messages1.json" "C:\\Users\\user\\Desktop\\학습데이터\\messages2.json" --output local_data/style-profile.json` 후 `python -m echomate_studio.chat_probe --profile local_data/style-profile.json --message "오늘 메이플 할래?"`.
+
+## 2026-10-18 스타일 QA 실패 / 연구 기반 수정
+- 사용자 Windows 58개 테스트 OK. 생성된 style-profile.json은 2개 채널, 304,997 원본, 270,989 텍스트, 평균 7.25자, 웃음 0.0402, Unicode 이모지 0.0039.
+- 모델이 '메이플 서비스 종료'라는 거짓 단정을 하고 길고 격식 있는 답변 생성. 테스트 통과와 실제 품질을 구분할 것.
+- `conversation.py` 시스템 프롬프트: 일상 초대 의도/짧은 캐주얼 채팅/검증 없는 서비스 종료 추측 금지.
+- `style_profile.py`에서 과장된 특성 대신 짧고 담백한 기본 반응을 권장. `chat_probe.py --timing` 추가.
+- 새 테스트 1개 추가(예상 총 59개, 사용자 Windows 확인 전).
+- 문헌·프로젝트 검토: docs/PERSONA-RESEARCH-AND-QA.md (Lost in the Middle, mimic-bot, PersonaAgent, llmcord).
+- 실제 품질 향상과 지연 개선은 미검증; 별도 다중 프롬프트 A/B QA 필요.
