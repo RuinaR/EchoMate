@@ -363,3 +363,8 @@
 ## 2026-10-18 — Gemma4 private QLoRA runner implemented; execution pending
 - Added opt-in local-only Gemma4 12B-it text language model fine-tuning tool, saved private adapter, one-sample validation before/after (not quality evaluation), strict private paths, model cache-only loading, triple approval gate, 1..10 steps at max64 tokens. Existing Gemma3 code unchanged.
 - Three static/validation tests added. Previously reported 171 tests OK; expected 174 after code change. No actual Discord training, new GPU runner verification, or privacy clearance claimed.
+
+## 2026-10-18 — User Windows 174 QA green; synthetic E2E trainer test prepared
+- User reported `Ran 174 tests in 0.681s OK`. Confirms new Gemma4 trainer validation unit tests, NOT its GPU training/saving path.
+- Added `tools/run_gemma4_synthetic_e2e.ps1` creating only fixed invented Korean single-speaker train/validation JSONL inside ignored local_data, then invoking the gated Gemma4 private trainer at 2 steps, seq32. The three flags in this script certify **only synthetic test inputs**, never user-data authorization. Script refuses to overwrite an existing adapter.
+- Two no-GPU script tests added. Expected Windows unittest count now 176; script's GPU E2E and adapter saving NOT YET EXECUTED.
