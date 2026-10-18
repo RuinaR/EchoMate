@@ -303,3 +303,9 @@
 - [x] .venv-train isolation, CUDA PyTorch setup with fail-fast tensor check and optional PEFT/TRL stack installation.
 - [ ] User Windows 137 unittest and CUDA bootstrap confirmation.
 - [ ] Verify training dataset rights, sensitive-data review, compatible Gemma base weight access, and adapter A/B.
+
+## 2026-10-18 — Windows CUDA validation
+- [x] 137 unittest passed; isolated CUDA PyTorch installed and GPU tensor test passed.
+- [x] Optional training dependencies include NumPy plus pip/import checks.
+- [ ] Install/verify full local QLoRA dependencies, evaluate CUDA/bitsandbytes compatibility.
+- [ ] Confirm source AI-training permissions and inspect sensitive data before generating training corpus or downloading base model.
