@@ -512,3 +512,8 @@
 - [x] Two-step short-sample synthetic GPU QLoRA and adapter serialization verified; 176 F32 tensors, 2,596,864 weights.
 - [ ] Evaluate meaningful multi-example heldout sample set; one synthetic validation loss rose from 18.5799 to 18.6001 and provides no performance estimate.
 - [ ] Actual owner-data training only after provenance/use-rights and contextual third-party privacy review, a locally approved corpus, and leakage audit.
+
+## 2026-10-18 — Training-candidate dry-run preview
+- [x] Complete aggregate-only first-pass original export count scan; 304,997 messages, 30,848 two-character contents (not all eligible).
+- [x] Implement privacy-safe count-only corpus preview with global heldout dedup and optional 2-character expressions; 2 unit tests.
+- [ ] Verify Windows 192 tests, run local preview, inspect aggregate counts and source-use/contextual privacy before explicitly approved private corpus generation/QLoRA.
