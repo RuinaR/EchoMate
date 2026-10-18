@@ -63,3 +63,9 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - `src/echomate_studio/chat_probe.py`: Discord 연결 없이 로컬 모델에 단발 대화 시험.
 - `tests/test_conversation.py`: Ollama 호출을 모킹한 단위 테스트 6개 신규 작성. **Windows 실행 검증 전**.
 - 실행법: [LOCAL-BASELINE.md](docs/LOCAL-BASELINE.md). 실제 페르소나 학습 또는 Discord 연동은 여전히 미구현.
+
+## 최신 개발 상태 (2026-10-18)
+- Ollama 대화 출력이 빈 문자열로 나오던 공백 필터 정규식 버그를 수정. thinking-only/빈 응답에는 명시적 오류 반환.
+- Bot의 **자율 메시지 이모지 반응** 요구를 추가: Discord 기본 Unicode 이모지만 사용, 일반 발언과 별도로 채널/스레드·반응 빈도·활성화 설정.
+- 현재 이모지 반응은 오프라인 순수 정책 게이트·단위 테스트만 구현. 실제 Discord API 연결과 문맥별 이모지 선택은 아직 없음.
+- AITrader와 Ollama 설치/모델 공유 가능하지만 두 프로그램의 동시 모델 추론 성능은 별도 검증 필요.
