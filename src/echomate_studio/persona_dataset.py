@@ -6,13 +6,14 @@ Outputs private JSONL: protect its contents as confidential.
 from __future__ import annotations
 import argparse
 import json
+import hashlib
 from pathlib import Path
 from collections import Counter
 from .analyze import iter_json_array, normalize_text
 from .persona_split_audit import timestamp_of, classify
 
 def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
-          validation_fraction=0.1):
+          validation_fraction=0.1, preserve_two_char=False):
     if not (rights_confirmed and privacy_reviewed):
         raise PermissionError("Confirm data-use rights and private-content review first")
     if not 0 < validation_fraction < 0.5:
@@ -28,6 +29,16 @@ def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
             raise ValueError("input must be outside output folder")
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ValueError("Refusing to overwrite existing private corpus output")
+    def eligible(record):
+        category, digest = classify(record)
+        if preserve_two_char and category == "too_short":
+            # Only normalized two-character expressions; all other safety checks
+            # have already run before classify returns too_short.
+            text = normalize_text(record["Contents"])
+            if len(text) == 2:
+                return "candidate", hashlib.sha256(text.encode("utf-8")).digest()
+        return category, digest
+
     # Global UTC cutoff, not independent per-channel cutoffs:
     # no older/younger cross-channel time interleaving across the split.
     timestamps=[]
@@ -49,7 +60,7 @@ def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
         for r in iter_json_array(p):
             if not isinstance(r,dict) or (t:=timestamp_of(r)) is None or t<cutoff:
                 continue
-            tag,digest=classify(r)
+            tag,digest=eligible(r)
             if tag=="candidate":
                 heldout.add(digest)
     output_dir.mkdir(parents=True,exist_ok=True)
@@ -65,7 +76,7 @@ def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
                     if not isinstance(r,dict) or (t:=timestamp_of(r)) is None:
                         counts["invalid_timestamp"]+=1
                         continue
-                    category,digest=classify(r)
+                    category,digest=eligible(r)
                     if category!="candidate":
                         counts[category]+=1
                         continue
@@ -95,6 +106,7 @@ def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
     report={"status":"built_local_only","counts":dict(counts),
             "validation_overlap_removed_from_training":True,
             "global_chronological_cutoff":True,
+            "two_character_expressions_preserved":bool(preserve_two_char),
             "objective":"single_speaker_language_modeling_not_chat_sft",
             "limits":["Filtered text can still contain private context",
                       "Rights and privacy flags represent user review, not proof of legal permission"]}
@@ -106,11 +118,13 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("files",nargs="+",type=Path)
     ap.add_argument("--output-dir",type=Path,default=Path("local_data/persona-dataset"))
+    ap.add_argument("--preserve-two-char",action="store_true",help="Retain exactly two-character style expressions after other eligibility checks")
     ap.add_argument("--confirm-rights",action="store_true")
     ap.add_argument("--confirm-privacy-review",action="store_true")
     args=ap.parse_args()
     result=build(args.files,args.output_dir,rights_confirmed=args.confirm_rights,
-                 privacy_reviewed=args.confirm_privacy_review)
+                 privacy_reviewed=args.confirm_privacy_review,
+                 preserve_two_char=args.preserve_two_char)
     print("Local-only corpus built. Candidate counts:",result["counts"])
     print("Keep the JSONL files private. Do not commit them.")
 
