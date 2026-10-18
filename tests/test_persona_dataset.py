@@ -52,6 +52,24 @@ class PersonaDatasetTests(unittest.TestCase):
             self.assertIn("later sample number 9",val)
             self.assertTrue(report["global_chronological_cutoff"])
 
+    def test_two_character_style_is_opt_in_and_holdout_safe(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d); src=root/"messages.json"
+            rows=[{"Timestamp":f"2026-01-{i+1:02d}T00:00:00Z",
+                   "Contents":("ㅋㅋ" if i==0 else f"synthetic phrase number {i}")}
+                  for i in range(9)]
+            rows.append({"Timestamp":"2026-01-15T00:00:00Z","Contents":"ㅋㅋ"})
+            src.write_text(json.dumps(rows),encoding="utf-8")
+            a=root/"local_data"/"default"
+            b=root/"local_data"/"optin"
+            build([src],a,rights_confirmed=True,privacy_reviewed=True)
+            report=build([src],b,rights_confirmed=True,privacy_reviewed=True,preserve_two_char=True)
+            self.assertNotIn("ㅋㅋ",(a/"persona-validation.jsonl").read_text(encoding="utf-8"))
+            self.assertIn("ㅋㅋ",(b/"persona-validation.jsonl").read_text(encoding="utf-8"))
+            self.assertNotIn("ㅋㅋ",(b/"persona-train.jsonl").read_text(encoding="utf-8"))
+            self.assertEqual(report["counts"]["cross_split_excluded"],1)
+            self.assertTrue(report["two_character_expressions_preserved"])
+
     def test_existing_dataset_output_never_overwritten(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
