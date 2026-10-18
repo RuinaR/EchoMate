@@ -50,5 +50,5 @@ def build_messages(context: list[dict], *, style: str = "짧고 편안한 한국
 def generate(context: list[dict], *, style: str = "짧고 편안한 한국어 구어체",
              model: str = "qwen3.5:9b-q4_K_M",
              base_url: str = "http://127.0.0.1:11434") -> str:
-    raw = chat(build_messages(context, style=style), model=model, base_url=base_url)
+    raw = chat(build_messages(context, style=style), model=model, base_url=base_url, max_tokens=128)
     return sanitize_output(raw)
