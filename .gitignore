@@ -45,3 +45,6 @@ messages*.json
 
 # Dedicated persona training interpreter
 .venv-train/
+
+# Isolated Gemma 4 toolchain
+.venv-gemma4/
