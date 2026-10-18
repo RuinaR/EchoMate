@@ -378,3 +378,8 @@
 - User Windows suite 152/152 OK (note 152, not expected earlier count 148). Local `gemma4b-lora-smoke.json`: status=ok; model google/gemma-3-4b-it; synthetic_only=true; seq_len=32; trainable_params=1,611,776; loss=2.49 (NOT quality score); peak_allocated=5660.7 MiB; free_after=8235.0 MiB. Full forward/loss/backward/AdamW optimizer step ran successfully on RTX 4070 Ti SUPER 16GB.
 - PyTorch gradient checkpoint emitted use_reentrant warning. Changed smoke tool prepare_model_for_kbit_training to explicit gradient_checkpointing_kwargs={use_reentrant:False}; this change needs Windows revalidation.
 - This establishes technical viability for tiny synthetic LoRA step, NOT final corpus training fit/quality. Next work: data rights and private content review, robust chronological splits and safe local-only training preparation, plus longer context/memory experiment as justified. No real-user text fine-tuning yet.
+
+## 2026-10-18 — Repeat synthetic LoRA report after checkpoint setting change
+- User provided another local gemma4b-lora-smoke.json: status ok; google/gemma-3-4b-it, synthetic seq_len32, trainable params 1,611,776; loss 2.49; peak allocated 5660.7 MiB; free after 8235 MiB.
+- JSON does not include console warning status, so cannot verify absence of use_reentrant warning. No real private chat model training occurred.
+- Next priority: review official Discord-data AI training rights and user privacy selection, design leak-resistant chronological train/eval partitions; do not fabricate multi-speaker Q&A from single-speaker archives.
