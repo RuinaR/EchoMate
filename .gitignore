@@ -33,3 +33,12 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Discord private exports and derived fine-tuning corpora: never commit
+messages*.json
+**/messages*.json
+*train*.jsonl
+*validation*.jsonl
+*test-corpus*.jsonl
+*.safetensors
+*.gguf
