@@ -313,3 +313,6 @@
 
 ## 2026-10-18 — Persona research review
 - Compared primary LoRA/QLoRA/DoRA papers, memorization risks, and TRL/PEFT examples. Created docs/PERSONA-RESEARCH.md with EchoMate-specific baselines and experiment gate. No private message uploads or model training.
+
+## 2026-10-18 — Research-driven one-speaker dataset pipeline
+- Implemented private, double-gated local JSONL export with chronological validation and exact cross-split dedup. Synthetic regression tests added (3). Previous 155 Windows OK; new 158 expected. Private corpus generation not executed.
