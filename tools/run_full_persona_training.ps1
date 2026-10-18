@@ -4,6 +4,10 @@ param(
     [string]$Validation = "local_data\reviewed\validation.jsonl",
     [int]$Steps = 300,
     [int]$SeqLen = 128,
+    [int]$ValidationSamples = 32,
+    [int]$EvalEvery = 100,
+    [int]$CheckpointEvery = 250,
+    [int]$Patience = 4,
     [switch]$ConfirmRights,
     [switch]$ConfirmPrivacyReview,
     [switch]$ApprovePrivateTraining
@@ -25,6 +29,6 @@ if ($LASTEXITCODE -ne 0) {
     throw "Private corpus preflight blocked training; inspect aggregate-only report: $preflight"
 }
 $out = Join-Path $PWD ("local_data\persona-adapters\gemma4-full-" + $stamp)
-& $py .\tools\train_persona_gemma4_full.py --train $Train --validation $Validation --output $out --steps $Steps --seq-len $SeqLen --approve-private-training --confirm-rights --confirm-privacy-review
+& $py .\tools\train_persona_gemma4_full.py --train $Train --validation $Validation --output $out --steps $Steps --seq-len $SeqLen --validation-samples $ValidationSamples --eval-every $EvalEvery --checkpoint-every $CheckpointEvery --patience $Patience --approve-private-training --confirm-rights --confirm-privacy-review
 if ($LASTEXITCODE -ne 0) { throw "Local training failed. Inspect local-only run directory." }
 Write-Host "Training metrics:" (Join-Path $out "summary.json")
