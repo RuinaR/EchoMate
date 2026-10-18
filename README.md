@@ -167,3 +167,9 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 
 ## 로컬 Gemma 주제 연속성 실측
 - `python -m echomate_studio.topic_qa --model gemma3:12b`로 합성된 6개 답장/주제 전환 시나리오를 실제 로컬 모델로 평가. 출력은 `local_data/topic-qa.json`; 현재 오프라인 QA이고 실제 Discord 연동/자연스러움 검증과는 별개.
+
+## 간단한 부탁: 예약 멘션 (로컬 코어)
+- `reminders.py`는 `오늘 2시간 후에 나 멘션해줘`, `30분 후에 알림 해줘` 등 일부 명확한 상대시간 요청만 파싱. 최대 7일.
+- SQLite에 Discord 요청 메시지 ID, 요청자, 채널, 길드, 실행 시각과 처리 상태만 저장. 원문을 저장하지 않으며 `.gitignore`가 DB를 제외.
+- 동일 요청이 반복 처리되어도 중복 생성되지 않도록 하고, 재시작 후 pending 유지. 발송 중 강제 종료는 중복 알림 방지 정책상 누락 가능.
+- **아직 Discord 송수신과 실행 워커가 연결되지 않아 실제 예약 멘션은 발송되지 않음.** 해당 연결 및 권한/취소/조회 기능은 후속 단계.
