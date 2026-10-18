@@ -101,3 +101,9 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - Windows unittest 50개 모두 통과, 로컬 Qwen 문맥평가 성공.
 - 생성 중 새 메시지 대응: `stale_recovery.py`에 최대 재평가/생성 2회 복구(1~3 설정 가능) 추가, 신규 테스트 5개 작성. 실전 Discord 송신 잠금/재검증은 미구현.
 - 필요할 때만 사용하는 **옵트인 웹 검색**과 **페르소나 Style Profile v1 최우선 개발**을 계획. [SEARCH-AND-PERSONA-PLAN.md](docs/SEARCH-AND-PERSONA-PLAN.md) 참고.
+
+## Studio Style Profile v1 (2026-10-18)
+- 새 `echomate_studio.style_profile`: JSON 파일 N개(파일당 채널 하나)를 로컬에서 스트리밍 순회하여 최근 반감기 가중 집계형 말투 통계 생성.
+- 길이/웃음/울음/질문/감탄/기본 Unicode 이모지 사용률 등 집계값만 출력. 원문·특정 단어·ID는 프로필 파일에 포함하지 않음.
+- `chat_probe --profile local_data/style-profile.json`으로 로컬 Qwen 프롬프트에 집계형 말투 지침 반영.
+- **이는 모델 가중치를 변경하는 학습이 아니라 프롬프트 기반 스타일 기준선**. 정책/사용 허가 확인 전 데이터 원문을 학습셋으로 변환하지 않음.
