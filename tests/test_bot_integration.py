@@ -175,6 +175,14 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PermissionError):self.library.resolve(mid,8)
         path=self.library.resolve(mid,2);path.write_bytes(b'changed')
         with self.assertRaises(PermissionError):self.library.resolve(mid,2)
+    async def test_model_cannot_bypass_media_probability_even_with_valid_approved_id(self):
+        image=BytesIO();Image.new('RGB',(12,12),'red').save(image,format='PNG')
+        mid=await self.library.register(1,image.getvalue(),2,'tag','purpose',self.cache,self.backend)
+        self.settings.set(1,'media',True);self.settings.set(1,'media_probability',0)
+        async def propose(context,catalog):return json.dumps(dict(kind='MEDIA',text='',asset=mid))
+        self.backend.propose=propose
+        await self.runtime.ingest(self.event());await self.settle()
+        self.assertFalse(self.transport.sent)
     async def test_action_schema_rejects_extra_fields_and_unapproved_asset(self):
         with self.assertRaises(ValueError):parse_action('{"kind":"TEXT","text":"x","asset":"","api":"send"}')
         self.assertFalse(validate_action(Action(Kind.MEDIA,asset='unknown'),dict(DEFAULTS,media=True),'autonomous',{'view':True,'send':True,'attach':True},{},self.library,2))
@@ -276,6 +284,18 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(backend.failed)
         with self.assertRaises(RuntimeError):await backend._job([])
         backend.executor.shutdown(wait=True)
+    async def test_finite_control_grammar_cannot_emit_extra_keys_or_channels(self):
+        from echomate_bot.inference import token_choices
+        class IDs(list):
+            def __getitem__(self,key):
+                item=super().__getitem__(key)
+                return IDs(item) if isinstance(item,list) else item
+            def tolist(self):return list(self)
+        select=token_choices([[1,2,4],[1,3,4]],2)
+        self.assertEqual(select(0,IDs([99,99])),[1])
+        self.assertEqual(select(0,IDs([99,99,1])),[2,3])
+        self.assertEqual(select(0,IDs([99,99,1,3])),[4])
+        with self.assertRaises(ValueError):select(0,IDs([99,99,7]))
     async def test_repeated_failures_disable_runtime(self):
         async def fail(context):raise RuntimeError('synthetic')
         self.backend.classify=fail

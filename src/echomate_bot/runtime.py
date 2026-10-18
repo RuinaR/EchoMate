@@ -135,11 +135,13 @@ class Runtime:
                 # Verified reply/semantic addressee may continue existing participation.
                 _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
                 if not any(t.is_bot for t in turns):return
+            self.note('stage_assessment')
             assessment=await self.backend.classify(context)
             if assessment.is_sensitive_moment:return
             continuing=False
             _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
             if not direct and any(t.is_bot for t in turns[:-1]):
+                self.note('stage_continuity')
                 evidence=await self.backend.continuity(context)
                 reply_verified=any(t.is_bot and t.message_id==str(event.reply_to) for t in turns[:-1])
                 continuing=continue_engagement(EngagementPolicy(max_gap_seconds=cfg["engagement_seconds"]),ongoing=True,
@@ -170,6 +172,7 @@ class Runtime:
                     if not await self.fresh(event,state,version,revision):return
                     try:
                         data=await download(url)
+                        self.note('stage_visual')
                         result=await self.cache.analyze(event.guild,asset,data,self.backend)
                         visual.append(dict(asset=asset,result=result))
                     except (ValueError,OSError,RuntimeError):self.note("visual_asset_unavailable")
@@ -194,14 +197,18 @@ class Runtime:
                     if cfg['text']:allowed.append('TEXT_MEDIA')
             catalog['allowed_actions']=allowed
             catalog['directed_to_bot']=direct or continuing
+            self.note('stage_action')
             proposed=parse_action(await self.backend.propose(context,catalog))
             self.note('proposed_'+proposed.kind.value)
+            if proposed.kind.value not in allowed:
+                self.note('disabled_candidate_veto');return
             if proposed.kind==Kind.SILENCE:
                 self.pending_mentions.pop(event.channel,None);return
             if reaction_only and proposed.kind!=Kind.REACTION:
                 self.note('reaction_mode_veto');return
             action=proposed
             if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
+                self.note('stage_text')
                 answer=await self.backend.text(context,effective_character(cfg,event.content))
                 action=Action(action.kind,answer,action.asset)
             if (event.guild,action.asset) in self.blocked_assets:
