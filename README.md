@@ -164,3 +164,6 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 ## 실제 주제 이어가기 판별 (오프라인)
 - `topic_assessor.py`: Discord 봇 발언에 대한 실제 reply-to 메시지일 경우에만 로컬 Ollama(Gemma 3 12B)에 대화 화제 연속성 JSON 판단 요청. 잘못된 응답/오류는 이어가기 불승인.
 - `turn_pipeline.evaluate_turn(..., topic_assessor=...)`에 콜백 주입 가능. 봇 멘션 및 일반 자율 발언과 구분. 실제 Discord 이벤트 수신/전송은 향후 작업.
+
+## 로컬 Gemma 주제 연속성 실측
+- `python -m echomate_studio.topic_qa --model gemma3:12b`로 합성된 6개 답장/주제 전환 시나리오를 실제 로컬 모델로 평가. 출력은 `local_data/topic-qa.json`; 현재 오프라인 QA이고 실제 Discord 연동/자연스러움 검증과는 별개.
