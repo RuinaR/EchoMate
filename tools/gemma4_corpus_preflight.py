@@ -43,14 +43,16 @@ def audit(train, validation):
     # Never claim near-duplicate detection exhaustive.
     bucket = {}
     for _,s in a:
-        key = (len(s)//8, s[:12])
-        bucket.setdefault(key, []).append(s)
+        for anchor in (s[:12], s[-12:]):
+            key = (len(s)//8, anchor)
+            bucket.setdefault(key, []).append(s)
     near = 0
     for h,s in b:
         if h in ah: continue
         candidates = []
         for delta in (-1,0,1):
-            candidates.extend(bucket.get((len(s)//8+delta, s[:12]), [])[:128])
+            for anchor in (s[:12], s[-12:]):
+                candidates.extend(bucket.get((len(s)//8+delta, anchor), [])[:128])
         if any(SequenceMatcher(None,s,t,autojunk=False).ratio()>=0.9 for t in candidates):
             near += 1
     blocked = overlap>0 or ca["identifier_or_url_hint"]>0 or cb["identifier_or_url_hint"]>0 or near>0 or not a or not b
@@ -59,6 +61,7 @@ def audit(train, validation):
         "exact_cross_split_overlap":overlap,"approx_near_overlap":near,
         "not_a_training_authorization":True,
         "limitations":["No chronology or source provenance inferred from JSONL.",
+                       "Near-duplicate search is bounded by length and prefix/suffix buckets; it is not exhaustive.",
                        "Identifiers and near duplicates are heuristic; third-party privacy and semantic leakage require human review.",
                        "A clear report never authorizes model training."]}
 
