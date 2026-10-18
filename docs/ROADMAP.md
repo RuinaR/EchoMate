@@ -481,3 +481,5 @@
 - [x] Verify user previous 182 tests pass; inspect private owner exports with aggregate-only outputs.
 - [x] Replace per-file train/validation boundaries with global UTC timestamp cutoff; add 1 synthetic regression test (expect 183 Windows tests).
 - [ ] Windows 183 tests; approved local data review, contextual privacy, near duplicates and legal/terms assessment before any real-message training.
+
+- [x] Windows user verified 183/183 unittest OK (0.463s) after global multi-export chronological split regression; real owner-data training remains blocked pending review.
