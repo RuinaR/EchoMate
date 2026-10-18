@@ -492,3 +492,8 @@
 ## 2026-10-18 — Windows 184 regression tests passed
 - [x] Windows `unittest discover -s tests -v`: 184/184 OK (0.476s), including opt-in two-character style retention and cross-split test.
 - [ ] Design safe short-message packing, prevent cross-split leakage and ensure selected samples reach Gemma4 optimizer; verify synthetic data before any owner-text training.
+
+## 2026-10-18 — Optional short sample optimization
+- [x] Add opt-in standalone >=3 token-ID short-example sampling; no fake chat concatenation; default >=8 unchanged.
+- [x] Add pure-Python synthetic selection test.
+- [ ] Windows 185 unittest run and synthetic GPU comparison for opt-in short examples before use with approved private data.
