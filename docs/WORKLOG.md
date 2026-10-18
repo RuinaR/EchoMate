@@ -432,3 +432,8 @@
 
 ## 2026-10-18 — Original file counts and dry-run preview
 - 190 Windows tests pass. Privately scanned owner-provided exports (304,997 total) without publishing messages. Found 30,848 exactly 2-char message contents; 23,867 empty; 3,963 URLs; 7,995 Discord mentions; 27,624 rows with attachments (sets may overlap). Added aggregate-only preview tool reproducing builder dedup/global split and 2-char opt-in counts, with two synthetic tests. Expected 192 Windows tests, unverified. No actual owner-data QLoRA performed.
+
+## 2026-10-18 — Corpus-wide sampling and multi-example validation
+- Updated Gemma4 trainer to choose deterministic evenly spread eligible examples rather than first N rows. Validation now averages up to min(8, max_steps) heldout examples, reducing dependence on one sentence; still a smoke experiment, not full quality evaluation.
+- Synthetic unit test for selection indices added. Last user test 192 OK before this change; expected 193 but Windows GPU and regression not yet run. No private owner-data training conducted.
+- Screened source ZIP remains NOT APPROVED. Optional short style set has no independently guaranteed chronological validation membership, so do not mix it into train until provenance / leakage review and applicable privacy rights are resolved.
