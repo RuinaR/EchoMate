@@ -30,7 +30,7 @@ if ($InstallTrainingLibraries) {
     if ($LASTEXITCODE -ne 0) { throw 'Training libraries installation failed' }
     & $py -m pip check
     if ($LASTEXITCODE -ne 0) { throw 'Package compatibility check failed' }
-    & $py -c 'import numpy, torch, transformers, peft, trl, accelerate, bitsandbytes, datasets; print("Training stack imports OK; NumPy", numpy.__version__)'
+    & $py (Join-Path $PSScriptRoot 'verify_training_stack.py')
     if ($LASTEXITCODE -ne 0) { throw 'Training stack import check failed' }
 }
 Write-Host 'Isolated CUDA check completed. No model or private data downloaded.'
