@@ -425,3 +425,10 @@
 - Keep existing fully verified Gemma3 4B scripts and .venv-train intact; installed transformers 4.57.6 previously, so Gemma4 might require newer version in a new isolated environment, do not silently update other project envs.
 - Added tools/probe_gemma4_12b.py: lightweight config access/CUDA/class preflight by default. To explicitly download and load ~24GB weights requires BOTH --allow-load and --allow-download. Results to local_data/gemma4-12b-probe.json. Added tools/smoke_gemma4_12b_lora.py synthetic cached NF4 LoRA optimizer test, --allow-synthetic-step, no user messages. Added 4 static unit tests. Expected Windows total 165 (previous 161), not verified.
 - Gemma4 12B NF4 and LoRA compatibility/VRAM not verified! User must run staged checks and share sanitized reports before selecting training strategy. Hardware 16GB RTX 4070 Ti SUPER; 12B QLoRA OOM is possible, do not promise it fits. Local approved corpus and private training still not run.
+
+## 2026-10-18 — Gemma4 library import blocker mitigation (Windows pending)
+- Chosen model: google/gemma-4-12B-it, initial conversation-focused preference over base google/gemma-4-12B, subject to empirical comparison.
+- Official model instructions use AutoModelForMultimodalLM. Transformers 4.57.6 Gemma4 direct-class import failed in user report; separate .venv-gemma4 setup uses Transformers >=5.10,<6 and existing CUDA torch baseline, without changing .venv-train.
+- Updated probe and synthetic smoke loader; created tools/setup_gemma4_env.ps1, tests/test_gemma4_staged.py, docs/GEMMA4-SETUP.md; .gitignore protects separate environment.
+- Confirmed user Windows previous 165 tests OK. Newly added 3 tests and modified probes NOT yet executed on RTX 4070 Ti SUPER. No 12B weight load/LoRA training proof; no owner-message training.
+- Next: run isolated installation, unittest, small-file config preflight; review diagnostic JSON before opting into 23.9GB download, NF4 load and synthetic backward.
