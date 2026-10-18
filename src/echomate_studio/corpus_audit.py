@@ -11,8 +11,8 @@ from .analyze import iter_json_array, normalize_text
 MENTION = re.compile(r"<@!?[0-9]+>")
 URL = re.compile(r"https?://", re.I)
 LONG_NUMBER = re.compile(r"(?<![0-9])[0-9]{8,}(?![0-9])")
-EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
-REPEATED = re.compile(r"^(.)\\1{5,}$")
+EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+REPEATED = re.compile(r"^(.)\1{5,}$")
 def audit(paths: list[Path]) -> dict:
     if not paths or len({p.resolve() for p in paths}) != len(paths):
         raise ValueError("unique source paths required")
