@@ -356,3 +356,8 @@
 - [x] VRAM: 4266 MiB loading delta, 10845 MiB free afterwards.
 - [ ] Validate LoRA backward and optimizer on entirely synthetic sequence; monitor VRAM/OOM.
 - [ ] Training data rights and sensitive message review before any actual private corpus training.
+
+## 2026-10-18 cached model LoRA smoke test
+- [x] Opt-in synthetic LoRA one-step tool with cached 4B NF4 weights.
+- [ ] Windows 148 tests and --allow-synthetic-step CUDA outcome.
+- [ ] Evaluate stability, data rights and training set privacy before personal message training.
