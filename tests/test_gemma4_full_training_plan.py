@@ -19,6 +19,16 @@ class Gemma4FullTrainingPlanTests(unittest.TestCase):
                       "train_persona_gemma4_full.py","if ($LASTEXITCODE -ne 0)"):
             self.assertIn(token,s)
         self.assertNotIn("NOT-APPROVED.zip",s)
+    def test_unattended_long_run_progress_and_bounds(self):
+        trainer=(ROOT/"tools"/"train_persona_gemma4_full.py").read_text(encoding="utf-8")
+        launcher=(ROOT/"tools"/"run_full_persona_training.ps1").read_text(encoding="ascii")
+        self.assertIn("args.steps<=3000",trainer)
+        self.assertIn("flush=True",trainer)
+        self.assertIn('"metrics.json").write_text',trainer)
+        for option in ("ValidationSamples = 32","EvalEvery = 100",
+                       "CheckpointEvery = 250","Patience = 4"):
+            self.assertIn(option,launcher)
+
     def test_full_protocol_has_validation_and_rollback_checkpoint(self):
         s=(ROOT/"tools"/"train_persona_gemma4_full.py").read_text(encoding="utf-8")
         for token in ("validation_baseline","best_validation_loss","best_step",
