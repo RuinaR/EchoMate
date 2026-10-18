@@ -466,3 +466,8 @@
 - [x] Three focused regression tests added.
 - [ ] Windows 180 unittests and GPU cached-adapter reload inference/loss comparison.
 - [ ] Human data-rights, contextual privacy and chronology review; quality holdout and memorization evaluation before genuine owner-data training.
+
+## 2026-10-18 — Gemma4 synthetic adapter lifecycle verified
+- [x] Windows 180/180 tests pass; cached base+saved adapter GPU reload succeeds.
+- [x] Same two synthetic prompts tested with adapter disabled/enabled: base losses [23.795,22.2657], adapter losses [23.7906,22.196], 7585.0 MiB GPU free after.
+- [ ] Data provenance/use rights and third-party privacy, near duplicate/contextual PII review, approved chronological splits, leak-free representative holdout before first real owner-data QLoRA.
