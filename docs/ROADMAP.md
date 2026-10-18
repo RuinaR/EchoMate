@@ -326,3 +326,10 @@
 - [x] Windows 143/143 unit tests and synthetic bitsandbytes NF4 kernel succeeded.
 - [ ] Verify actual Gemma 3 base weights access/license, local 4-bit model load and VRAM.
 - [ ] Verify user export training rights and sensitive content screening before creating private tuning dataset.
+
+## 2026-10-18 — Model load and access gate
+- [x] Windows 143 tests and bitsandbytes NF4 GPU kernel verified.
+- [x] Opt-in Gemma 3 4B NF4 actual weight load/VRAM diagnostic CLI, defaults to no download.
+- [ ] User Windows 145 tests, review/accept Gemma license, authenticate locally, opt-in multi-GB base model load.
+- [ ] Confirm VRAM and module placement; then safe small synthetic LoRA backward test without user messages.
+- [ ] Obtain clarity on training permissions and user privacy review before real data preparation/training.
