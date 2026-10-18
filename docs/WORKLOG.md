@@ -286,3 +286,6 @@
 
 ## 2026-10-18 Gemma 4B gating debug
 - 145 Windows tests OK. Local HF identity works but real NF4 Gemma load OSError; no proof of license grant/download. Added redacted failure category and removed torch_dtype deprecation warning, 2 new tests.
+
+## 2026-10-18 Gemma 3 4B access diagnostic
+- Windows 147 QA OK, full-model load OSError categorized as access denied; HF whoami succeeded. Added config.json-only auth probe and 2 tests, no weights download. Expected 149 Windows tests.
