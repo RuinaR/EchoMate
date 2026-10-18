@@ -272,3 +272,9 @@
 - 기존 SQLite 테이블 CHECK에 `cancelled`가 없으므로 ReminderStore 초기화 시 이전 테이블을 트랜잭션으로 재구성해 기존 항목을 보존하는 마이그레이션 추가.
 - `tests/test_reminder_management.py` 5개(소유자/서버 범위, 선택/전체취소, claimed 불가, 구형DB 보존) 추가. 기존 118+5=**123개 예상**, Windows 새 버전 미검증.
 - 중요: claimed 이후의 취소는 불가, 발송 도중 프로그램 종료 시 누락 가능; 중복 발송 방지가 우선인 임시 설계. 공식 Discord 발송 워커/취소 명령 연결/안전한 allowed_mentions, 토큰·원본 비공개 관리 등 작업 남음.
+
+## 2026-10-18 — 페르소나 미세조정 우선순위 재설정 / Windows SQLite 잠금 수정
+- 사용자 질문: '페르소나 학습은?' 핵심 미완료 상태를 명확히 설명해야 함. 현재 완료: 원본 304997건/정규화 텍스트 270989건 품질·스타일 진단 및 개인 자료 검사, 로컬 Gemma 3 12B 기본 모델 품질 실측. **미완료: 실제 LoRA/QLoRA 훈련, 학습셋 선별, 가중치 체크포인트, 학습 전후 A/B 성능 증거**. 프롬프트 기반 스타일 반영과 미세조정은 다른 것임.
+- 공식 Discord 개인 데이터 패키지/Discord API 정책 등 출처별 모델 훈련 이용 권한은 별도 검토해야 한다. 실제 원본 학습데이터·비밀 키는 GitHub에 커밋하지 않음. 사용자 본인 메시지 원본 열람은 허락했지만 AI 훈련 허용 권한을 확정한 것은 아님.
+- 다음 **최우선 기술 과제**: (1) 데이터 출처 및 훈련 이용 권한 검토, (2) 개인정보·중복·반복·짧은 맞장구를 고려한 로컬 학습셋 품질/검수 설계, (3) Windows RTX4070 용량 확인과 4B급 QLoRA feasibility, (4) baseline vs adapter A/B 검증, (5) 로컬 체크포인트 Studio/Bot 배포. 학습 진행 중 사용자 원본 외부 전송 금지.
+- 사용자 최신 Windows 123 tests 1 ERROR: 구형 SQLite 마이그레이션 테스트가 Windows 임시 `old.db` 삭제 중 WinError32. 원인은 `with sqlite3.Connection`이 커넥션 close를 보장하지 않음. 모든 `with self._connect() as db`을 `with closing(self._connect()) as db`로 변경해 명시적으로 close. 아직 Windows 재실행 미검증.
