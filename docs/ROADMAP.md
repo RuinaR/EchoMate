@@ -412,3 +412,10 @@
 ## 2026-10-18 — Gemma4 isolated runtime
 - [x] Add separate .venv-gemma4 Windows setup, official multimodal loader, staged config and NF4 checks, and regression tests.
 - [ ] Run Windows tests, dependency import, config access, explicit NF4 loading; then synthetic LoRA step.
+
+## 2026-10-18 — Windows Gemma4 isolated preflight success
+- [x] New .venv-gemma4 install completed; torch 2.9.1+cu128, transformers 5.20.1, peft 0.21.2, bnb 0.50.2; pip check clean.
+- [x] Windows unittest 168/168 OK (0.441s).
+- [x] Gemma4 12B IT config-only probe ready_for_optional_load; type gemma4_unified; CUDA available; 15111 MiB free before load.
+- [ ] Explicit opt-in weights NF4 load and measure GPU allocation. Do not infer 12B fits from config preflight.
+- [ ] If successful: cached synthetic LoRA forward/backward/optimizer compatibility, memory and privacy-neutral diagnostics.
