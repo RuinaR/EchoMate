@@ -382,3 +382,8 @@
 ## 2026-10-18 — Before owner-data training: adapter reload + corpus gates
 - Implemented cached-only Gemma4 NF4 synthetic adapter reload comparison with explicit GPU flag; separate private JSONL exact-overlap/heuristic near-duplicate/identifier audit. Three mocked/static no-GPU tests added. All aggregate reports remain local_data; no messages or tokens in reports.
 - Prior Windows suite: 177 OK and 2-step synthetic adapter save verified. New suite expected 180, GPU reload and real-corpus inspection are UNVERIFIED. A heuristic-clean corpus does not mean approved, legally cleared or safe to train.
+
+## 2026-10-18 — Gemma4 adapter reload GPU QA green
+- Windows 180 unit tests OK, 0.515s. Cached 677/677 base weights and saved synthetic rank4 LoRA adapter reloaded; GPU report status ok.
+- On 2 fixed synthetic prompts, losses base-disabled 23.795/22.2657 vs adapter-on 23.7906/22.196. Free GPU memory after test 7585.0 MiB. These are synthetic-only loss probes, not owner style quality measurements.
+- Completed technical synthetic train/save/reload milestone. Private owner Discord training not performed.
