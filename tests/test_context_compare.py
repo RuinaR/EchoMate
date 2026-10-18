@@ -13,6 +13,12 @@ class ContextCompareTests(unittest.TestCase):
                       quality_hints(SCENARIOS[0], "7시에 만나기로 했어"))
         self.assertNotIn("fabricated_time_candidate",
                          quality_hints(SCENARIOS[0], "시간을 정한 기록이 없어"))
+    def test_unknown_time_denial_is_not_fabrication(self):
+        for reply in ("현재 대화 기록에는 만나기로 한 시간 정보가 없습니다.",
+                      "아직 시간을 정하지 않았어", "기록에 없어서 모르겠어"):
+            self.assertNotIn("fabricated_time_candidate", quality_hints(SCENARIOS[0], reply))
+        self.assertIn("fabricated_time_candidate", quality_hints(SCENARIOS[0], "10시에 만나요."))
+
     def test_changed_time(self):
         changed = SCENARIOS[2]
         self.assertIn("missing_known_fact", quality_hints(changed, "9시에 가자"))
