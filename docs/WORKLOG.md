@@ -280,3 +280,6 @@
 
 ## 2026-10-18 — NF4 actual GPU smoke QA
 - User Windows 143 tests OK. Tiny synthetic bitsandbytes NF4 CUDA operation success on RTX 4070 Ti SUPER, max PyTorch allocated 0.08 MiB, free GPU memory after 15073 MiB. Not a full-model VRAM benchmark.
+
+## 2026-10-18 — Real Gemma 3 4B loading probe prepared
+- User confirmed 143 tests and real NF4 CUDA kernel OK, 15073 MiB GPU free after tiny probe. Added gated HF model NF4 load CLI opt-in only, 2 tests. Requires Google Gemma license acceptance; no weight downloaded/training executed.
