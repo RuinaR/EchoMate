@@ -225,3 +225,6 @@
 ## 2026-10-18 — 109 테스트 통과 및 Gemma 주제판정 실측 준비
 - Windows 109개 unittest 모두 OK.
 - 실제 Ollama를 대상으로 6가지 합성 답장/대화 전환 상황에서 topic_continues 성능을 측정하는 CLI와 2개 테스트 추가. 111개 Windows QA 및 `local_data/topic-qa.json` 실측 대기.
+
+## 2026-10-18 — Windows 111/111 및 실제 Gemma 6/6
+- 사용자가 111개 unittest OK와 실제 Ollama Gemma 3 12B topic_qa 6/6 정답 보고. 첫 호출 9.306초, 이후 대부분 약 0.25~0.29초. Discord 실환경 일반화 불확실.
