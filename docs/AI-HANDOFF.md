@@ -529,3 +529,8 @@
 ## 2026-10-18 — Standalone short-token Gemma4 training selection implementation
 - Windows previously verified 184/184 unit tests OK (0.476s). Updated `tools/train_persona_gemma4.py` with explicit optional `--include-short-samples` lowering minimum tokenized sample length from 8 to 3 IDs; defaults unchanged. Every JSONL record stays an independent causal-LM example: **do not pack unrelated conversations together**. Added sample-selection regression test, expect 185 Windows tests (NOT run yet).
 - `--preserve-two-char` approved corpus builder option and new trainer flag are separate; neither option authorizes source reuse or privacy clearance. Very short examples may be skipped if fewer than 3 tokenizer IDs; results reflect experiment selection only, not learned speaking style. No owner data trained.
+
+## 2026-10-18 — Fix syntax regression in short-sample trainer
+- User Windows unittest import failed before exercising trainer: literal backslash-n sequences injected into `tools/train_persona_gemma4.py` source (line 115), not a CUDA/model/data failure. Also found malformed multiline Python string in newly added short-sample regression test.
+- Corrected literal escaped source newlines in trainer, corrected short-sample JSONL fixture string to Python `\\n` escapes, and added AST parse regression test for trainer.
+- Last confirmed Windows 184/184 suite green before this commit; current expected suite 186 tests (1 previous short-selection test newly discoverable plus 1 added syntax guard). Windows verification pending. Never commit or train on original Discord files without separate review.
