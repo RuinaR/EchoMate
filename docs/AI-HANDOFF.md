@@ -194,3 +194,10 @@
 - 사용자가 **본인 메시지 원본 2개는 어시스턴트가 직접 검토해도 됨**, 단 GitHub 업로드 금지를 명시적으로 허용함. 대화 파일 검색으로 `messages1.json`(약 32.3MB), `messages2.json`(약 8.8MB) 현재 대화 파일에 존재함을 확인. 사용자 재업로드 요구하지 말 것.
 - 공개 GitHub에는 원본/발언 인용문/비공개 학습·평가 코퍼스를 올리지 않고, 개인 식별 콘텐츠의 로그 출력/커밋 방지. `.gitignore`에 messages*.json, 파생 JSONL 학습 파일, 모델 산출물 제외 추가. 이미 추적 중인 파일은 .gitignore만으로 막히지 않으므로 별도 git status/repo 확인 필요.
 - 사용자 허락은 파일 검토 및 저장소 비공개 원칙에 관한 것이며 Discord 데이터 학습 사용 허가의 법적 확인을 대체하지 않음. 실제 QLoRA 미실행.
+
+## 2026-10-18 — 실제 원본 2채널 직접 검사 / 코퍼스 QA 구현
+- 사용자 요청: 판단에 따라 계속 개발, 원본 파일 직접 검토 허용, GitHub 원문 업로드 금지.
+- mounted original `messages1.json`(244976 records; 2021-02-27..2026-10-16) and `messages2.json`(60021 records; 2023-07-04..2026-10-17) inspected programmatically. Both reversed chronological. Raw nonempty 228342 / 52788. Many repeated short texts; message gaps <=10 sec 120915 / 23812, but do not infer reply-pairs since author-only.
+- `corpus_audit.py` added: per channel record counts, reverse ordering, repeated normalized messages, 10s adjacency, URL/mention/long-numeric/email candidate counts. Only aggregate counts, no raw strings, IDs, quotes or samples output. Regex corrected; `tests/test_corpus_audit.py` three synthetic tests.
+- Previously Windows 79 tests OK, new **82 expected**, Windows not yet run.
+- CRITICAL: user permission to inspect uploaded data is not a blanket claim of permission to train under Discord rules. Continue source/rights review. No fine-tuning or export yet. Direct corpus is available on current conversation mount, no need re-upload.
