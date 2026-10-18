@@ -315,3 +315,9 @@
 - [x] Windows PowerShell -c quote issue replaced by standalone package import script.
 - [ ] Confirm actual native DLL imports and 140 tests on Windows.
 - [ ] GPU bitsandbytes 4-bit quantization dry-run (no model download), training rights review, then controlled base-model access.
+
+## 2026-10-18 — NF4 GPU kernels
+- [x] 140 Windows tests and local training stack imports succeeded.
+- [x] Synthetic CUDA bitsandbytes NF4 operation and VRAM probe added.
+- [ ] Windows 143 tests and actual GPU NF4 report.
+- [ ] Model access/rights and memory-constrained controlled 4B QLoRA feasibility, after private dataset review and source policy checks.
