@@ -557,3 +557,7 @@
 ## 2026-10-18 — Windows privacy classifier regression verified
 - User Windows unittest result: 190 tests, 0.430s, OK. Fix for raw URL/mention/secret detection ordering and regex escaping is unit-test verified.
 - Real personal Discord QLoRA remains unstarted. Next gate: locally reviewed corpus with third-party contextual privacy screening and rights assessment; no raw files or derived private adapters in GitHub.
+
+## 2026-10-18 — 190 Windows tests green; privacy-safe owner corpus preview
+- User Windows: 190/190 unit tests OK in 0.430s. Local originals: 304,997 records total; exact two-character contents 30,848 (25,866 + 4,982); empty strings 23,867; URL hints 3,963; Discord mentions 7,995; attached-item records 27,624. Counts are coarse pattern detections with overlaps, not a rights/privacy review or eligible training-count assertion.
+- Added tools/preview_persona_candidates.py: COUNT-ONLY dry run matching corpus builder global UTC split, validation-priority dedup, and optional 2-char reactions. No message/ID/hash/time copied to reports and no train or validation JSONL created. Added 2 synthetic unit tests. Expect Windows total 192, NOT yet verified. Do not launch private training without explicit rights + contextual review and preflight.
