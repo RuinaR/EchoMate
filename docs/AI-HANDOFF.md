@@ -214,3 +214,9 @@
 - 신규 `engagement.py`: 최근 참여 상태, 봇에게 말이 향하는지, 주제 지속 여부, 180초 기본 만료에 따른 대화 이어가기 판단. 파이프라인은 이어가기 중 진입 확률/쿨타임/끼어들기 평가를 건너뛰되 유용성, 민감도, allowlist, opt-out, 봇 자기발언, stale 검사 유지.
 - **중요:** ongoing_engagement / addressed_to_bot / topic_continues를 이벤트+맥락으로 신뢰성 있게 산출하는 구현과 Discord API 연동은 아직 미완성. 단순 최근 발언만으로 활성 상태로 취급 금지.
 - 테스트 tests/test_engagement.py 2개 + tests/test_turn_pipeline.py 3개, 기존 91개에서 5개 추가해 **96개 예상**, Windows 미검증.
+
+## 2026-10-18 — 96개 테스트 중 3개 실패 원인 수정
+- 사용자 Windows 96개 실행 중 3 FAIL. `test_direct_mention_bypasses_autonomous_frequency`는 직접 멘션임에도 자율 참여용 `has_useful_contribution=false`에서 차단된 문제. `turn_pipeline`에서 direct mention은 자율 유용성·끼어들기 조건을 우회하되 민감한 순간·scope·optout·멘션 쿨타임·오류·stale 검증 유지하도록 수정.
+- `test_engagement_expires_or_changes_topic`: 참여 지속 만료 300초는 cooldown 180초도 이미 지나 일반 자율 확률 0 때문에 `frequency_gate`가 맞음. 테스트 기대값 수정.
+- `test_engagement_still_respects_safety`: 테스트의 마지막 발언 300초 후는 기본 180초 연속성 TTL 초과였음. 5초로 변경해 실제 지속 참여 중 민감도 차단 검증.
+- 기존 코드 기준 96개 테스트 유지, 수정 후 Windows 재검증 전. 멘션·참여 지속은 아직 Discord Gateway 미연동.
