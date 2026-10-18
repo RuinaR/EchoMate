@@ -506,3 +506,9 @@
 - [x] Scripted synthetic short-message E2E and gated single-command private JSONL preflight -> first 2-step Gemma4 QLoRA run. Includes 2 regression tests.
 - [ ] Windows unittest 188 pass; synthetic GPU short-example run.
 - [ ] Review data rights, other-participant context and actual local train/validation JSONL; run first private owner-model training with explicit manual confirmation after preflight.
+
+## 2026-10-18 — Short-example GPU gate passed
+- [x] User Windows 188/188 tests green, 0.425s.
+- [x] Two-step short-sample synthetic GPU QLoRA and adapter serialization verified; 176 F32 tensors, 2,596,864 weights.
+- [ ] Evaluate meaningful multi-example heldout sample set; one synthetic validation loss rose from 18.5799 to 18.6001 and provides no performance estimate.
+- [ ] Actual owner-data training only after provenance/use-rights and contextual third-party privacy review, a locally approved corpus, and leakage audit.
