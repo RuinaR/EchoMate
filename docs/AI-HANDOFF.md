@@ -227,3 +227,10 @@
 - `continue_engagement`는 이전 참여 상태, 봇에게 향한 발언, 주제 연속성이라는 **세 신호 모두 참일 때만** 확률/자율 쿨타임 우회. 단순 시간 근접만으로 참여 상태를 만들 수 없으며, 시간이 길어도 세 신호가 살아 있으면 연속 대화로 허용.
 - tests/test_engagement.py: 1시간 연속성, 즉각 주제 전환 종료; tests/test_turn_pipeline.py: 기본 300초 이어짐, 관련 증거 없으면 자동 진입 안 함 테스트 추가. **총 97개 예상, 새 Windows 검증 전.**
 - 중요: 실제 Discord 이벤트 기반으로 발언 대상/스레드/답장 대상/주제 연속성 판정하는 구현은 여전히 미연결. 이 세 인자를 무조건 true로 전달하면 안 됨.
+
+## 2026-10-18 — Windows 97개 통과 / 실제 답장 참조 기반 참여 판별 착수
+- 사용자 Windows 97개 unittest 모두 OK.
+- `engagement_evidence.py`: 같은 채널/스레드의 `DialogueState.Turn.reply_to`가 실제 bot turn ID를 가리키는지 확인. 연결된 봇 응답이 있으면 addressed_to_bot 및 ongoing_engagement 근거로 삼고, `topic_continues`는 별도 실제 맥락 판단이 반드시 True여야 유효. 다른 사람 답장/인접 메시지/모르는 ID는 연속성 근거 불인정.
+- `turn_pipeline`은 `state.snapshot()`에서 reply 대상 확인 후 명시적 봇 대상이면 이어가기 분기에 반영. 단 현재 topic_continues 외부 판정과 실제 Discord 수집·송신은 미구현.
+- tests/test_engagement_evidence.py 5개 + tests/test_turn_pipeline.py 1개. 기존 97개에서 총 **103개 예상**, Windows 새 QA 전.
+- 원본 Discord 데이터와 비공개 학습 내용 GitHub 비업로드 원칙 유지.
