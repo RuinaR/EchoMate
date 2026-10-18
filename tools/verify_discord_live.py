@@ -3,6 +3,9 @@ import argparse
 import asyncio
 import json
 import logging
+import hashlib
+import shutil
+import subprocess
 from pathlib import Path
 import time
 from echomate_bot.settings import ROOT,Settings,private_path
@@ -12,6 +15,12 @@ from echomate_bot.discord_app import EchoClient
 
 async def run(output,duration):
     output.mkdir(parents=True,exist_ok=False)
+    source={}
+    for file in [*Path('src/echomate_bot').glob('*.py'),Path(__file__)]:
+        file=file.resolve().relative_to(Path.cwd().resolve())
+        source[str(file)]=hashlib.sha256(file.read_bytes()).hexdigest()
+        target=output/'source'/file;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(file,target)
+    (output/'manifest.json').write_text(json.dumps(dict(source_commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),source_sha256=source),indent=2),encoding='utf-8')
     bootstrap=json.loads((ROOT/'bootstrap.json').read_text(encoding='utf-8'))
     settings=Settings(bootstrap['owner_id'],bootstrap['signing_key'])
     backend=LocalBackend();client=EchoClient(settings,backend,bootstrap['admin_guilds'])
@@ -53,6 +62,7 @@ async def run(output,duration):
         deadline=time.monotonic()+duration
         while time.monotonic()<deadline:
             await asyncio.sleep(2)
+            if (output/'STOP').exists():break
             if start.done():await start;break
             summary['diagnostics']=client.runtime.diagnostics
             summary['metrics']=backend.metrics

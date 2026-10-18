@@ -30,7 +30,9 @@ class FakeBackend:
         self.calls.append(context)
         if self.wait:await self.wait.wait()
         return '응, 테스트 답변이야.'
-    async def propose(self,context,catalog):return json.dumps(dict(kind=self.action,text='',asset='👍' if self.action=='REACTION' else ''))
+    async def propose(self,context,catalog):
+        self.catalog=catalog
+        return json.dumps(dict(kind=self.action,text='',asset='👍' if self.action=='REACTION' else ''))
     async def visual(self,images,metadata):
         self.calls.append((images,metadata))
         return json.dumps(dict(objects=['빨간 도형'],emotion_candidates=[],action='정지',motion='판단 제한',uncertainty='합성 이미지',evidence=['빨간 픽셀']))
@@ -89,6 +91,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
     async def test_mention_sends_once_and_persists_replay_guard(self):
         event=self.event();await self.runtime.ingest(event);await self.settle()
         self.assertEqual(len(self.transport.sent),1)
+        self.assertEqual(self.backend.catalog['allowed_actions'],['SILENCE','TEXT'])
         await self.runtime.ingest(event);await self.settle();self.assertEqual(len(self.transport.sent),1)
         self.assertFalse(self.runtime.ledger.reserve(event,100,0))
     async def test_disallowed_channel_bot_and_dm_do_not_infer(self):

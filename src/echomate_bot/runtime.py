@@ -167,8 +167,20 @@ class Runtime:
             if not cfg["reactions"]:catalog["reactions"]={}
             if not cfg["stickers"]:catalog["stickers"]={}
             if not cfg["media"] or self.rng.random()>=cfg["media_probability"]:catalog["media"]={}
-            catalog['allowed_actions']=['SILENCE','REACTION'] if reaction_only else [k.value for k in Kind]
+            allowed=['SILENCE']
+            if cfg['text'] and not reaction_only:allowed.append('TEXT')
+            if catalog['reactions']:
+                allowed.append('REACTION')
+                if cfg['text'] and not reaction_only:allowed.append('TEXT_REACTION')
+            if not reaction_only:
+                if catalog['stickers']:allowed.append('STICKER')
+                if catalog['media']:
+                    allowed.append('MEDIA')
+                    if cfg['text']:allowed.append('TEXT_MEDIA')
+            catalog['allowed_actions']=allowed
+            catalog['directed_to_bot']=direct or continuing
             proposed=parse_action(await self.backend.propose(context,catalog))
+            self.note('proposed_'+proposed.kind.value)
             if proposed.kind==Kind.SILENCE:return
             if reaction_only and proposed.kind!=Kind.REACTION:
                 self.note('reaction_mode_veto');return
