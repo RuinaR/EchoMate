@@ -411,3 +411,6 @@
 
 ## 2026-10-18 — Short-sample syntax failure corrected
 - Windows log: failure to import `test_train_persona_gemma4` due to literal `\\n` in trainer source; 182 discovered tests, one import error, no GPU work. Fixed trainer Python syntax and malformed new JSONL fixture, added AST regression guard. Expected after fix: 186 tests, pending Windows run.
+
+## 2026-10-18 — Gated first-persona QLoRA orchestration
+- Implemented ASCII PowerShell 5.1 synthetic short-message GPU smoke with unique local output; separate real private training runner with mandatory rights/privacy/training confirmations and fail-closed overlap/PII preflight. Private JSONL must already exist and be human reviewed; no automatic original export conversion. 2 static regression tests added, expected 188 on Windows (not tested yet). Existing 186 passed. No private training run yet.
