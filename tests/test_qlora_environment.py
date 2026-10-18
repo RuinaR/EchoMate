@@ -23,4 +23,7 @@ class QloraEnvironmentTests(unittest.TestCase):
         out=inspect(query_gpu=True)
         self.assertEqual(out["gpu"]["status"],"ok")
         self.assertIn("4070",out["gpu"]["summary"])
-        self.assertTrue(any(call.kwargs.get("timeout") == 10 and\n                            "--query-gpu=name,memory.total,memory.free,compute_cap" in call.args[0]\n                            for call in run.call_args_list),\n                        "nvidia-smi query must use a 10-second timeout")
+        self.assertTrue(any(call.kwargs.get("timeout") == 10 and
+                            "--query-gpu=name,memory.total,memory.free,compute_cap" in call.args[0]
+                            for call in run.call_args_list),
+                        "nvidia-smi query must use a 10-second timeout")
