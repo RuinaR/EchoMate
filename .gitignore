@@ -42,3 +42,6 @@ messages*.json
 *test-corpus*.jsonl
 *.safetensors
 *.gguf
+
+# Dedicated persona training interpreter
+.venv-train/
