@@ -96,3 +96,8 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - `echomate_studio.turn_pipeline`을 추가해 최근 대화 상태 → 범위/쿨다운/빈도 확인 → Ollama 문맥 평가 → 선택적 답변 생성 → 최신 대화 상태 재확인을 하나의 실행 흐름으로 묶음.
 - 모델 장애, 불필요한 개입, 생성 도중의 대화 변경은 침묵·답변 폐기.
 - 현재 이 파이프라인은 오프라인 함수이며 실제 Discord 송수신은 아직 구현하지 않았다.
+
+## 최신 개발 방향 (2026-10-18)
+- Windows unittest 50개 모두 통과, 로컬 Qwen 문맥평가 성공.
+- 생성 중 새 메시지 대응: `stale_recovery.py`에 최대 재평가/생성 2회 복구(1~3 설정 가능) 추가, 신규 테스트 5개 작성. 실전 Discord 송신 잠금/재검증은 미구현.
+- 필요할 때만 사용하는 **옵트인 웹 검색**과 **페르소나 Style Profile v1 최우선 개발**을 계획. [SEARCH-AND-PERSONA-PLAN.md](docs/SEARCH-AND-PERSONA-PLAN.md) 참고.
