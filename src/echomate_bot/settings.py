@@ -68,8 +68,11 @@ def validate(cfg):
         raise ValueError("Guild limit")
     for gid, g in cfg["guilds"].items():
         positive_id(int(gid))
-        if set(g) != {"enabled", "channels", "threads"} or type(g["enabled"]) is not bool:
+        if set(g) not in ({"enabled", "channels", "threads"},{"enabled", "channels", "threads","name"}) or type(g["enabled"]) is not bool:
             raise ValueError("Invalid guild")
+        if 'name' in g:
+            from .naming import validate_name
+            validate_name(g['name'])
         if len(g["channels"]) + len(g["threads"]) > 200:
             raise ValueError("Scope limit")
         for table, rules in (("channels", g["channels"]), ("threads", g["threads"])):

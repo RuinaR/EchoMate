@@ -26,15 +26,19 @@ class LocalController:
     def __init__(self):
         self.updates=queue.Queue(maxsize=8);self.loop=None;self.client=None;self.job=None
         self.phase='설정 읽는 중';self.error='';self.lease=None
-        self.inventory=[]
+        self.inventory=[];self.closed=threading.Event()
         self.thread=threading.Thread(target=self._thread,name='echomate-discord',daemon=True)
         self.thread.start()
 
     def _thread(self):
-        asyncio.run(self._main())
+        try:asyncio.run(self._main())
+        except asyncio.CancelledError:pass
+        finally:
+            if self.lease:self.lease.close()
+            self.closed.set()
 
     async def _main(self):
-        self.loop=asyncio.get_running_loop()
+        self.loop=asyncio.get_running_loop();self.main_task=asyncio.current_task()
         try:
             from .instance import InstanceLease
             self.lease=InstanceLease()
@@ -71,7 +75,7 @@ class LocalController:
                     for c in [*guild.channels,*guild.threads]:
                         if isinstance(c,(discord.TextChannel,discord.ForumChannel,discord.Thread)):
                             label=(c.parent.name+' / ' if isinstance(c,discord.Thread) and c.parent else '')+c.name
-                            channels[c.id]=dict(id=c.id,label=label,thread=isinstance(c,discord.Thread))
+                            channels[c.id]=dict(id=c.id,label=label,thread=isinstance(c,discord.Thread),parent=c.parent_id if isinstance(c,discord.Thread) else None)
                 for table in ('channels','threads'):
                     for cid in g[table]:channels.setdefault(int(cid),dict(id=int(cid),label='등록된 '+('스레드' if table=='threads' else '채널'),thread=table=='threads'))
                 servers.append(dict(id=gid,label=guild.name if guild else saved['label'] if saved else '등록된 테스트 서버',enabled=g['enabled'],channels=list(channels.values())))
@@ -119,7 +123,7 @@ class LocalController:
             async for guild in reader.fetch_guilds(limit=200):
                 channels=await guild.fetch_channels();parents={c.id:c.name for c in channels}
                 entries=[dict(id=c.id,label=c.name,thread=False) for c in channels if isinstance(c,(discord.TextChannel,discord.ForumChannel))]
-                entries.extend(dict(id=t.id,label=parents.get(t.parent_id,'')+' / '+t.name,thread=True) for t in await guild.active_threads())
+                entries.extend(dict(id=t.id,label=parents.get(t.parent_id,'')+' / '+t.name,thread=True,parent=t.parent_id) for t in await guild.active_threads())
                 inventory.append(dict(id=guild.id,label=guild.name,channels=entries))
             self.inventory=inventory
         except Exception as exc:self.error='목록 갱신 실패 · '+type(exc).__name__
@@ -127,7 +131,20 @@ class LocalController:
             await reader.close();self.refreshing=False
 
     async def command(self,operation,**kwargs):
+        if operation in {'start','stop','shutdown','name'}:
+            if not hasattr(self,'lifecycle_lock'):self.lifecycle_lock=asyncio.Lock()
+            async with self.lifecycle_lock:return await self._command(operation,**kwargs)
+        return await self._command(operation,**kwargs)
+
+    async def _command(self,operation,**kwargs):
         try:
+            if operation=='shutdown':
+                if getattr(self,'settings',None):
+                    try:self.settings.set(self.bootstrap['owner_id'],'enabled',False)
+                    except OSError:self.error='SettingsWriteError'
+                if self.job and not self.job.done():
+                    self.job.cancel();await asyncio.gather(self.job,return_exceptions=True)
+                self.main_task.cancel();return
             if not self.settings:raise ValueError('Setup required')
             owner=self.bootstrap['owner_id'];self.settings.authorize(owner)
             self.error=''
@@ -150,6 +167,30 @@ class LocalController:
                 self.settings.change(owner,lambda cfg:cfg.update(values))
                 if self.client:
                     self.client.runtime.cancel_pending()
+            elif operation=='name':
+                from .naming import validate_name
+                gid=kwargs['guild'];name=validate_name(kwargs['name'])
+                if not self.known_guild(gid):raise PermissionError('Guild is not connected')
+                def rename(cfg):
+                    g=cfg['guilds'].setdefault(str(gid),dict(enabled=False,channels={},threads={}))
+                    g['name']=name
+                self.settings.change(owner,rename)
+                self.notice='이 서버의 봇 이름을 저장했어요'
+                if self.client:
+                    self.client.runtime.invalidate_all()
+                    await self.client.apply_guild_name(gid)
+            elif operation=='diagnostics':
+                from .settings import atomic_private_json
+                from .telemetry import summarize
+                from collections import Counter
+                runtime=self.client.runtime if self.client else None
+                atomic_private_json(ROOT/'diagnostic-report.json',dict(schema=1,
+                    connected=bool(self.client and self.client.is_ready()),
+                    queue_depth=self.client.backend.pending if self.client else 0,
+                    safe_stopped=runtime.stopped if runtime else False,
+                    summary=summarize(runtime.traces if runtime else []),
+                    codes=dict(Counter(r['code'] for r in runtime.diagnostics)) if runtime else {}))
+                self.notice='진단 보고서 저장 · local_data/bot/diagnostic-report.json'
             elif operation=='guild':
                 gid=kwargs['guild']
                 if not self.known_guild(gid):raise PermissionError('Guild is not connected')
@@ -161,8 +202,14 @@ class LocalController:
             elif operation=='scope':
                 gid=kwargs['guild'];cid=kwargs['channel']
                 if not self.known_guild(gid):raise PermissionError('Guild is not connected')
-                self.settings.set_activity_scope(owner,gid,cid,kwargs['text_mode'],kwargs['reaction_mode'],thread=kwargs['thread'],inherit=kwargs['inherit'])
-                self.settings.change(owner,lambda cfg:cfg['guilds'][str(gid)].update(enabled=kwargs['enabled']))
+                from .settings import positive_id
+                positive_id(gid);positive_id(cid)
+                def apply_scope(cfg):
+                    g=cfg['guilds'].setdefault(str(gid),dict(enabled=False,channels={},threads={}))
+                    g['threads' if kwargs['thread'] else 'channels'][str(cid)]=dict(
+                        mode=kwargs['text_mode'],reaction_mode=kwargs['reaction_mode'],inherit=kwargs['inherit'])
+                    g['enabled']=kwargs['enabled']
+                self.settings.change(owner,apply_scope)
                 if self.client:
                     self.client.runtime.invalidate(cid)
                     guild=self.client.get_guild(gid)
@@ -196,9 +243,15 @@ class LocalController:
         finally:
             if self.client:
                 from .settings import atomic_private_json
-                atomic_private_json(ROOT/'desktop-performance.json',self.client.backend.metrics)
-                await self.client.close()
-                self.client=None
+                client=self.client
+                try:
+                    # Resource release must happen even with a full/read-only disk.
+                    await client.close()
+                except Exception as exc:self.error="Shutdown"+type(exc).__name__
+                finally:
+                    self.client=None
+                    try:atomic_private_json(ROOT/'desktop-performance.json',client.backend.metrics)
+                    except OSError:self.error='PerformanceWriteError'
             self.phase='정지'
             self._published_at=0;self._publish()
 

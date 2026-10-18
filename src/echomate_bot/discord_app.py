@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
+from .telemetry import measure
 
 import discord
 from discord import app_commands
@@ -54,6 +56,8 @@ class DiscordTransport:
                 await asyncio.sleep(6)
         except discord.HTTPException:return
     async def permissions(self,event):
+        with measure("permissions"):return await self._permissions(event)
+    async def _permissions(self,event):
         channel=self.channel(event)
         if not channel or not channel.guild.me:return {}
         if isinstance(channel,discord.Thread) and (channel.archived or channel.locked):return {}
@@ -63,12 +67,16 @@ class DiscordTransport:
         return dict(view=p.view_channel,send=(p.send_messages_in_threads if isinstance(channel,discord.Thread) else p.send_messages),
                     react=p.add_reactions and p.read_message_history,attach=p.attach_files)
     async def catalog(self,event,cache):
+        with measure("catalog"):return await self._catalog(event,cache)
+    async def _catalog(self,event,cache):
         channel=self.channel(event)
         if not channel:return dict(reactions={},stickers={})
         reactions={"🙂":"가벼운 동의", "🎉":"축하", "👍":"동의", "😮":"놀람"}
         stickers=self.client.standard_catalog(event.content)
         return dict(reactions=reactions,stickers=stickers)
     async def execute(self,event,action,library,fresh):
+        with measure("discord_send"):return await self._execute(event,action,library,fresh)
+    async def _execute(self,event,action,library,fresh):
         if action.kind in {Kind.MEDIA,Kind.TEXT_MEDIA}:raise ValueError('Media output removed')
         if action.kind in {Kind.REACTION,Kind.TEXT_REACTION} and '<' in action.asset:raise ValueError('Custom emoji disabled')
         channel=self.channel(event)
@@ -236,12 +244,31 @@ class EchoClient(discord.Client):
         except discord.HTTPException:self.runtime.note('standard_sticker_catalog_unavailable')
         for guild in self.admin_guilds:await self.tree.sync(guild=discord.Object(guild))
 
-    async def on_ready(self):self.runtime.note("gateway_ready")
+    async def apply_guild_name(self,guild_id):
+        from .naming import guild_name
+        if not hasattr(self,'name_lock'):self.name_lock=asyncio.Lock()
+        async with self.name_lock:
+            guild=self.get_guild(guild_id)
+            if not guild or not guild.me:return
+            name=guild_name(self.settings.get(),guild_id)
+            if guild.me.nick==name:return
+            try:await guild.me.edit(nick=name,reason='Owner configured bot name')
+            except discord.HTTPException as exc:
+                self.runtime.note('nickname_update_failed_'+type(exc).__name__)
+                raise
+
+    async def on_ready(self):
+        self.runtime.note("gateway_ready")
+        for gid,g in self.settings.get()['guilds'].items():
+            if 'name' in g:
+                try:await self.apply_guild_name(int(gid))
+                except discord.HTTPException:pass
     async def on_disconnect(self):self.runtime.invalidate_all();self.runtime.note("gateway_disconnected")
     async def on_resumed(self):self.runtime.note("gateway_resumed")
     async def on_error(self,event,*args,**kwargs):self.runtime.note("gateway_event_failed")
 
     async def on_message(self,message):
+        received=time.monotonic()
         if not message.guild or message.author.bot or message.webhook_id:return
         parent=message.channel.parent_id if isinstance(message.channel,discord.Thread) else None
         cfg=self.settings.get()
@@ -249,7 +276,7 @@ class EchoClient(discord.Client):
         standard=tuple(dict(id=str(s.id),official_description=(s.description or '')[:180],official_tags=s.tags[:12]) for item in message.stickers if (s:=self.standard_stickers.get(item.id)))
         await self.runtime.ingest(Event(message.id,message.guild.id,message.channel.id,message.author.id,
             message.content,message.created_at,parent=parent,reply_to=message.reference.message_id if message.reference else None,
-            assets=assets_from_message(message) if cfg['vision'] else (),standard_stickers=standard))
+            assets=assets_from_message(message) if cfg['vision'] else (),standard_stickers=standard,received_at=received))
 
     async def on_raw_message_delete(self,payload):self.runtime.invalidate(payload.channel_id)
     async def on_raw_message_edit(self,payload):self.runtime.invalidate(payload.channel_id)

@@ -3,6 +3,8 @@ from __future__ import annotations
 import queue
 import tkinter as tk
 from tkinter import font as tkfont
+from .settings import scope
+from .naming import guild_name,validate_name
 
 BG='#0b1018';PANEL='#121b28';CARD='#182333';LINE='#273447'
 FG='#e9eff9';MUTED='#94a4bb';ACCENT='#9b91ff';MINT='#5ed8b8'
@@ -25,20 +27,29 @@ class SelectionList(tk.Canvas):
         self.callback=callback;self.multiple=multiple;self.items=[];self.selected=set();self.offset=0;self.index=0
         self.label_font=tkfont.Font(family='맑은 고딕',size=10)
         self.bind('<Configure>',lambda e:self.redraw());self.bind('<Button-1>',self.click)
+        self.bind('<B1-Motion>',self.drag)
         self.bind('<MouseWheel>',self.wheel)
         self.bind('<Up>',lambda e:self.move(-1));self.bind('<Down>',lambda e:self.move(1))
-        self.bind('<space>',lambda e:self.select_index(self.index,False));self.bind('<Return>',lambda e:self.select_index(self.index,False))
+        self.bind('<space>',lambda e:self.select_index(self.index,bool(e.state&4)));self.bind('<Return>',lambda e:self.select_index(self.index,False))
         self.bind('<FocusIn>',lambda e:self.redraw());self.bind('<FocusOut>',lambda e:self.redraw())
     def set_items(self,items):
         if items==self.items:return
         self.items=items;self.selected.intersection_update({x['id'] for x in items})
-        self.offset=min(self.offset,max(0,len(items)-1));self.redraw()
+        visible=max(1,self.winfo_height()//52)
+        self.offset=min(self.offset,max(0,len(items)-visible))
+        self.index=min(self.index,max(0,len(items)-1));self.redraw()
     def click(self,event):
         self.focus_set()
+        self.dragging=event.x>self.winfo_width()-12
         if event.x>self.winfo_width()-12:
-            self.offset=max(0,min(len(self.items)-1,int(event.y/max(1,self.winfo_height())*len(self.items))));self.redraw();return
+            self.drag(event);return
         index=self.offset+event.y//52
         if index<len(self.items):self.select_index(index,bool(event.state&4))
+    def drag(self,event):
+        if not getattr(self,'dragging',False):return
+        visible=max(1,self.winfo_height()//52)
+        self.offset=max(0,min(max(0,len(self.items)-visible),round(event.y/max(1,self.winfo_height())*len(self.items))))
+        self.redraw()
     def select_index(self,index,add):
         if not 0<=index<len(self.items):return
         self.index=index;key=self.items[index]['id']
@@ -69,7 +80,7 @@ class SelectionList(tk.Canvas):
                 label+='…'
             self.create_text(13,y+15,text=label,anchor='w',fill=FG if selected else '#c2cddd',font=('맑은 고딕',10,'bold' if selected else 'normal'))
             self.create_text(13,y+35,text=item.get('hint',''),anchor='w',fill=ACCENT if selected else MUTED,font=('맑은 고딕',8))
-        if not self.items:self.create_text(14,26,text='연결 후 목록이 표시돼',anchor='w',fill=MUTED,font=('맑은 고딕',10))
+        if not self.items:self.create_text(14,26,text=getattr(self,'empty_hint','연결 후 목록이 표시돼'),anchor='w',fill=MUTED,font=('맑은 고딕',10))
         if len(self.items)*52>h and h>1:
             thumb=max(25,h*h/(len(self.items)*52));top=self.offset/max(1,len(self.items))*h
             rounded(self,w-8,top,4,min(thumb,h-top),LINE,2)
@@ -79,7 +90,7 @@ class SelectionList(tk.Canvas):
 class DesktopApp:
     def __init__(self,root,controller):
         self.root=root;self.controller=controller;self.snapshot=None;self.page='spaces';self.hits=[]
-        self.guild_id=None;self.channel_ids=set();self.text_mode='silent';self.react_mode='silent';self.inherit=False
+        self.guild_id=None;self.channel_ids=set();self.text_mode='silent';self.react_mode='silent';self.inherit=False;self.drafts={};self.scope_baseline=None;self.closing=False;self.show_all=False
         self.canvas=tk.Canvas(root,bg=BG,highlightthickness=0,takefocus=True);self.canvas.pack(fill='both',expand=True)
         self.server_list=SelectionList(self.canvas,self.select_guild)
         self.channel_list=SelectionList(self.canvas,self.select_channels,True)
@@ -92,6 +103,8 @@ class DesktopApp:
         except (AttributeError,OSError):pass
         self.canvas.bind('<Configure>',lambda e:self.render());self.canvas.bind('<Button-1>',self.click)
         self.canvas.bind('<Tab>',self.focus_next);self.canvas.bind('<Return>',self.activate_focus);self.focus_index=-1
+        self.canvas.bind('<Shift-Tab>',self.focus_previous);self.canvas.bind('<space>',self.activate_focus)
+        root.bind('<Control-s>',lambda e:self.save_scope() if self.page=='spaces' else None)
         root.protocol('WM_DELETE_WINDOW',self.close);root.after(100,self.poll)
     def text(self,x,y,value,size=11,color=FG,bold=False,width=None):
         return self.canvas.create_text(x,y,text=value,anchor='nw',fill=color,font=('맑은 고딕',size,'bold' if bold else 'normal'),width=width or 0)
@@ -111,17 +124,40 @@ class DesktopApp:
                 self.focus_index=i;callback();self.render();break
     def focus_next(self,event):
         if self.hits:
+            if self.focus_index==len(self.hits)-1 and self.page=='spaces':
+                self.server_list.focus_set();return 'break'
             self.focus_index=(self.focus_index+1)%len(self.hits);self.render()
+        return 'break'
+    def focus_previous(self,event):
+        if self.focus_index<=0 and self.page=='spaces':self.channel_list.focus_set()
+        elif self.hits:self.focus_index=(self.focus_index-1)%len(self.hits);self.render()
         return 'break'
     def activate_focus(self,event):
         if 0<=self.focus_index<len(self.hits):self.hits[self.focus_index][4]()
         return 'break'
     def set_page(self,page):self.page=page;self.focus_index=-1
     def set_value(self,key,value):self.controller.submit('settings',values={key:value})
+    def remember_scope(self):
+        if self.guild_id and self.channel_ids:
+            self.drafts[(self.guild_id,frozenset(self.channel_ids))]=(self.text_mode,self.react_mode,self.inherit)
+    @property
+    def scope_dirty(self):
+        if not self.channel_ids or not self.snapshot or not self.snapshot.get('cfg'):return False
+        server=next((s for s in self.snapshot['servers'] if s['id']==self.guild_id),None)
+        if not server:return False
+        guild=self.snapshot['cfg']['guilds'].get(str(self.guild_id),{})
+        for channel in server['channels']:
+            if channel['id'] not in self.channel_ids:continue
+            rule=guild.get('threads' if channel['thread'] else 'channels',{}).get(str(channel['id']),{})
+            saved=(rule.get('mode','silent'),rule.get('reaction_mode',rule.get('mode','silent')),rule.get('inherit',False))
+            if saved!=(self.text_mode,self.react_mode,self.inherit if not channel['thread'] else False):return True
+        return False
     def select_guild(self,ids):
+        self.remember_scope()
         self.guild_id=next(iter(ids),None);self.channel_ids=set();self.channel_list.selected=set();self.refresh_lists();self.render()
     def select_channels(self,ids):
-        self.channel_ids=ids
+        self.remember_scope()
+        self.channel_ids=set(ids)
         if ids and self.snapshot:
             server=next((s for s in self.snapshot['servers'] if s['id']==self.guild_id),None)
             channel=next((c for c in server['channels'] if c['id']==next(iter(ids))),None) if server else None
@@ -132,6 +168,9 @@ class DesktopApp:
             self.react_mode=rule.get('reaction_mode',rule.get('mode','silent'))
             if self.react_mode=='reaction':self.react_mode='autonomous'
             self.inherit=rule.get('inherit',False)
+            self.scope_baseline=(self.text_mode,self.react_mode,self.inherit)
+            draft=self.drafts.get((self.guild_id,frozenset(ids)))
+            if draft:self.text_mode,self.react_mode,self.inherit=draft
         self.render()
     def refresh_lists(self):
         if not self.snapshot:return
@@ -144,11 +183,21 @@ class DesktopApp:
         if server:
             g=cfg['guilds'].get(str(self.guild_id),{})
             for c in sorted(server['channels'],key=lambda c:(c['thread'],c['label'])):
+                if self.snapshot.get('running') and not self.show_all and scope(dict(cfg,enabled=True),self.guild_id,c['id'],c.get('parent'))=='silent':continue
                 rule=g.get('threads' if c['thread'] else 'channels',{}).get(str(c['id']),{})
                 labels={'silent':'꺼짐','mention':'대화 중에만','autonomous':'자연스럽게','reaction':'이모지만'}
-                hint='아직 설정하지 않았어요' if not rule else '채팅 '+labels[rule['mode']]+'  ·  반응 '+labels[rule.get('reaction_mode',rule['mode'])]
+                hint=('상위 채널의 활동 설정을 따름' if c.get('parent') and scope(dict(cfg,enabled=True),self.guild_id,c['id'],c.get('parent'))!='silent' else '아직 설정하지 않았어요') if not rule else '채팅 '+labels[rule['mode']]+'  ·  반응 '+labels[rule.get('reaction_mode',rule['mode'])]
                 items.append(dict(id=c['id'],label=('↳ ' if c['thread'] else '# ')+c['label'],hint=hint))
-        self.channel_list.set_items(items)
+        self.channel_list.empty_hint=('활동할 곳이 없어요\n전체 목록에서 설정해 주세요' if self.snapshot.get('running') and not self.show_all else '목록이 없으면 새로고침해 주세요')
+        self.channel_list.set_items(items);self.channel_list.redraw()
+        if server and len(self.channel_ids)==1:
+            cid=next(iter(self.channel_ids));c=next((c for c in server['channels'] if c['id']==cid),None)
+            if c:
+                rule=g.get('threads' if c['thread'] else 'channels',{}).get(str(cid),{})
+                current=(self.text_mode,self.react_mode,self.inherit)
+                persisted=(rule.get('mode','silent'),rule.get('reaction_mode',rule.get('mode','silent')),rule.get('inherit',False))
+                if current==persisted:
+                    self.scope_baseline=current;self.drafts.pop((self.guild_id,frozenset(self.channel_ids)),None)
         self.channel_ids.intersection_update({i['id'] for i in items})
     def save_scope(self):
         server=next((s for s in self.snapshot['servers'] if s['id']==self.guild_id),None) if self.snapshot else None
@@ -159,6 +208,29 @@ class DesktopApp:
                     reaction_mode=self.react_mode,inherit=self.inherit if not c['thread'] else False,enabled=True)
     def change_guild(self):
         if self.guild_id:self.controller.submit('guild',guild=self.guild_id)
+    def toggle_channel_view(self):
+        self.remember_scope();self.show_all=not self.show_all;self.refresh_lists();self.render()
+    def edit_name(self):
+        if not self.guild_id or not self.snapshot:return
+        gid=self.guild_id
+        dialog=tk.Toplevel(self.root);dialog.title('이 서버의 봇 이름');dialog.configure(bg=PANEL)
+        dialog.geometry('430x235');dialog.resizable(False,False);dialog.transient(self.root);dialog.grab_set()
+        canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
+        canvas.create_text(24,20,text='이 서버에서 어떤 이름을 쓸까요?',anchor='nw',fill=FG,font=('맑은 고딕',13,'bold'))
+        value=tk.StringVar(value=guild_name(self.snapshot['cfg'],gid))
+        entry=tk.Entry(dialog,textvariable=value,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',12))
+        entry.place(x=24,y=61,width=380,height=36);entry.focus_set();entry.select_range(0,'end')
+        hint=canvas.create_text(24,110,text='예: 별빛봇 → “별빛아”라고 불러도 문맥을 보고 답해요.\nDiscord에서 이름 변경 권한이 필요할 수 있어요.',anchor='nw',fill=MUTED,font=('맑은 고딕',9))
+        def save():
+            try:name=validate_name(value.get().strip())
+            except ValueError:
+                canvas.itemconfigure(hint,text='이름은 2~32자로, 줄바꿈·멘션·특수 제어문자 없이 입력해 주세요.');return
+            self.controller.submit('name',guild=gid,name=name);dialog.destroy()
+        rounded(canvas,222,178,86,34,CARD,8);rounded(canvas,318,178,86,34,ACCENT,8)
+        canvas.create_text(265,195,text='취소',fill=FG,font=('맑은 고딕',10))
+        canvas.create_text(361,195,text='저장',fill=BG,font=('맑은 고딕',10,'bold'))
+        canvas.bind('<Button-1>',lambda e:save() if 318<=e.x<=404 and 178<=e.y<=212 else dialog.destroy() if 222<=e.x<=308 and 178<=e.y<=212 else None)
+        dialog.bind('<Return>',lambda e:save());dialog.bind('<Escape>',lambda e:dialog.destroy())
     def render(self):
         self.canvas.delete('all');self.hits=[];w=max(1040,self.canvas.winfo_width());h=max(740,self.canvas.winfo_height())
         self.canvas.create_rectangle(0,0,196,h,fill='#0e1521',outline='')
@@ -188,8 +260,9 @@ class DesktopApp:
         elif self.page=='character':self.draw_character(w,h,cfg)
         elif self.page=='status':self.draw_status(w,h,s)
         elif self.page=='labs':self.draw_labs(w,h,cfg)
-        footer=('변경을 적용하지 못했어요. 서버 목록과 설정을 확인해 주세요.' if s and s['error'] else
-                '설정을 저장했어요 · 재시작하지 않아도 적용돼요' if s and s.get('notice') else
+        footer=('저장하지 않은 채널 설정이 있어요 · 선택을 바꿔도 임시 보관돼요' if self.scope_dirty else
+                '변경을 적용하지 못했어요. 서버 목록과 설정을 확인해 주세요.' if s and s['error'] else
+                s['notice']+' · 재시작 없이 적용돼요' if s and s.get('notice') else
                 '허용한 채널에서만 대화해요 · 목록을 선택하는 것만으로는 말을 하지 않아요')
         self.text(226,h-29,footer,9,MUTED)
         if 0<=self.focus_index<len(self.hits):
@@ -199,8 +272,13 @@ class DesktopApp:
         for x,width in [(left,210),(mid,right-mid-15),(right,250)]:rounded(self.canvas,x,sy,width,bottom-sy,PANEL)
         self.text(left+16,sy+16,'가입한 서버',12,bold=True);self.text(mid+16,sy+16,'채널과 진행 중인 스레드',12,bold=True)
         self.button(left+126,sy+12,72,28,'새로고침',lambda:self.controller.submit('refresh'))
-        self.text(mid+16,sy+44,'여러 곳을 고르려면 Ctrl 키를 누르고 클릭하세요',9,MUTED)
-        self.server_list.place(x=left+10,y=sy+54,width=190,height=bottom-sy-70)
+        if self.snapshot and self.snapshot.get('running'):
+            self.button(mid+16,sy+41,190,28,'활동 설정한 곳만 보기' if self.show_all else '전체 목록 · 활동 설정',self.toggle_channel_view)
+        else:self.text(mid+16,sy+44,'여러 곳 선택: Ctrl + 클릭',9,MUTED)
+        self.server_list.place(x=left+10,y=sy+54,width=190,height=bottom-sy-158)
+        if cfg and self.guild_id:
+            self.text(left+16,bottom-90,'이 서버의 봇 이름',9,MUTED)
+            self.button(left+10,bottom-62,190,34,guild_name(cfg,self.guild_id)[:16]+' · 변경',self.edit_name)
         self.channel_list.place(x=mid+10,y=sy+78,width=right-mid-35,height=bottom-sy-94)
         x=right+16;self.text(x,sy+17,'이곳에서 어떻게 할까요?',12,bold=True)
         self.text(x,sy+46,f'{len(self.channel_ids)}곳을 선택했어요' if self.channel_ids else '먼저 왼쪽에서 채널을 골라 주세요',9,ACCENT)
@@ -215,8 +293,8 @@ class DesktopApp:
         parent_selected=server and any(c['id'] in self.channel_ids and not c['thread'] for c in server['channels'])
         if parent_selected:self.toggle(x,sy+414,'이 채널의 스레드도 적용',self.inherit,lambda:setattr(self,'inherit',not self.inherit))
         else:self.text(x,sy+414,'선택한 스레드에만 적용돼요' if self.channel_ids else '채널을 선택하면 설정할 수 있어요',9,MUTED)
-        self.button(x,sy+461,216,36,f'선택한 {len(self.channel_ids)}곳에 저장' if self.channel_ids else '채널을 먼저 선택하세요',self.save_scope,primary=True,enabled=bool(self.channel_ids))
-        self.button(x,sy+508,216,32,'이 서버에서 모두 쉬기' if server and server['enabled'] else '이 서버에서 활동 허용',self.change_guild,enabled=bool(server))
+        self.button(x,sy+445,216,36,f'선택한 {len(self.channel_ids)}곳에 저장' if self.channel_ids else '채널을 먼저 선택하세요',self.save_scope,primary=True,enabled=bool(self.channel_ids))
+        self.button(x,sy+488,216,32,'이 서버에서 모두 쉬기' if server and server['enabled'] else '이 서버에서 활동 허용',self.change_guild,enabled=bool(server))
     def choices(self,x,y,choices,current,callback,width=105):
         for index,(label,value) in enumerate(choices):self.button(x+index*(width+8),y,width,35,label,lambda v=value:callback(v),value==current)
     def number(self,x,y,label,key,value,step,lo,hi):
@@ -233,9 +311,9 @@ class DesktopApp:
         self.choices(250,301,list(ACTIVITY.items()),cfg['activity'],lambda v:self.set_value('activity',v),125)
         for index,(label,key,step,lo,hi) in enumerate([('다정함','warmth',5,0,100),('귀여움','cuteness',5,0,100),('장난기','playfulness',5,0,100),
              ('먼저 말할 때 최소 간격','cooldown',10,2,3600),('대화를 이어갈 대기 시간','engagement_seconds',60,10,86400)]):
-            self.number(250,371+index*47,label,key,cfg[key],step,lo,hi)
-        self.text(250,622,'모델',10,MUTED)
-        self.choices(310,612,[('개인 말투 · 잠정','persona'),('기본 Gemma 4','base')],cfg['model'],lambda v:self.set_value('model',v),156)
+            self.number(250,355+index*40,label,key,cfg[key],step,lo,hi)
+        self.text(250,576,'모델',10,MUTED)
+        self.choices(310,566,[('개인 말투 · 잠정','persona'),('기본 Gemma 4','base')],cfg['model'],lambda v:self.set_value('model',v),156)
         self.text(250,h-100,'기분은 바로 반영돼요. 이미 나누던 대화는 활동 빈도와 관계없이 문맥에 맞게 이어가요.',9,MUTED,width=w-290)
     def draw_status(self,w,h,s):
         if not s:return
@@ -245,7 +323,8 @@ class DesktopApp:
             self.text(x+20,160,label,10,MUTED);self.text(x+20,192,value,25,bold=True)
         rounded(self.canvas,226,277,w-252,h-344,PANEL);self.text(248,297,'진행 중인 작업',13,bold=True)
         if not s['progress']:self.text(248,348,'새 메시지를 기다리고 있어요' if s['connected'] else '봇을 켜면 여기에서 처리 과정을 볼 수 있어요',12,MUTED)
-        for i,p in enumerate(s['progress'][:8]):
+        self.button(w-430,291,180,32,'개인정보 없는 진단 저장',lambda:self.controller.submit('diagnostics'))
+        for i,p in enumerate(s['progress'][:max(1,(h-420)//48)]):
             y=344+i*48;self.text(248,y,p['channel'],11);self.text(510,y,p['stage'],11,ACCENT);self.text(w-120,y,str(p['seconds'])+'초',11,MUTED)
         self.text(248,h-107,'대화 내용은 이 화면에 표시하지 않아요. 긴 답변은 작성에 시간이 더 걸릴 수 있어요.',9,MUTED)
     def draw_outputs(self,w,h,cfg):
@@ -271,8 +350,10 @@ class DesktopApp:
         except queue.Empty:pass
         self.refresh_lists();self.render();self.root.after(400,self.poll)
     def close(self):
-        self.controller.submit('stop')
+        if self.closing:return
+        self.closing=True
+        self.controller.submit('shutdown')
         def wait():
-            if self.controller.client is None and (self.controller.job is None or self.controller.job.done()):self.root.destroy()
+            if self.controller.closed.is_set():self.root.destroy()
             else:self.root.after(200,wait)
         self.root.after(200,wait)

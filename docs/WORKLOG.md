@@ -1,5 +1,17 @@
 # 작업 로그
 
+> 최신 사용자 설정: 컴퓨터 화면·마우스·키보드 자동 조작을 사용하지 않는다. 전역 권한을 변경한 것이 아니며 파일 수정·명령 기반 검증만 이어간다.
+
+## 2026-10-19 — 릴리즈 계측·종료 정리·활동 목록·서버별 호칭
+
+- 보존: 시작 HEAD fdf4c46/clean. 기존 private684파일 size/mtime 보존 목록과 기준260테스트 OK(7.269초)를 local_data/release-qa-20261019에 기록. 이전 미커밋 안정화 변경은 덮어쓰지 않고 이어 작업했다. 실제 모델/체크포인트/서명 설정을 새 값으로 임의 변경하지 않았다.
+- 수정 파일: telemetry/inference/runtime/discord_app/desktop/desktop_ui/__main__/settings/character 및 새 naming.py. 원문 없는 단계 계측과 숫자 진단, executor context 전파, 저장 실패와 무관한 종료 정리, lifecycle 직렬화, 단일 scope 저장, 미저장 초안/키보드/드래그/배치, 실행 중 활동 목록 필터와 전체 보기, 소유자의 서버별 이름 및 자기 닉네임 동기화, 호격 후보 후 의미 판단을 구현했다.
+- GPU: verify_release_performance.py, 상황별 warmup1 + A/B각5회(총22) 완료. TF32 이득 없어 미적용. 잡담 A/B p50 4.968/5.141, 기술36.204/36.282초. 모델 학습/승격/시각 실험 활성화 없음. TTFT는 host callback 근사, Windows monotonic 해상도 한계 명시. 개인 생성은 공개하지 않음.
+- 회귀: 267개 OK(안정화 단계), 호칭/격리/차단/상속 필터/닉네임 mock 추가 후274개 OK(7.662초). 명령 `$env:PYTHONPATH='src'; .venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`, compileall. 테스트 수를 실사용 품질로 간주하지 않는다.
+- 실제 UI: computer-use로 창 열기/선택/미저장 표시/성격 화면 관찰. 물리 Escape 중단 보고로 종료/나머지 조작 미완료, 재시도도 중단됨. 이후 최신 이름/필터는 합성 Tk 테스트만 확인. 서버/채널 이름이 담긴 스크린샷은 공개하지 않았다.
+- 미확인: 새 닉네임/호칭의 실제 Discord 송수신, 다중 화자 품질, 실제 비소유자 계정/기본 스티커/재연결/장시간 QA. RELEASE-QA에 분리 기록. 앱 재시작과 TESTING-DISCORD-APP의 최신 절을 사용자 검증 순서로 제공한다.
+- 문서: AI-HANDOFF/CURRENT-STATUS/ARCHITECTURE/DISCORD-BOT/DESKTOP-UI/TESTING-DISCORD-APP/ML-EXPERIMENTS/RELEASE-QA에 현재 구현·검증 경계를 기록. 최신 커밋은 git log -1로 확인한다.
+
 ## 2026-10-19 — 누적 변경 문서 반영·커밋 재확인
 
 - 요청: 지금까지의 변경사항을 문서에도 반영하고 커밋.

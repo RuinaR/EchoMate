@@ -33,6 +33,11 @@ def setup():
 async def run():
     from .instance import InstanceLease
     lease=InstanceLease()
+    try:await _run_client()
+    finally:lease.close()
+
+
+async def _run_client():
     from .inference import LocalBackend
     from .discord_app import EchoClient
     path=ROOT/"bootstrap.json"
@@ -47,11 +52,15 @@ async def run():
         await client.backend.ready()
         await client.start(bootstrap['token'],reconnect=True)
     finally:
-        ROOT.mkdir(parents=True,exist_ok=True)
-        (ROOT/"diagnostics.json").write_text(json.dumps(client.runtime.diagnostics,indent=2),encoding="utf-8")
-        (ROOT/"performance.json").write_text(json.dumps(client.backend.metrics,indent=2),encoding="utf-8")
-        if not client.is_closed():await client.close()
-        lease.close()
+        try:
+            if not client.is_closed():await client.close()
+        finally:
+            from .settings import atomic_private_json
+            try:
+                atomic_private_json(ROOT/"diagnostics.json",client.runtime.diagnostics)
+                atomic_private_json(ROOT/"performance.json",client.backend.metrics)
+            except OSError:
+                print("진단 파일을 저장하지 못했어. 폴더 쓰기 권한과 남은 용량을 확인해 줘.")
 
 
 def main():

@@ -1,5 +1,15 @@
 # 아키텍처
 
+## 2026-10-19 추가 경계 — 서버별 이름·활동 목록·계측
+
+`naming.py`는 2~32자 이름 검증/서버별 조회/호격 후보만 담당한다. signed guild에 optional name을 추가하며 기존 3필드 guild와 호환한다. Runtime은 configured_bot_name을 실제 발언이 아닌 이벤트 메타데이터로 전달한다. 이름 후보는 참여/대상 의미 평가 후에만 직접 응답 경로로 진입한다. 캐릭터 지침은 해당 서버의 별명과 오인 정정 방식을 제공한다. 이름은 식별자·권한 근거가 아니다. 실제 nickname 수정은 discord.py 자기 Member.edit만 사용하며 설정 변경/재연결 시 적용한다.
+
+GUI 실행 중 목록은 기존 scope 해석기를 사용해 상속과 차단을 그대로 반영한다. REST/실시간 스냅샷의 thread parent ID는 메모리에서만 사용한다. 전체 목록 전환은 보기 상태이며 설정 권한을 바꾸지 않는다.
+
+telemetry의 ContextVar는 단일 GPU executor에 copy_context로 전파한다. monotonic 기반 단계 시간과 worker 대기/준비/첫 stopping callback/생성 속도/VRAM/working-set RAM만 기록한다. 호스트 첫 callback은 GPU 동기화된 첫 토큰/Discord 표시 시간의 정확한 측정과 다르다. 저장은 별도 thread+순차 lock, 보관 1000요청/worker200개. 단계 총계와 permissions/catalog/send 하위 span은 겹치므로 합산하지 않는다. 실패한 worker는 요청 trace에 남고 성공 지연 분포에서 취소/침묵은 제외한다. 본문/이름/Discord ID/프롬프트/토큰 내용은 계측에 넣지 않는다.
+
+CLI/GUI는 진단 파일 쓰기보다 자원 종료를 먼저 수행한다. GUI 종료는 controller main task와 inventory 작업을 정리하고 lease를 반환한다. lifecycle lock은 start/stop/shutdown/name 작업의 경쟁을 막는다. 이 변경의 실제 종료·장시간 안정성 승인은 RELEASE-QA를 따른다.
+
 ## 현재: 다크 앱·기본 에셋·실험 분석
 
 최종 UX는 5개 화면이며 앱을 자동 재실행하지 않는다. GUI 시작은 응답 허용과 함께 동작하고, 일시정지는 현재 작업만 취소해 실제 이력을 보존하며 새 메시지는 받지 않는다. 종료는 연결/모델/이력을 정리한다. 실제 이력에서 확인한 bot message의 reply_to도 명시적 요청으로 취급해 끼어들기 투표 없이 생성한다. 작성 중 표시는 별도 비동기 작업으로 보내며 최종 텍스트 검증 전 부분 출력은 송신하지 않는다. 취소/완료 시 표시 갱신 작업도 종료한다.

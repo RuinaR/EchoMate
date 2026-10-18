@@ -1,5 +1,11 @@
 # Windows Discord Bot 실행과 검증
 
+## 최신 — 이름으로 부르기 (2026-10-19)
+
+앱에서 서버별 이름을 저장하면 해당 서버에서만 적용한다. 공식 Bot의 자기 Member.edit(nick=...)를 사용하며 다른 사람 이름은 변경하지 않는다. [discord.py Member.edit](https://discordpy.readthedocs.io/en/stable/api.html#discord.Member.edit) 및 [Discord Guild API](https://docs.discord.com/developers/resources/guild#modify-current-member)를 따른다. 자기 닉네임 변경 권한을 확인한다. 권한 실패 코드는 비공개 진단에 남고 이름 설정 자체는 보존된다.
+
+이름 전체/봇 접미사 생략/한국어 호격을 후보로 인식한다. 코드/인용/URL의 예시는 호출로 취급하지 않는다. 후보만으로 전송하지 않고 현재 화자/대상·참여 적절성을 의미 판단한다. mention 전용 허용 채널에서도 처음 이름을 부르면 응답할 수 있다. 새 진입 확률과 독립이지만 권한/빈도/일시정지/민감 상황/최신 상태 검사는 유지한다. 다른 사람을 부른 것이라는 정정에는 간단히 착각을 인정하도록 지시한다. 동명이인·철자 변형의 정확한 인식과 실제 Discord 응답 품질은 아직 미검증이다.
+
 2026-10-19 최신 기준. 현재 모델은 rank8 q/k/v/o 60단계 잠정 후보이며 품질 승인은 별개다. 등록 미디어는 제거했고 기본 에셋과 실험 시각 분석을 분리했다.
 
 ## 기존 설정이 있는 경우

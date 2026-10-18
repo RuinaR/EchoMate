@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
+from contextvars import copy_context
+from .telemetry import active_trace
 import json
 import os
 from pathlib import Path
@@ -109,9 +111,23 @@ class LocalBackend:
         if self.pending>=self.max_pending:raise RuntimeError("Inference queue full")
         self.pending+=1;stop=threading.Event()
         loop=asyncio.get_running_loop()
+        queued=time.monotonic();context=copy_context()
+        def work():
+            entered=time.monotonic();before=self.metrics[-1] if self.metrics else None;outcome='failed'
+            try:
+                result=self._generate(messages,images,budget,weight,stop,choices) if choices is not None else self._generate(messages,images,budget,weight,stop)
+                outcome='completed';return result
+            except InterruptedError:
+                outcome='cancelled';raise
+            finally:
+                metric=self.metrics[-1] if self.metrics and self.metrics[-1] is not before else dict(seconds=time.monotonic()-entered)
+                metric.update(queue_seconds=entered-queued,worker_seconds=time.monotonic()-entered,outcome=outcome)
+                from .telemetry import process_ram_mib
+                metric['ram_mib']=process_ram_mib()
+                trace=active_trace.get()
+                if trace:trace.calls.append(dict(metric))
         try:
-            if choices is None:future=loop.run_in_executor(self.executor,self._generate,messages,images,budget,weight,stop)
-            else:future=loop.run_in_executor(self.executor,lambda:self._generate(messages,images,budget,weight,stop,choices))
+            future=loop.run_in_executor(self.executor,context.run,work)
         except Exception:self.pending-=1;raise
         def finished(result):
             self.pending-=1
@@ -131,8 +147,9 @@ class LocalBackend:
         import torch
         from transformers import StoppingCriteria, StoppingCriteriaList
         class Cancel(StoppingCriteria):
-            def __init__(self,backend):self.backend=backend;self.checked=time.monotonic();self.resource_stop=False
+            def __init__(self,backend):self.backend=backend;self.checked=time.monotonic();self.resource_stop=False;self.first_token=None
             def __call__(self,*args,**kwargs):
+                if self.first_token is None:self.first_token=time.monotonic()
                 if time.monotonic()-self.checked>=5:
                     self.checked=time.monotonic()
                     try:self.backend.health()
@@ -142,6 +159,7 @@ class LocalBackend:
             self.load()
             try:self.health()
             except RuntimeError:self.failed=True;raise
+            prepared=time.monotonic()
             proc=self.processor
             if images:
                 # All bytes were decoded locally; processor never receives remote URLs.
@@ -153,6 +171,7 @@ class LocalBackend:
                 inputs=proc.tokenizer.apply_chat_template(messages,add_generation_prompt=True,enable_thinking=False,
                     tokenize=True,return_dict=True,return_tensors="pt")
             if inputs["input_ids"].shape[-1]>6000:raise ValueError("Inference context limit")
+            tokenized=time.monotonic()
             inputs={k:(v.to("cuda",dtype=torch.bfloat16) if torch.is_floating_point(v) else v.to("cuda")) for k,v in inputs.items()}
             end=proc.tokenizer.convert_tokens_to_ids("<turn|>")
             kwargs={}
@@ -171,6 +190,10 @@ class LocalBackend:
             metric=dict(seconds=round(time.monotonic()-started,3),peak_allocated_mib=round(torch.cuda.max_memory_allocated()/1048576,1),
                         input_tokens=inputs["input_ids"].shape[-1],output_tokens=len(ids),images=len(images or []),weight=weight,
                         ended=bool(ids and ids[-1] in (end,proc.tokenizer.eos_token_id)))
+            metric.update(tokenization_seconds=tokenized-prepared, preparation_seconds=started-prepared,
+                          ttft_seconds=(cancel.first_token-started) if cancel.first_token else None,
+                          tokens_per_second=len(ids)/max(time.monotonic()-started,1e-9),
+                          peak_reserved_mib=round(torch.cuda.max_memory_reserved()/1048576,1))
             self.metrics.append(metric);self.metrics=self.metrics[-200:]
             if not metric["ended"]:raise ValueError("Incomplete model output")
             return visible(proc.tokenizer.decode(ids,skip_special_tokens=False))
@@ -181,6 +204,8 @@ class LocalBackend:
         messages=[dict(role="system",content=instruction(cfg)),*context]
         result=await self._job(messages,weight=cfg["model"],budget=768)
         if needs_rewrite(result,context):
+            trace=active_trace.get()
+            if trace:trace.regenerations+=1
             messages[0]["content"]+=" 이번 응답에서는 인용/코드/URL 이외의 자모 웃음/울음 표현을 자연스러운 말로 바꿔 새로 답해."
             result=await self._job(messages,weight=cfg["model"],budget=768)
             if needs_rewrite(result,context):raise ValueError("Character output did not pass retry")
@@ -202,6 +227,7 @@ class LocalBackend:
                 '4: 최신 사람이 EchoMate에게 이어 말하는가 (이름/멘션 없이도 질문에 대한 답이나 후속 질문이면 가능). '
                 '5: EchoMate와 하던 주제가 이어지는가. '
                 '다른 사람끼리의 대화, 화제 전환, 종료 의사를 구별해. 최근 봇 발언만으로 4/5를 참으로 삼지 마. 불확실하면 2~5는 0.')
+        prompt+=' 이벤트 메타데이터의 configured_bot_name은 이 서버에서 EchoMate를 부르는 이름이야. 봇 접미사 생략이나 아/야 호격도 고려하되, 동명이인/다른 사람에게 말하는 문맥을 구별해.'
         choices=[' '.join(map(str,bits)) for bits in product((0,1),repeat=5)]
         raw=await self._job([dict(role='system',content=prompt),*context],weight='base',budget=20,choices=choices)
         return parse_turn_assessment(raw)

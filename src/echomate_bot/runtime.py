@@ -19,6 +19,8 @@ from .settings import ROOT,scope,ACTIVITY,private_path
 from .actions import Action,Kind,parse_action,validate_action
 from .vision import download
 from .character import effective_character
+from .telemetry import Trace,active_trace,summarize
+from .naming import guild_name,name_candidate
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,7 @@ class Event:
     opted_out:bool=False
     standard_stickers:tuple=()
     response_to:int|None=None
+    received_at:float=field(default_factory=time.monotonic,compare=False)
 
 
 class Ledger:
@@ -68,7 +71,8 @@ class Runtime:
         self.states={};self.tasks={};self.seen={};self.blocked_assets=set();self.failures=0
         self.pending_mentions={}
         self.ingest_locks=weakref.WeakValueDictionary()
-        self.stopped=False;self.diagnostics=[];self.progress={};self.latencies=[]
+        self.stopped=False;self.diagnostics=[];self.progress={};self.latencies=[];self.traces=[]
+        self.telemetry_lock=asyncio.Lock()
 
     def note(self,code):
         record=dict(at=time.time(),code=code)
@@ -80,6 +84,8 @@ class Runtime:
         except OSError:self.stopped=True
 
     def stage(self,event,name,started):
+        trace=active_trace.get()
+        if trace:trace.stage(name)
         self.progress[event.channel]=dict(stage=name,started=started,updated=time.time())
         self.note('stage_'+name)
 
@@ -119,6 +125,10 @@ class Runtime:
             details=json.loads(metadata) if metadata else {}
             details['standard_stickers_official_metadata']=event.standard_stickers
             metadata=json.dumps(details,ensure_ascii=False)
+        if guild_name(cfg,event.guild)!='EchoMate':
+            details=json.loads(metadata) if metadata else {}
+            details['configured_bot_name']=guild_name(cfg,event.guild)
+            metadata=json.dumps(details,ensure_ascii=False)
         if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None,context_metadata=metadata)):return
         request_content=None
         if mentions_bot(event.content,self.transport.bot_id):
@@ -145,6 +155,22 @@ class Runtime:
                 (await self.transport.permissions(event)).get("view",False))
 
     async def process(self,event,state,request_content=None):
+        trace=Trace(event.received_at);token=active_trace.set(trace)
+        try:await self._process(event,state,request_content)
+        finally:
+            self.traces.append(trace.finish());self.traces=self.traces[-1000:]
+            active_trace.reset(token)
+            # Numeric only. Disk failure must not turn a successful send into a retry.
+            from .settings import atomic_private_json
+            try:
+                async with self.telemetry_lock:
+                    from copy import deepcopy
+                    report=deepcopy(self.traces)
+                    await asyncio.to_thread(atomic_private_json,self.ledger.path.parent/'telemetry.json',dict(
+                        summary=summarize(report),requests=report))
+            except OSError:self.note('telemetry_write_failed')
+
+    async def _process(self,event,state,request_content=None):
         started=time.time();self.stage(event,'assessment',started)
         revision=self.settings.revision;cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
         text_mode=scope(cfg,event.guild,event.channel,event.parent,action='text')
@@ -154,6 +180,7 @@ class Runtime:
             since=time.time()-self.ledger.last(event.channel)
             verified_request=request_content if request_content is not None else event.content
             mention=mentions_bot(verified_request,self.transport.bot_id)
+            named=name_candidate(event.content,guild_name(cfg,event.guild))
             _,known_turns=state.snapshot(channel_id=event.channel,thread_id=None)
             verified_bot_reply=any(t.is_bot and t.message_id==str(event.reply_to) for t in known_turns[:-1])
             direct=mention or verified_bot_reply
@@ -163,7 +190,7 @@ class Runtime:
                     author_is_bot=False,opted_out=False,seconds_since_last_reply=since)
                 if not allowed:return
             elif verified_bot_reply and since<2:return
-            if not direct and mode=="mention":
+            if not direct and not named and mode=="mention":
                 # Verified reply/semantic addressee may continue existing participation.
                 _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
                 if not any(t.is_bot for t in turns):return
@@ -177,6 +204,11 @@ class Runtime:
             elif hasattr(self.backend,'assess_turn'):assessment,evidence=await self.backend.assess_turn(context)
             else:assessment=await self.backend.classify(context)
             if assessment.is_sensitive_moment:return
+            if named and not direct:
+                if evidence is None:evidence=await self.backend.continuity(context)
+                if evidence.addressed_to_bot and assessment.interruption_is_appropriate:
+                    direct=True
+                    if since<2:return
             continuing=False
             _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
             if not direct and any(t.is_bot for t in turns[:-1]):
@@ -259,6 +291,7 @@ class Runtime:
             if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
                 self.stage(event,'text',started)
                 character=effective_character(cfg,event.content);character['_selected_action']=action.kind.value
+                character['_guild_name']=guild_name(cfg,event.guild)
                 indicator=(asyncio.create_task(self.transport.indicate_typing(event,lambda:self.fresh(event,state,version,revision)))
                            if hasattr(self.transport,'indicate_typing') else None)
                 try:answer=await self.backend.text(context,character)
@@ -298,14 +331,18 @@ class Runtime:
                 if sent or action.kind==Kind.REACTION:
                     state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(sent) if sent else 'reaction:'+str(event.id),str(self.transport.bot_id),bot_content,
                         datetime.now(timezone.utc),is_bot=True,reply_to=str(event.response_to or event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
+                active_trace.get().outcome="sent"
                 self.failures=0
                 self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
             except Exception:
                 self.ledger.completed(event,"failed_or_uncertain")
                 if action.asset:self.blocked_assets.add((event.guild,action.asset))
                 raise
-        except asyncio.CancelledError:self.note("stale_cancelled");raise
+        except asyncio.CancelledError:
+            active_trace.get().outcome="cancelled"
+            self.note("stale_cancelled");raise
         except Exception as exc:
+            active_trace.get().outcome="failed"
             self.failures+=1;self.note("turn_failed_"+type(exc).__name__)
             if self.failures>=3 or getattr(self.backend,"failed",False):
                 self.stopped=True;self.note("safe_disabled")
