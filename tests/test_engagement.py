@@ -12,6 +12,8 @@ class EngagementTests(unittest.TestCase):
         self.assertFalse(continue_engagement(p,**{**args,"addressed_to_bot":False}))
         self.assertFalse(continue_engagement(p,**{**args,"topic_continues":False}))
         self.assertFalse(continue_engagement(p,**{**args,"seconds_since_last_bot_reply":121}))
+        self.assertTrue(continue_engagement(EngagementPolicy(),**{**args,"seconds_since_last_bot_reply":3600}))
+        self.assertFalse(continue_engagement(EngagementPolicy(),**{**args,"seconds_since_last_bot_reply":1,"topic_continues":False}))
     def test_invalid(self):
         with self.assertRaises(ValueError): EngagementPolicy(max_gap_seconds=0)
         self.assertFalse(continue_engagement(EngagementPolicy(enabled=False),
