@@ -1,5 +1,19 @@
 # 아키텍처 (계획)
 
+## 2026-10-19 실제 Bot 통합 구조 — 현재 구현이 우선
+
+`src/echomate_bot/`은 추론 전용 실행 패키지다. 기존 `echomate_studio`의 DialogueState/참여 판단/멘션 검사/engagement/assessment schema를 가져오되 Studio 학습·데이터 import·실험 도구는 Bot에서 호출하지 않는다. 이전 오프라인 평가 코드는 수정하지 않는다.
+
+- `settings.py`: 로컬 bootstrap의 소유자 ID/서명 키는 mutable 설정과 분리. 설정 HMAC/스키마 검사·원자 저장, 서버/채널/스레드 allowlist와 명시적 상속. 같은 OS 계정은 신뢰 경계.
+- `character.py`: 가중치를 수정하지 않는 성격/기분 지침, 자모 표현 검사 후 최대 1회 재생성. 인용/코드/URL을 삭제하지 않는다. 자동 연출은 소유자 옵션이며 단순 축하/휴식 표현에만 제한한다.
+- `inference.py`: 단일 GPU executor/최대12 대기, 읽기 전용 NF4/BF16 Gemma+보존된 rank8-60. base/persona 전환으로 중복 로딩 방지. 공식 Gateway 전 모델 준비, 이후 worker 추론. token 단위 취소와 주기적 온도/VRAM/RAM 검사, OOM 안전 정지, 채널 제어/미완결 fail closed. 사용자 지정 모델 코드를 실행하지 않는다.
+- `vision.py`: HTTPS Discord CDN/프록시·공인 DNS·redirect 금지·바이트/픽셀/프레임 제한 → Pillow raster/여러 프레임 → 실제 기본 가중치 분석 → 엄격한 구조화 결과 → guild+asset+내용hash+분석버전 캐시. 이름은 시각 증거가 아니다. 소유자 승인 미디어 저장소와 분리한다.
+- `media.py`: 소유자가 승인한 바이트를 private library로 복사, 실제 분석/해시/서명된 승인 정보/서버 범위/파일별 쿨다운 관리. 받은 미디어의 cache 엔트리만으로 송신할 수 없다.
+- `runtime.py`: bounded 채널 상태/중복 수신 → 기존 맥락·멘션/지속/신규 참여 게이트 → 허용 시 비동기 이미지 분석 → 구조화 행동 제안 → 텍스트 생성 → 최신 설정/권한/상태와 카탈로그 재검사 → 영속 예약/빈도 제한 → 전송. 새 메시지/설정 변경은 취소, 애매한 실패는 재전송하지 않는다. 본문 없는 진단 코드만 제한된 로컬 로그에 남긴다.
+- `actions.py`/`discord_app.py`: AI가 API를 호출하지 못하도록 분리한 결정적 행동 검증과 공식 discord.py 실행. SILENCE/TEXT/REACTION/TEXT_REACTION/STICKER/MEDIA/TEXT_MEDIA. 소유자 검사와 ephemeral 관리 UI, 최소 Intents, 멤버십 REST 재확인, 전송 직전 재검사, nonce, 삭제/보관/재연결 상태 정리. text+reaction은 원자적이지 않다.
+
+과거 Unicode 전용/관리자 권한 허용 계획은 최신 사용자 요구에 따라 변경했다. 관리자는 소유자 ID와 일치하지 않으면 설정을 바꿀 수 없다. 서버 전용 에셋은 현재 서버 내에서만 사용한다. 실제 Discord 운영 품질/권한/장기 안정성은 모의 테스트나 합성 이미지 성공으로 선언하지 않는다. 현재 사용법/미지원 사항은 DISCORD-BOT, GPU 근거는 ML-EXPERIMENTS 참조.
+
 ## 2026-10-18 최신 ML 실행 경계
 
 추가 품질 단계: `src/echomate_studio/response_policy.py`는 응답 목적에 따른 지침과 선택적 train 집계 prior만 만든다. 발언 권한·멘션·침묵·상태/취소를 변경하지 않는다. `tools/persona_quality_v3.py`는 별도의 고정 pilot/holdout에서 가중치 × 정책 비교, 적용/masking GPU 진단, 동일 프롬프트 검사, 원자 진행 저장, 블라인드 평가를 수행한다. 자율 참여 문항만 기존 판단/참여 코어를 공통으로 호출하며 실제 송신은 없다. 기술/일상 가중치 라우팅 후보는 캐시된 동일 생성 결과로 평가한다. `tools/persona_memorization_probe.py`는 비공개 prefix 노출 진단이며 추론 안전성 보증이나 추가 학습이 아니다. 이 모든 경로는 오프라인 실험이며 기존 Ollama Bot 경로에 연결하지 않았다.

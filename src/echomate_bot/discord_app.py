@@ -1,0 +1,275 @@
+"""Official Bot Token transport. Commands and components independently authorize owner."""
+from __future__ import annotations
+import asyncio
+import json
+import re
+
+import discord
+from discord import app_commands
+
+from .actions import Kind
+from .runtime import Event,Runtime
+from .settings import ROOT,MOODS,scope
+from .vision import VisualCache,download,validate_url
+from .media import MediaLibrary
+
+
+def assets_from_message(message):
+    assets=[]
+    for a in message.attachments:
+        if a.size<=8*1024**2:
+            assets.append(("attachment:"+str(a.id),str(a.url)))
+    for sticker in message.stickers:
+        if sticker.format in (discord.StickerFormatType.png,discord.StickerFormatType.apng,discord.StickerFormatType.gif):
+            assets.append(("sticker:"+str(sticker.id),str(sticker.url)))
+    for _,asset_id in re.findall(r"<(a?):[A-Za-z0-9_]+:(\d+)>",message.content):
+        emoji=next((e for e in message.guild.emojis if e.id==int(asset_id)),None)
+        if emoji:assets.append(("emoji:"+str(emoji.id),str(emoji.url)))
+    for embed in message.embeds:
+        for field in (embed.image,embed.thumbnail):
+            if field and field.proxy_url:
+                try:validate_url(field.proxy_url)
+                except ValueError:continue
+                assets.append(("embed:"+str(message.id)+":"+str(len(assets)),field.proxy_url))
+    result=[]
+    for asset,url in assets:
+        try:validate_url(url)
+        except ValueError:continue
+        if (asset,url) not in result:result.append((asset,url))
+    return tuple(result[:4])
+
+
+class DiscordTransport:
+    def __init__(self,client):self.client=client
+    @property
+    def bot_id(self):return self.client.user.id
+    def channel(self,event):
+        guild=self.client.get_guild(event.guild)
+        return guild.get_channel_or_thread(event.channel) if guild else None
+    async def permissions(self,event):
+        channel=self.channel(event)
+        if not channel or not channel.guild.me:return {}
+        if isinstance(channel,discord.Thread) and (channel.archived or channel.locked):return {}
+        # Re-read our membership so role removal is detected without Members Intent.
+        member=await channel.guild.fetch_member(self.bot_id)
+        p=channel.permissions_for(member)
+        return dict(view=p.view_channel,send=(p.send_messages_in_threads if isinstance(channel,discord.Thread) else p.send_messages),
+                    react=p.add_reactions and p.read_message_history,attach=p.attach_files)
+    async def catalog(self,event,cache):
+        channel=self.channel(event)
+        if not channel:return dict(reactions={},stickers={})
+        member=await channel.guild.fetch_member(self.bot_id)
+        descriptions=cache.descriptions(event.guild)
+        reactions={"🙂":"가벼운 동의", "🎉":"축하", "👍":"동의", "😮":"놀람"}
+        stickers={}
+        for emoji in channel.guild.emojis:
+            key="emoji:"+str(emoji.id)
+            if emoji.available and (not emoji.roles or any(role in member.roles for role in emoji.roles)) and key in descriptions:
+                reactions[str(emoji)]=descriptions[key]
+        for sticker in channel.guild.stickers:
+            key="sticker:"+str(sticker.id)
+            if sticker.available and key in descriptions and sticker.format in (discord.StickerFormatType.png,discord.StickerFormatType.apng,discord.StickerFormatType.gif):
+                stickers[str(sticker.id)]=descriptions[key]
+        return dict(reactions=reactions,stickers=stickers)
+    async def execute(self,event,action,library,fresh):
+        channel=self.channel(event)
+        if not channel or not await fresh():raise ValueError("Stale output")
+        current=await channel.fetch_message(event.id)
+        if not await fresh():raise ValueError("Stale output")
+        sent=None
+        if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
+            kwargs=dict(content=action.text,allowed_mentions=discord.AllowedMentions.none(),mention_author=False,nonce=event.id)
+            if action.kind==Kind.TEXT_MEDIA:
+                kwargs["file"]=discord.File(library.resolve(action.asset,event.guild))
+            sent=await current.reply(**kwargs)
+        elif action.kind==Kind.MEDIA:
+            sent=await channel.send(file=discord.File(library.resolve(action.asset,event.guild)),allowed_mentions=discord.AllowedMentions.none(),nonce=event.id)
+        elif action.kind==Kind.STICKER:
+            sticker=next(s for s in channel.guild.stickers if str(s.id)==action.asset and s.available)
+            sent=await channel.send(stickers=[sticker],allowed_mentions=discord.AllowedMentions.none(),nonce=event.id)
+        if action.kind in {Kind.REACTION,Kind.TEXT_REACTION}:
+            if not await fresh():raise ValueError("Stale reaction")
+            await current.add_reaction(action.asset)
+        return sent.id if sent else None
+
+
+class OwnerPanel(discord.ui.View):
+    def __init__(self,client):super().__init__(timeout=180);self.client=client
+    async def interaction_check(self,interaction):
+        return await self.client.owner_check(interaction)
+    @discord.ui.button(label="중지",style=discord.ButtonStyle.danger)
+    async def stop_bot(self,interaction,button):
+        self.client.settings.set(interaction.user.id,"enabled",False)
+        self.client.runtime.invalidate_all()
+        await interaction.response.send_message("정지했어.",ephemeral=True)
+    @discord.ui.button(label="활성화",style=discord.ButtonStyle.success)
+    async def start(self,interaction,button):
+        self.client.settings.set(interaction.user.id,"enabled",True)
+        self.client.runtime.invalidate_all()
+        await interaction.response.send_message("허용 범위에서 활성화했어. 장애 안전 중단은 프로세스를 재시작해 줘.",ephemeral=True)
+    @discord.ui.select(placeholder="기분 선택",options=[discord.SelectOption(label=m,value=m) for m in sorted(MOODS)])
+    async def mood(self,interaction,select):
+        self.client.settings.set(interaction.user.id,"mood",select.values[0]);self.client.runtime.invalidate_all()
+        await interaction.response.send_message("기분을 저장했어.",ephemeral=True)
+    @discord.ui.button(label="상태",style=discord.ButtonStyle.secondary)
+    async def status(self,interaction,button):
+        await interaction.response.send_message(self.client.status_text(),ephemeral=True)
+
+
+class EchoClient(discord.Client):
+    def __init__(self,settings,backend,admin_guilds):
+        intents=discord.Intents.none();intents.guilds=True;intents.guild_messages=True
+        intents.message_content=True;intents.emojis_and_stickers=True
+        super().__init__(intents=intents,allowed_mentions=discord.AllowedMentions.none(),max_messages=None,
+                         member_cache_flags=discord.MemberCacheFlags.none())
+        self.settings=settings;self.backend=backend;self.admin_guilds=admin_guilds
+        self.tree=app_commands.CommandTree(self);self.cache=VisualCache();self.library=MediaLibrary(settings)
+        self.runtime=Runtime(settings,backend,DiscordTransport(self),self.cache,self.library)
+        self.owner_tasks=set()
+        self.install_commands()
+
+    async def owner_check(self,interaction):
+        try:self.settings.authorize(interaction.user.id)
+        except PermissionError:
+            if not interaction.response.is_done():await interaction.response.send_message("이 작업은 사용할 수 없어.",ephemeral=True)
+            return False
+        if interaction.guild_id not in self.admin_guilds:
+            if not interaction.response.is_done():await interaction.response.send_message("로컬에서 등록한 관리 서버가 아니야.",ephemeral=True)
+            return False
+        return True
+
+    def status_text(self):
+        cfg=self.settings.get()
+        return f"활성 {cfg['enabled']} / 안전 중단 {self.runtime.stopped} / 모델 {cfg['model']} / 기분 {cfg['mood']} / 활동 {cfg['activity']} / GPU 대기 {self.backend.pending} / 미디어 {len(self.library.records)}"
+
+    def install_commands(self):
+        client=self
+        class OwnerGroup(app_commands.Group):
+            async def interaction_check(self,interaction):return await client.owner_check(interaction)
+        group=OwnerGroup(name="echo",description="EchoMate 관리")
+        @group.command(name="panel",description="비공개 관리 패널")
+        async def panel(i:discord.Interaction):
+            await i.response.send_message(self.status_text(),view=OwnerPanel(self),ephemeral=True)
+        @group.command(name="set",description="기분·성격·모델·기능 설정")
+        @app_commands.choices(key=[app_commands.Choice(name=k,value=k) for k in ("enabled","text","reactions","stickers","media","vision","mood","warmth","cuteness","playfulness","auto_mood","activity","cooldown","engagement_seconds","media_probability","daily_limit","model")])
+        async def setting(i:discord.Interaction,key:str,value:str):
+            defaults=self.settings.get()
+            if key not in defaults or key=="guilds":raise ValueError("Unknown setting")
+            previous=defaults[key]
+            if type(previous) is bool:
+                if value not in ("true","false"):raise ValueError("true/false required")
+                parsed=value=="true"
+            elif type(previous) is int:parsed=int(value)
+            elif type(previous) is float:parsed=float(value)
+            else:parsed=value
+            self.settings.set(i.user.id,key,parsed);self.runtime.invalidate_all()
+            await i.response.send_message("설정을 저장했어.",ephemeral=True)
+        @setting.autocomplete('value')
+        async def value_options(i:discord.Interaction,current:str):
+            if i.user.id!=self.settings.owner_id:return []
+            key=getattr(i.namespace,'key','')
+            options=(sorted(MOODS) if key=='mood' else ['quiet','normal','active','very_active'] if key=='activity' else
+                     ['base','persona'] if key=='model' else ['true','false'] if type(self.settings.get().get(key)) is bool else [])
+            return [app_commands.Choice(name=v,value=v) for v in options if current in v]
+        @group.command(name="scope",description="현재 서버의 채널·스레드 모드 설정")
+        @app_commands.choices(mode=[app_commands.Choice(name=k,value=k) for k in ('silent','mention','autonomous','reaction')])
+        async def set_scope(i:discord.Interaction,channel:discord.TextChannel|discord.ForumChannel|discord.Thread,mode:str,inherit:bool=False):
+            if channel.guild.id!=i.guild_id:raise ValueError("Wrong guild")
+            self.settings.set_scope(i.user.id,i.guild_id,channel.id,mode,thread=isinstance(channel,discord.Thread),inherit=inherit)
+            self.runtime.invalidate_all()
+            await i.response.send_message("범위를 저장했어. enabled가 켜져 있어야 동작해.",ephemeral=True)
+        @group.command(name="guild",description="현재 관리 서버 활성화 또는 비활성화")
+        async def guild(i:discord.Interaction,enabled:bool):
+            def mutate(cfg):
+                cfg["guilds"].setdefault(str(i.guild_id),dict(enabled=False,channels={},threads={}))['enabled']=enabled
+            self.settings.change(i.user.id,mutate);self.runtime.invalidate_all()
+            await i.response.send_message("서버 설정을 저장했어.",ephemeral=True)
+        @group.command(name="cache",description="현재 서버 시각 캐시 삭제 또는 허용 채널에서 에셋 갱신")
+        async def cache_command(i:discord.Interaction,refresh:bool=False,offset:int=0):
+            if not 0<=offset<=1000:raise ValueError("Invalid refresh page")
+            self.cache.clear(i.guild_id)
+            self.runtime.blocked_assets={key for key in self.runtime.blocked_assets if key[0]!=i.guild_id}
+            if not refresh:
+                await i.response.send_message("이 서버의 시각 캐시를 삭제했어.",ephemeral=True);return
+            cfg=self.settings.get();parent=i.channel.parent_id if isinstance(i.channel,discord.Thread) else None
+            if not cfg['vision'] or scope(cfg,i.guild_id,i.channel_id,parent)=="silent":raise ValueError("Vision requires an allowed active channel")
+            await i.response.defer(ephemeral=True)
+            processed=0
+            for asset in [*i.guild.emojis,*i.guild.stickers][offset:offset+50]:
+                self.settings.authorize(i.user.id)
+                if not self.settings.get()['vision'] or scope(self.settings.get(),i.guild_id,i.channel_id,parent)=="silent":break
+                prefix="emoji:" if isinstance(asset,discord.Emoji) else "sticker:"
+                try:await self.cache.analyze(i.guild_id,prefix+str(asset.id),await download(str(asset.url)),self.backend,force=True);processed+=1
+                except (ValueError,RuntimeError,OSError):self.runtime.note("owner_asset_refresh_failed")
+            await i.followup.send(f"실제 이미지 분석 {processed}개 완료. 최대 50개씩 갱신해.",ephemeral=True)
+        @group.command(name="media_add",description="승인할 미디어를 실제 시각 분석 후 라이브러리에 등록")
+        async def media_add(i:discord.Interaction,file:discord.Attachment,tags:str,purpose:str):
+            if file.size>8*1024**2:raise ValueError("File limit")
+            await i.response.defer(ephemeral=True)
+            mid=await self.library.register(i.user.id,await download(str(file.url)),i.guild_id,tags,purpose,self.cache,self.backend)
+            await i.followup.send("등록 완료: "+mid,ephemeral=True)
+        @group.command(name="media",description="등록 미디어 목록·삭제·활성화·태그·허용 서버 관리")
+        async def media_manage(i:discord.Interaction,operation:str,media_id:str="",value:str=""):
+            self.settings.authorize(i.user.id)
+            if operation=="list":
+                text="\n".join(mid+" / "+str(r['enabled'])+" / "+r['tags'] for mid,r in self.library.records.items()) or "등록 미디어 없음"
+            elif operation=="delete":self.library.delete(i.user.id,media_id);text="삭제했어."
+            elif operation in {"tags","purpose","enabled","cooldown","guilds"}:
+                parsed=value
+                if operation=="enabled":
+                    if value not in {"true","false"}:raise ValueError("Invalid enabled flag")
+                    parsed=value=="true"
+                elif operation=="cooldown":parsed=int(value)
+                elif operation=="guilds":
+                    parsed=[int(x) for x in value.split(",")]
+                    if set(parsed)-set(self.admin_guilds):raise ValueError("Guild not locally approved")
+                self.library.edit(i.user.id,media_id,**{operation:parsed});text="저장했어."
+            else:raise ValueError("Unknown operation")
+            await i.response.send_message(text[:1900],ephemeral=True)
+        @group.command(name="shutdown",description="안전하게 종료")
+        async def shutdown(i:discord.Interaction):
+            await i.response.send_message("종료할게.",ephemeral=True)
+            asyncio.create_task(self.close())
+        for guild in self.admin_guilds:self.tree.add_command(group,guild=discord.Object(guild))
+
+        @self.tree.error
+        async def command_error(i,error):
+            self.runtime.note("owner_command_failed")
+            if not i.response.is_done():await i.response.send_message("처리하지 못했어. 입력값과 로컬 진단을 확인해 줘.",ephemeral=True)
+            else:await i.followup.send("처리하지 못했어. 설정과 파일 지원 범위를 확인해 줘.",ephemeral=True)
+
+    async def setup_hook(self):
+        for guild in self.admin_guilds:await self.tree.sync(guild=discord.Object(guild))
+
+    async def on_ready(self):self.runtime.note("gateway_ready")
+    async def on_disconnect(self):self.runtime.invalidate_all();self.runtime.note("gateway_disconnected")
+    async def on_resumed(self):self.runtime.note("gateway_resumed")
+    async def on_error(self,event,*args,**kwargs):self.runtime.note("gateway_event_failed")
+
+    async def on_message(self,message):
+        if not message.guild or message.author.bot or message.webhook_id:return
+        parent=message.channel.parent_id if isinstance(message.channel,discord.Thread) else None
+        cfg=self.settings.get()
+        if scope(cfg,message.guild.id,message.channel.id,parent)=="silent":return
+        await self.runtime.ingest(Event(message.id,message.guild.id,message.channel.id,message.author.id,
+            message.content,message.created_at,parent=parent,reply_to=message.reference.message_id if message.reference else None,
+            assets=assets_from_message(message) if cfg['vision'] else ()))
+
+    async def on_raw_message_delete(self,payload):self.runtime.invalidate(payload.channel_id)
+    async def on_raw_message_edit(self,payload):self.runtime.invalidate(payload.channel_id)
+    async def on_guild_channel_update(self,before,after):self.runtime.invalidate_all()
+    async def on_guild_channel_delete(self,channel):self.runtime.invalidate_all()
+    async def on_guild_role_update(self,before,after):self.runtime.invalidate_all()
+    async def on_guild_role_delete(self,role):self.runtime.invalidate_all()
+    async def on_thread_update(self,before,after):self.runtime.invalidate(after.id)
+    async def on_thread_delete(self,thread):self.runtime.invalidate(thread.id)
+    async def on_raw_thread_delete(self,payload):self.runtime.invalidate(payload.thread_id)
+    async def on_guild_remove(self,guild):self.runtime.invalidate_all();self.cache.clear(guild.id)
+    async def on_guild_emojis_update(self,guild,before,after):
+        self.cache.retain(guild.id,set(),"emoji:");self.runtime.invalidate_all()
+    async def on_guild_stickers_update(self,guild,before,after):
+        self.cache.retain(guild.id,set(),"sticker:");self.runtime.invalidate_all()
+
+    async def close(self):
+        await self.runtime.close()
+        await super().close()
