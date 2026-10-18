@@ -383,3 +383,10 @@
 - User provided another local gemma4b-lora-smoke.json: status ok; google/gemma-3-4b-it, synthetic seq_len32, trainable params 1,611,776; loss 2.49; peak allocated 5660.7 MiB; free after 8235 MiB.
 - JSON does not include console warning status, so cannot verify absence of use_reentrant warning. No real private chat model training occurred.
 - Next priority: review official Discord-data AI training rights and user privacy selection, design leak-resistant chronological train/eval partitions; do not fabricate multi-speaker Q&A from single-speaker archives.
+
+## 2026-10-18 — Persona corpus gate after synthetic GPU LoRA success
+- User supplied second `gemma4b-lora-smoke.json` status ok (synthetic 32-token step). Model training on real Discord messages remains NOT authorized/started.
+- Official Discord Developer Policy §21 API-obtained messages require Discord express permission for model training; personal user-requested Data Package is a distinct path, but cannot automatically be deemed trainable. See docs/DATA-GOVERNANCE.md. Revisit policy if new information/approval obtained.
+- Added `src/echomate_studio/persona_split_audit.py`: reads private messages locally, validates timestamps, performs per-file chronological 90/10 split, hashes normalized eligible text transiently to count duplicates within and across splits. Writes only counts and high-level notes to ignored `local_data/persona-split-audit.json`; never exports message text, IDs, hashes, or timestamps. More robust contextual privacy and rights review necessary before actual dataset creation.
+- Added 3 synthetic tests. Previous Windows suite reportedly 152 tests; new expected 155 (not Windows verified).
+- Windows command: `$env:PYTHONPATH='src'; python -m unittest discover -s tests -v; python -m echomate_studio.persona_split_audit '<local path to messages1.json>' '<local path to messages2.json>'`. Return ONLY aggregate JSON. Do not upload the raw files to public repository.
