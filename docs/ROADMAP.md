@@ -429,3 +429,8 @@
 - [x] Windows cached-model NF4 LoRA seq32 forward/loss/backward/AdamW succeeds on RTX 4070 Ti SUPER; 2,596,864 trainable parameters, peak PyTorch allocation 11,163.6 MiB, GPU free after 2,418.9 MiB.
 - [ ] Verify multiple synthetic optimizer steps and realistic tokenization/longer contexts without OOM; protect shared GPU usage.
 - [ ] Review local owner-export data, privacy and training rights, chronological/near-duplicate leakage and holdout before actual persona QLoRA.
+
+## 2026-10-18 — Gemma4 multi-step and tokenizer path
+- [x] Add explicit synthetic tokenizer smoke and bounded 1..3 optimizer updates to cached Gemma4 12B QLoRA test tool; 3 regression tests written.
+- [ ] Windows unittest suite now expected 171, then seq32 two-step tokenizer smoke; observe VRAM and classify failures; no large-context claim yet.
+- [ ] Human-reviewed private corpus permission/privacy/leakage gates, approved fine-tune and held-out study remain open.
