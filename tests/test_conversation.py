@@ -29,6 +29,12 @@ class ConversationTests(unittest.TestCase):
         self.assertIn("질문의 의도", system)
         self.assertIn("짧은 한 문장", system)
 
+    def test_system_prompt_contains_no_example_meeting_times(self):
+        prompt = build_messages([{"role": "user", "content": "아까 몇 시였지?"}])[0]["content"]
+        self.assertNotIn("9시", prompt)
+        self.assertNotIn("10시", prompt)
+        self.assertIn("가장 마지막으로 확인된 내용", prompt)
+
     def test_invalid_context(self):
         with self.assertRaises(ValueError):
             build_messages([{"role": "assistant", "content": "끝"}])
