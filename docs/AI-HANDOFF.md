@@ -55,3 +55,11 @@
 - 모델 호출은 localhost 제한, 한 턴 현재 대화/설정된 짧은 스타일 지침을 사용. 원본 Discord 기록은 전달하지 않음. 학습·페르소나 모델·Discord 봇 코드 없음.
 - 다음 확인: `python -m unittest discover -s tests -v` / `python -m echomate_studio.chat_probe --model ... --message ...` 출력.
 - 이후 평가 세트/시간 계측, 명시적 스타일 프로필, 아티팩트 버전 관리 및 Discord Bot 순차 구현.
+
+## 2026-10-18 긴급 오류 수정 + 반응 기능 추가
+- 사용자 Windows QA: 15개 중 13개 OK, 2개 실패(`sanitize_output`이 한글/이모지 전부 지움). 모델 CLI 또한 빈 답변. 원인: `conversation.py`의 공백 정규식 이중 백슬래시. `r"[^\\S\\n]+"`를 `r"[^\S\n]+"`로 수정.
+- Ollama 모델 공유: AITrader와 EchoMate가 동일한 Ollama 모델을 사용할 수 있으나 동시 추론 경쟁/VRAM/대기 지연 주의. Qwen3.5 thinking-only 응답 대비 요청 `think=false`, 빈 응답은 `OllamaError`로 명시.
+- 신규 코드: `echomate_studio/reactions.py` 독립 정책 게이트; 기본 비활성, 개별 채널/스레드 allowlist, 반응 확률/쿨다운, 기본 Unicode 이모지, 봇/자기 메시지/opt-out 제외.
+- 요구사항: 봇의 자율 이모지 반응 기능, 대화 발언과 별도 활성화/빈도/활동 범위 설정. Discord API 연동·문맥 기반 이모지 선택은 아직 미구현.
+- `tests/test_conversation.py` 신규 2개, `tests/test_reactions.py` 신규 6개. **기존 15개 대비 총 23개 테스트 예정, 사용자 PC 미검증.**
+- 다음 사용자 실행: `git pull origin main`, `$env:PYTHONPATH="src"`, `python -m unittest discover -s tests -v`, `python -m echomate_studio.chat_probe --model "qwen3.5:9b-q4_K_M" --message "오늘 메이플 할래?"`.
