@@ -11,6 +11,7 @@ import time
 from echomate_studio.dialogue_state import DialogueState,Turn
 from echomate_studio.participation import ParticipationPolicy,decide
 from echomate_studio.mention_reply import MentionPolicy,permit_mention_reply,mentions_bot
+from echomate_studio.mention_reply import MENTION
 from echomate_studio.engagement import EngagementPolicy,continue_engagement
 from echomate_studio.reactions import ReactionPolicy,choose_reaction
 from .settings import ROOT,scope,ACTIVITY,private_path
@@ -62,6 +63,7 @@ class Runtime:
         self.settings=settings;self.backend=backend;self.transport=transport;self.cache=cache;self.library=library
         self.ledger=Ledger(ledger_path);self.rng=rng or random.Random()
         self.states={};self.tasks={};self.seen={};self.blocked_assets=set();self.failures=0
+        self.pending_mentions={}
         self.stopped=False;self.diagnostics=[]
 
     def note(self,code):
@@ -77,6 +79,7 @@ class Runtime:
         task=self.tasks.get(channel)
         if task:task.cancel()
         self.states.pop(channel,None)
+        self.pending_mentions.pop(channel,None)
 
     def invalidate_all(self):
         for channel in list(self.states):self.invalidate(channel)
@@ -93,9 +96,20 @@ class Runtime:
             self.invalidate(next(iter(self.states)))
         state=self.states.setdefault(event.channel,DialogueState(limit=100,max_age_seconds=3600))
         if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None)):return
+        request_content=None
+        if mentions_bot(event.content,self.transport.bot_id):
+            self.pending_mentions[event.channel]=(event.author,event.timestamp,event.content)
+        else:
+            pending=self.pending_mentions.get(event.channel)
+            if (pending and pending[0]==event.author and 0<=(event.timestamp-pending[1]).total_seconds()<=30
+                    and not MENTION.search(event.content)):
+                # Reprocess an actual unanswered mention with newer same-author
+                # context. Never invent a mention or infer a third party's intent.
+                request_content=pending[2]
+            else:self.pending_mentions.pop(event.channel,None)
         old=self.tasks.get(event.channel)
         if old:old.cancel()
-        task=asyncio.create_task(self.process(event,state),name="echomate-turn")
+        task=asyncio.create_task(self.process(event,state,request_content),name="echomate-turn")
         self.tasks[event.channel]=task
         task.add_done_callback(lambda t,c=event.channel:self.tasks.pop(c,None) if self.tasks.get(c) is t else None)
 
@@ -105,15 +119,16 @@ class Runtime:
                 self.settings.revision==revision and scope(self.settings.get(),event.guild,event.channel,event.parent)!="silent" and
                 (await self.transport.permissions(event)).get("view",False))
 
-    async def process(self,event,state):
+    async def process(self,event,state,request_content=None):
         revision=self.settings.revision;cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
         version,context=state.recent_context(channel_id=event.channel,thread_id=None,max_chars=6000)
         try:
             since=time.time()-self.ledger.last(event.channel)
-            direct=mentions_bot(event.content,self.transport.bot_id)
+            verified_request=request_content if request_content is not None else event.content
+            direct=mentions_bot(verified_request,self.transport.bot_id)
             if direct:
                 allowed,_=permit_mention_reply(MentionPolicy(allowed_channel_ids=frozenset({event.channel}),cooldown_seconds=cfg["cooldown"]),
-                    content=event.content,bot_user_id=self.transport.bot_id,channel_id=event.channel,thread_id=None,
+                    content=verified_request,bot_user_id=self.transport.bot_id,channel_id=event.channel,thread_id=None,
                     author_is_bot=False,opted_out=False,seconds_since_last_reply=since)
                 if not allowed:return
             if not direct and mode=="mention":
@@ -181,7 +196,8 @@ class Runtime:
             catalog['directed_to_bot']=direct or continuing
             proposed=parse_action(await self.backend.propose(context,catalog))
             self.note('proposed_'+proposed.kind.value)
-            if proposed.kind==Kind.SILENCE:return
+            if proposed.kind==Kind.SILENCE:
+                self.pending_mentions.pop(event.channel,None);return
             if reaction_only and proposed.kind!=Kind.REACTION:
                 self.note('reaction_mode_veto');return
             action=proposed
@@ -204,6 +220,7 @@ class Runtime:
                 sent=await self.transport.execute(event,action,self.library,
                     lambda:self.fresh(event,state,version,revision))
                 self.ledger.completed(event,"sent")
+                self.pending_mentions.pop(event.channel,None)
                 if action.kind in {Kind.MEDIA,Kind.TEXT_MEDIA}:self.library.used(action.asset)
                 if sent and action.text:
                     state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(sent),str(self.transport.bot_id),action.text,

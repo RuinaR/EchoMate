@@ -106,6 +106,20 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event(id=11,content='<@999> 새 질문'))
         self.backend.wait.set();await self.settle()
         self.assertEqual([e.id for e,a in self.transport.sent],[11])
+    async def test_unmentioned_same_author_retains_actual_pending_mention(self):
+        self.backend.wait=asyncio.Event()
+        await self.runtime.ingest(self.event());await asyncio.sleep(.02)
+        await self.runtime.ingest(self.event(id=11,content='이 내용도 함께 봐 줘'))
+        self.backend.wait.set();await self.settle()
+        self.assertEqual([e.id for e,a in self.transport.sent],[11])
+        self.assertEqual(self.runtime.pending_mentions,{})
+        self.assertTrue(self.backend.catalog['directed_to_bot'])
+    async def test_pending_mention_never_transfers_to_other_speaker(self):
+        self.backend.wait=asyncio.Event()
+        await self.runtime.ingest(self.event());await asyncio.sleep(.02)
+        await self.runtime.ingest(replace(self.event(id=11,content='다른 사람 이야기'),author=5))
+        self.backend.wait.set();await self.settle()
+        self.assertFalse(self.transport.sent);self.assertEqual(self.runtime.pending_mentions,{})
     async def test_config_change_and_permission_revoke_veto_send(self):
         self.backend.wait=asyncio.Event();await self.runtime.ingest(self.event());await asyncio.sleep(.02)
         self.transport.allow=False;self.backend.wait.set();await self.settle()
@@ -243,6 +257,25 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.backend.classify=fail
         await self.runtime.ingest(self.event(id=11));await self.settle()
         self.assertTrue(self.runtime.stopped)
+    async def test_injected_cuda_oom_disables_backend_without_real_gpu_allocation(self):
+        import torch,threading
+        from types import SimpleNamespace
+        from unittest.mock import patch,Mock
+        from echomate_bot.inference import LocalBackend
+        class Tokenizer:
+            eos_token_id=0
+            def apply_chat_template(self,*args,**kwargs):return {'input_ids':torch.tensor([[1,2]])}
+            def convert_tokens_to_ids(self,token):return 3
+        backend=LocalBackend();backend.load=lambda:None;backend.health=lambda:None
+        backend.processor=SimpleNamespace(tokenizer=Tokenizer())
+        backend.model=SimpleNamespace(generate=Mock(side_effect=torch.cuda.OutOfMemoryError('synthetic OOM, no allocation')))
+        with patch.object(torch.Tensor,'to',lambda tensor,*args,**kwargs:tensor),patch.object(torch.cuda,'reset_peak_memory_stats'),patch.object(torch.cuda,'empty_cache') as empty:
+            with self.assertRaisesRegex(RuntimeError,'inference disabled'):
+                backend._generate([],None,20,'persona',threading.Event())
+            empty.assert_called_once()
+        self.assertTrue(backend.failed)
+        with self.assertRaises(RuntimeError):await backend._job([])
+        backend.executor.shutdown(wait=True)
     async def test_repeated_failures_disable_runtime(self):
         async def fail(context):raise RuntimeError('synthetic')
         self.backend.classify=fail
