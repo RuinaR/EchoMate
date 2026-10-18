@@ -283,3 +283,6 @@
 
 ## 2026-10-18 — Real Gemma 3 4B loading probe prepared
 - User confirmed 143 tests and real NF4 CUDA kernel OK, 15073 MiB GPU free after tiny probe. Added gated HF model NF4 load CLI opt-in only, 2 tests. Requires Google Gemma license acceptance; no weight downloaded/training executed.
+
+## 2026-10-18 Gemma 4B gating debug
+- 145 Windows tests OK. Local HF identity works but real NF4 Gemma load OSError; no proof of license grant/download. Added redacted failure category and removed torch_dtype deprecation warning, 2 new tests.
