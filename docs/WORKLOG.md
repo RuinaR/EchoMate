@@ -259,3 +259,6 @@
 
 ## 2026-10-18 — 131 tests OK / QLoRA environment diagnostics
 - Added read-only qlora_environment CLI with optional nvidia-smi and seven local package version checks. No weights download, no data extraction, no training. 3 tests added; expected 134 Windows tests.
+
+## 2026-10-18 QLoRA GPU mock regression
+- Windows 134 tests, 1 test_gpu_query failure checking last subprocess mock call timeout. Test now checks matching NVIDIA query call, rerun required.
