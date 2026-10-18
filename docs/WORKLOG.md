@@ -387,3 +387,6 @@
 - Windows 180 unit tests OK, 0.515s. Cached 677/677 base weights and saved synthetic rank4 LoRA adapter reloaded; GPU report status ok.
 - On 2 fixed synthetic prompts, losses base-disabled 23.795/22.2657 vs adapter-on 23.7906/22.196. Free GPU memory after test 7585.0 MiB. These are synthetic-only loss probes, not owner style quality measurements.
 - Completed technical synthetic train/save/reload milestone. Private owner Discord training not performed.
+
+## 2026-10-18 — Corpus overwrite and near-duplicate protections
+- Inspected current owner export split builder and corpus preflight. Hardened builder against overwriting nonempty existing output folder; extended heuristic prefix/suffix near overlap screening. Added 2 regression tests, expected Windows total 182, execution pending. Existing 180 tests and synthetic GPU adapter reloading already confirmed. No private corpus training run.
