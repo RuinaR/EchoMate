@@ -114,6 +114,34 @@ class TurnPipelineTests(unittest.TestCase):
                                engagement_policy=EngagementPolicy(), topic_continues=False)
         self.assertEqual(result.reason, "cooldown")
 
+    def test_topic_assessor_controls_verified_reply(self):
+        state = DialogueState()
+        state.append(channel_id=1, thread_id=None,
+                     turn=Turn("b", "bot", "보스 얘기", self.now, is_bot=True))
+        state.append(channel_id=1, thread_id=None,
+                     turn=Turn("u", "human", "그럼 9시?", self.now, reply_to="b"))
+        zero = ParticipationPolicy(enabled=True, allowed_channel_ids=frozenset({1}),
+                                   opportunity_probability=0, cooldown_seconds=180)
+        good=self.run_turn(state=state, policy=zero, seconds_since_last_speech=5,
+            engagement_policy=EngagementPolicy(), topic_assessor=lambda turns: True)
+        self.assertEqual(good.reason,"engaged_ready")
+        bad=self.run_turn(state=state, policy=zero, seconds_since_last_speech=5,
+            engagement_policy=EngagementPolicy(), topic_assessor=lambda turns: False)
+        self.assertEqual(bad.reason,"cooldown")
+
+    def test_topic_assessor_error_is_not_engagement(self):
+        state=DialogueState()
+        state.append(channel_id=1,thread_id=None,
+                     turn=Turn("b","bot","안녕",self.now,is_bot=True))
+        state.append(channel_id=1,thread_id=None,
+                     turn=Turn("u","human","?",self.now,reply_to="b"))
+        def failing(_): raise RuntimeError("offline")
+        zero=ParticipationPolicy(enabled=True,allowed_channel_ids=frozenset({1}),
+                                 opportunity_probability=0,cooldown_seconds=180)
+        result=self.run_turn(state=state,policy=zero,seconds_since_last_speech=5,
+            engagement_policy=EngagementPolicy(), topic_assessor=failing)
+        self.assertEqual(result.reason,"cooldown")
+
     def test_ready(self):
         result = self.run_turn()
         self.assertEqual(result.reply, "응 좋아 😂")
