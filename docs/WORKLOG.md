@@ -295,3 +295,6 @@
 
 ## 2026-10-18 — Gemma 4B real NF4 load successful
 - Two official gated model shards downloaded. Actual NF4 load OK, GPU memory delta 4266 MiB; free_after 10845 MiB; PyTorch peak 4100.9 MiB. Training step not tested yet.
+
+## 2026-10-18 LoRA GPU optimizer dry-run
+- Real Gemma3 4B NF4 load verified. Added opt-in synthetic-only, bounded LoRA backward/optimizer smoke test and 3 preflight tests. Expected 148 tests; device run pending.
