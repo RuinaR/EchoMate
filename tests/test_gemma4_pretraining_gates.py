@@ -36,8 +36,8 @@ class Gemma4BeforeOwnerTrainingTests(unittest.TestCase):
             p=Path(d)/"local_data";p.mkdir()
             a,b=p/"train.jsonl",p/"valid.jsonl"
             common="fixed sample phrase that stays the same"
-            a.write_text(json.dumps({"text":"one "+common})+"\\n",encoding="utf-8")
-            b.write_text(json.dumps({"text":"two "+common})+"\\n",encoding="utf-8")
+            a.write_text(json.dumps({"text":"one "+common})+"\n",encoding="utf-8")
+            b.write_text(json.dumps({"text":"two "+common})+"\n",encoding="utf-8")
             result=audit.audit(a,b)
             self.assertEqual(result["exact_cross_split_overlap"],0)
             self.assertGreater(result["approx_near_overlap"],0)
