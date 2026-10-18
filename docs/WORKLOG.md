@@ -271,3 +271,6 @@
 
 ## 2026-10-18 — CUDA GPU ready, toolchain pending
 - Windows user reports 137 tests OK, isolated torch 2.9.1+cu128 runtime 12.8 RTX 4070 Ti SUPER CUDA calculation success. NumPy missing warning observed; optional install now includes NumPy and import smoke test. Actual QLoRA fine-tuning not started.
+
+## 2026-10-18 — QLoRA library setup: quote bug fixed
+- Training library installation and pip check succeeded. Final Python -c verification failed due to PowerShell quote parsing, NOT package installation. Replaced it with standalone import smoke test and three mock unit tests. New expected baseline 140.
