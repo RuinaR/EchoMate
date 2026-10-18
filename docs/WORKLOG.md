@@ -354,3 +354,8 @@
 ## 2026-10-18 — Gemma4 synthetic tokenizer / repeated-step QA implementation
 - Preserved working Gemma3 and Gemma4 single-step results. Enhanced Gemma4 synthetic-only smoke with `--steps` (1..3), `--tokenizer-smoke` (fixed synthetic Korean words), finite loss checks, stage-coded failures and aggregate-only loss/memory metrics.
 - Added tests/test_gemma4_extended_synthetic.py (3 regression tests). Previously user reported 168 tests OK. New suite and CUDA multi-step paths remain Windows UNVERIFIED. No private messages read or output.
+
+## 2026-10-18 — Confirmed Windows Gemma4 synthetic Korean-tokenized 2-step test
+- All 171 unit tests passed in 0.606s on Windows.
+- Actual Gemma4 NF4 LoRA (seq32, 2 optimizer updates, official tokenizer with fixed synthetic Korean text): status OK, losses 22.9326 and 22.8617; 2,596,864 trainable; peak 11,163.6 MiB; free_after 2,344.8 MiB.
+- No real Discord messages used or exported. Two consecutive synthetic updates demonstrate execution feasibility, not model quality or 16GB long-context fitness. Next: controlled Gemma4 trainer implementation, private corpus review, holdout, OOM safety.
