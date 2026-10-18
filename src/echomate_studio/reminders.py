@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 import sqlite3
 
-_REQUEST = re.compile(r"(?:(?P<hours>[1-9][0-9]?)시간\s*)?(?:(?P<minutes>[1-9][0-9]?)분\s*)?후에?\s*(?:나\s*)?(?:멘션|알림|불러)\s*(?:해줘|해\s*줘|해줄래|부탁해)[!?.\s]*$")
+_REQUEST = re.compile(r"(?:오늘\\s+)?(?:(?P<hours>[1-9][0-9]?)시간\s*)?(?:(?P<minutes>[1-9][0-9]?)분\s*)?후에?\s*(?:나\s*)?(?:멘션|알림|불러)\s*(?:해줘|해\s*줘|해줄래|부탁해)[!?.\s]*$")
 _MAX_DELAY_SECONDS = 7 * 86400
 
 def parse_reminder_request(message: str) -> timedelta | None:
