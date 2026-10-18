@@ -10,6 +10,12 @@ class SyntheticTrainerQATests(unittest.TestCase):
         self.assertIn("Test-Path $out", text)
         self.assertNotIn("messages1.json", text)
         self.assertNotIn("messages2.json", text)
+    def test_powershell_51_source_is_ascii(self):
+        raw = (ROOT / "tools" / "run_gemma4_synthetic_e2e.ps1").read_bytes()
+        self.assertTrue(raw.isascii())
+        self.assertIn(b"Decode-Utf8Base64", raw)
+        self.assertNotIn(b"\\xef\\xbb\\xbf", raw)
+
     def test_synthetic_dataset_is_distinct(self):
         text = (ROOT / "tools" / "run_gemma4_synthetic_e2e.ps1").read_text(encoding="utf-8")
         self.assertIn("$syntheticTrain", text)
