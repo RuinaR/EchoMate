@@ -429,3 +429,6 @@
 ## 2026-10-18 — Windows privacy classifier regression verified
 - User Windows unittest result: 190 tests, 0.430s, OK. Fix for raw URL/mention/secret detection ordering and regex escaping is unit-test verified.
 - Real personal Discord QLoRA remains unstarted. Next gate: locally reviewed corpus with third-party contextual privacy screening and rights assessment; no raw files or derived private adapters in GitHub.
+
+## 2026-10-18 — Original file counts and dry-run preview
+- 190 Windows tests pass. Privately scanned owner-provided exports (304,997 total) without publishing messages. Found 30,848 exactly 2-char message contents; 23,867 empty; 3,963 URLs; 7,995 Discord mentions; 27,624 rows with attachments (sets may overlap). Added aggregate-only preview tool reproducing builder dedup/global split and 2-char opt-in counts, with two synthetic tests. Expected 192 Windows tests, unverified. No actual owner-data QLoRA performed.
