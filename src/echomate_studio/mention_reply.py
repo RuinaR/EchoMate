@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-MENTION = re.compile(r"<@!?(\\d+)>")
+MENTION = re.compile(r"<@!?(\d+)>")
 
 @dataclass(frozen=True)
 class MentionPolicy:
