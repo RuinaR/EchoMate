@@ -60,7 +60,7 @@ def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
     val_seen=set()
     try:
         with train_path.open("w",encoding="utf-8") as train, val_path.open("w",encoding="utf-8") as val:
-            for p,cutoff in zip(paths,thresholds):
+            for p in paths:
                 for r in iter_json_array(p):
                     if not isinstance(r,dict) or (t:=timestamp_of(r)) is None:
                         counts["invalid_timestamp"]+=1
