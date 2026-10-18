@@ -31,6 +31,27 @@ class PersonaDatasetTests(unittest.TestCase):
             self.assertEqual(report["counts"]["cross_split_excluded"],1)
             self.assertNotIn("shared phrase",str(report))
             self.assertTrue(all("text" in json.loads(x) for x in training.splitlines()))
+    def test_global_cutoff_across_uneven_channel_histories(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            # Channel A early only, channel B much later. Independent per-file
+            # cutoffs would incorrectly assign early A texts to validation.
+            a=root/"early.json";b=root/"late.json"
+            early=[{"Timestamp":f"2020-01-{i+1:02d}T00:00:00Z",
+                    "Contents":f"early sample number {i}"} for i in range(10)]
+            late=[{"Timestamp":f"2025-01-{i+1:02d}T00:00:00Z",
+                   "Contents":f"later sample number {i}"} for i in range(10)]
+            a.write_text(json.dumps(early),encoding="utf-8")
+            b.write_text(json.dumps(late),encoding="utf-8")
+            out=root/"local_data"/"global-cutoff"
+            report=build([a,b],out,rights_confirmed=True,privacy_reviewed=True)
+            train=(out/"persona-train.jsonl").read_text(encoding="utf-8")
+            val=(out/"persona-validation.jsonl").read_text(encoding="utf-8")
+            self.assertIn("early sample number 9",train)
+            self.assertNotIn("early sample number 9",val)
+            self.assertIn("later sample number 9",val)
+            self.assertTrue(report["global_chronological_cutoff"])
+
     def test_existing_dataset_output_never_overwritten(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
