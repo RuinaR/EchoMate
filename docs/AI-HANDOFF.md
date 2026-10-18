@@ -403,3 +403,6 @@
 
 ## 2026-10-18 — Persona academic research protocol
 - New docs/PERSONA-RESEARCH.md summarizes LoRA (Hu), QLoRA (Dettmers), DoRA (Liu), unintended memorization (Carlini), TRL and PEFT implementations. Protocol: owner-only language modeling, no fake Q&A, chronological held-out validation, privacy and memorization testing, baseline vs adapter. Subject matter (health/sexual/aggressive) not automatically removed per user preference. Actual owner message fine-tuning not started.
+
+## 2026-10-18 dataset builder
+- Added double-gated local-only single-speaker JSONL corpus builder, three synthetic regression tests. Holdout strings excluded from training. No real private messages processed into training dataset. 158 Windows tests expected, not yet confirmed.
