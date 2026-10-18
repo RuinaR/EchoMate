@@ -106,3 +106,11 @@
 - 사용자는 필요한 경우 인터넷 검색을 원함. 웹 검색은 opt-in, 질의 최소화, 출처/날짜, 실패 안전 정책으로 진행(아직 미구현).
 - 사용자는 페르소나 학습 시작 시점을 질문. **다음 1순위는 Style Profile v1 및 Qwen A/B**. 실제 모델 가중치 QLoRA 학습은 데이터 이용 허가 검증, GPU/품질 평가 후 단계적으로 결정.
 - 설계: docs/SEARCH-AND-PERSONA-PLAN.md.
+
+## 2026-10-18 — Style Profile v1 최초 코드
+- 직전 Windows 55개 테스트 모두 OK.
+- `style_profile.py` 로컬 다중 채널 JSON 입력/최근 시간 반감기(기본 365일)/짧은 메시지/웃음·울음·질문·감탄·기본 이모지 사용률을 집계. 원문 메시지나 ID를 결과에 저장하지 않음.
+- `chat_probe.py --profile`로 요약 집계값에서 파생한 스타일 지침을 생성 모델 프롬프트에 적용할 수 있음.
+- `tests/test_style_profile.py` 3건 신규 작성, 총 58건 예상(Windows 검증 전).
+- **기존 Qwen 모델 가중치 학습/QLoRA 아님**. 통계형 프로필 프롬프트의 품질 평가 다음 작업.
+- 실행: `python -m echomate_studio.style_profile "C:\\Users\\user\\Desktop\\학습데이터\\messages1.json" "C:\\Users\\user\\Desktop\\학습데이터\\messages2.json" --output local_data/style-profile.json` 후 `python -m echomate_studio.chat_probe --profile local_data/style-profile.json --message "오늘 메이플 할래?"`.
