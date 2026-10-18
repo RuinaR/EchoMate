@@ -258,3 +258,9 @@
 - `implicit_address.py`: 멘션이나 명시적 reply-to 없는 최근 인간 발언에 대해 로컬 Gemma가 addressed_to_bot/topic_continues 두 boolean을 반환하는 엄격 JSON 분류 도구. 봇이 최근 맥락에 참여한 경우만 호출하며 미확실·모델 오류는 False/False.
 - `turn_pipeline`에 선택적 `implicit_assessor` 콜백 연결. 두 필드 모두 true인 경우만 확률/자율 쿨타임을 우회하며 채널 범위, 민감도, 타임스탬프 버전 검사는 그대로 적용. **아직 Discord Gateway 이벤트와 자동 연결되지 않았음.**
 - 합성 테스트 4개 추가해 현재 **115개 예상**(Windows 미검증). 실제 모델 오판 가능성 있으므로 실서버 도입 전에 평가 케이스 보강 필요.
+
+## 2026-10-18 — 사용자 요청: 간단한 부탁 수행, 나중에 멘션
+- 사용자 Windows `114 tests OK` (직전 예상 115는 테스트 개수 산정 오류). 새로운 기능 요구: 사용자가 `오늘 2시간 후에 나 멘션해줘`라고 하면 자신에게 예약 멘션.
+- `reminders.py`: 제한된 한국어 상대시간 명령(시간/분, 최대 7일)을 결정론적으로 추출, 요청 원본 Message ID를 UNIQUE 처리, 사용자 본인 Discord ID·길드·채널·UTC due_at를 로컬 SQLite에 저장, 재시작 복구. claim_due 선점으로 중복 수신/발송 방지, 실패는 failed 종결(중복 방지 우선, 강제종료 시 누락 가능). 메시지 원문은 DB에 저장하지 않음. `.gitignore` *.db,*.sqlite3 이미 제외.
+- `tests/test_reminders.py`: 명령 파싱, 범위 제한, 재시작 복구, 중복 수신/선점, 실패 후 자동 재시도 금지 테스트 4건. 총 **118개 예상**, Windows 확인 전.
+- 실제 Discord Gateway에서 신뢰할 수 있는 author ID/channel/guild 검사, 봇 권한, allowed_mentions 제한, 발송 워커 및 앱 재시작 스케줄러 연결은 **아직 미구현**. 실제 멘션이 간다고 주장하면 안 됨.
