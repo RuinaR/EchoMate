@@ -91,3 +91,8 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - LLM 응답이 JSON 계약을 지키지 않거나 연결 실패하면 **침묵**한다.
 - 사용법: `python -m echomate_studio.autonomy_probe --model "qwen3.5:9b-q4_K_M" --message "오늘 보스 갈사람?" --message "나 가능"`
 - 이 판단은 아직 실제 대화로 품질 검증되지 않았으며 Discord Bot에 연결되지 않았다.
+
+## 실제 대화 생성 파이프라인 기반 (2026-10-18)
+- `echomate_studio.turn_pipeline`을 추가해 최근 대화 상태 → 범위/쿨다운/빈도 확인 → Ollama 문맥 평가 → 선택적 답변 생성 → 최신 대화 상태 재확인을 하나의 실행 흐름으로 묶음.
+- 모델 장애, 불필요한 개입, 생성 도중의 대화 변경은 침묵·답변 폐기.
+- 현재 이 파이프라인은 오프라인 함수이며 실제 Discord 송수신은 아직 구현하지 않았다.
