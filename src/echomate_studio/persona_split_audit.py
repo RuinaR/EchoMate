@@ -52,24 +52,23 @@ def audit(paths,*,validation_fraction=0.1):
         raise ValueError("validation fraction must be between 0 and 0.5")
     if not paths or len({Path(p).resolve() for p in paths})!=len(paths):
         raise ValueError("unique file paths required")
-    # Only timestamps and ephemeral digests retained in RAM, never written.
-    timelines=[]
+    # Use one global chronology across all files, identical to corpus builder.
+    times=[]
     for p in paths:
-        times=[]
         for r in iter_json_array(Path(p)):
             if isinstance(r,dict):
                 ts=timestamp_of(r)
                 if ts is not None:
                     times.append(ts)
-        if not times:
-            raise ValueError("input contains no parseable timestamps")
-        times.sort()
-        cutoff=times[min(len(times)-1,int(len(times)*(1-validation_fraction)))]
-        timelines.append(cutoff)
+    if not times:
+        raise ValueError("input contains no parseable timestamps")
+    times.sort()
+    cutoff=times[min(len(times)-1,int(len(times)*(1-validation_fraction)))]
+    del times
     counts=Counter()
     train_hashes=set()
     validation_hashes=set()
-    for p,cutoff in zip(paths,timelines):
+    for p in paths:
         for rec in iter_json_array(Path(p)):
             ts=timestamp_of(rec) if isinstance(rec,dict) else None
             if ts is None:
@@ -97,7 +96,7 @@ def audit(paths,*,validation_fraction=0.1):
             "counts":dict(counts),"cross_split_duplicate_unique_texts":overlap,
             "validation_unique_after_overlap_removal":len(validation_hashes-train_hashes),
             "notes":["No user text, hashes, IDs, timestamps or samples are saved.",
-                     "Per-file time cutoff; exact validation ratio may differ due to repeated timestamps.",
+                     "Global UTC cutoff; exact validation ratio may differ due to repeated timestamps.",
                      "These are unapproved candidates; human privacy review and data-rights clearance still required."]}
 
 def main():
