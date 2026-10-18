@@ -338,3 +338,9 @@
 - User ran unittest discovery: **168 tests, all OK** (0.441s), including 3 new staged probe regression tests.
 - User-provided JSON: model google/gemma-4-12B-it, status ready_for_optional_load, weight_download_allowed=false; config_model_type=gemma4_unified, config_access=ok; VRAM free_before=15111.0 MiB, total=16375.5 MiB.
 - This verifies environment imports and small official config access only. No Gemma4 weights downloaded, NF4 loading measured, optimizer step or private owner-data tuning. Next: explicitly opt into weight download/NF4 measurement using --allow-download --allow-load, examine aggregate report; do not start actual persona tuning yet.
+
+## 2026-10-18 — Gemma4 12B IT full weight NF4 GPU load VERIFIED
+- User Windows PowerShell loaded official google/gemma-4-12B-it checkpoint (23.9GB reconstructed), 677/677 weights; probe status=ok, stage=nf4_load, CUDA=True on RTX 4070 Ti SUPER 16GB.
+- Aggregate JSON: free_before_mib=15111.0, total_mib=16375.5, peak_allocated_mib=7381.7, free_after_mib=7621.0. These are actual NF4 load measurements; model successfully loaded, but no backward pass or optimizer update yet.
+- Existing separate .venv-gemma4 with Transformers 5.20.1 succeeded; preserve .venv-train/Gemma3 4B.
+- Next: cached-weight synthetic one-step LoRA test (seq_len32) under GPU monitoring, diagnose any OOM or multimodal PEFT incompatibility. Do not train private Discord data until separate corpus reviews.
