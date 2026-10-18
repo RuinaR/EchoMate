@@ -333,3 +333,9 @@
 - User: local torch 2.9.1+cu128 RTX 4070 Ti SUPER GPU test OK, Python packages numpy 2.2.6 / transformers 4.57.6 / peft 0.21.2 / trl 0.29.1 / accelerate 1.15.0 / bitsandbytes 0.50.2 / datasets 4.8.5 installed. `pip check`: No broken requirements found.
 - Setup errored ONLY at Python inline `-c` PowerShell quote parsing; imports not tested. Replaced with local tools/verify_training_stack.py and added 3 mocked tests; 140 expected user Windows tests. Avoid repeating multi-GB torch downloads; run `.venv-train\Scripts\python.exe tools\verify_training_stack.py` and `python -m unittest discover -s tests -v`.
 - Real fine-tuning / weights downloads have NOT started. Dataset rights and manual private data review still pending.
+
+## 2026-10-18 — 140 Windows tests, training imports OK; synthetic NF4 verification
+- User confirmed `Ran 140 tests OK` and local `.venv-train` imports OK for numpy/torch/transformers/peft/trl/accelerate/bitsandbytes/datasets. Actual CUDA tensor test had already passed on RTX 4070 Ti SUPER 16GB.
+- Added `tools/verify_nf4_gpu.py`: synthetic torch/bitsandbytes NF4 Linear4bit CUDA operation, checks finite output and reports peak allocated/free MiB in ignored `local_data/nf4-gpu-probe.json`. No internet, model files or personal Discord text. Failure is nonzero exit.
+- Added three unit tests. Expected Windows unittest total 143, NOT YET confirmed. Run `.venv-train\\Scripts\\python.exe tools\\verify_nf4_gpu.py` after `git pull` and share report.
+- Passing tiny NF4 would verify kernel basics, NOT full Gemma 3 4B QLoRA trainability or VRAM fit. Real training data source rights and human privacy review remain outstanding.
