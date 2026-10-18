@@ -29,6 +29,18 @@ class PersonaSplitAuditTests(unittest.TestCase):
             self.assertEqual(classify({"Contents":message})[0], "identifier_hint")
         self.assertEqual(classify({"Contents":"invented ordinary phrase"})[0],"candidate")
 
+    def test_global_chronology_across_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            a=Path(d)/"early.json"
+            b=Path(d)/"late.json"
+            a.write_text(json.dumps([{"Contents":f"early unique text {i}",
+                "Timestamp":f"2020-01-{i+1:02d}T00:00:00Z"} for i in range(10)]),encoding="utf-8")
+            b.write_text(json.dumps([{"Contents":f"later unique text {i}",
+                "Timestamp":f"2025-01-{i+1:02d}T00:00:00Z"} for i in range(10)]),encoding="utf-8")
+            report=audit([a,b])
+            self.assertEqual(report["counts"]["training_unique_candidates"],18)
+            self.assertEqual(report["counts"]["validation_unique_candidates"],2)
+
     def test_reject_bad_fraction(self):
         with self.assertRaises(ValueError):
             audit([],validation_fraction=0.9)
