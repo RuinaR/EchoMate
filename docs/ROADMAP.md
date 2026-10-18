@@ -517,3 +517,9 @@
 - [x] Complete aggregate-only first-pass original export count scan; 304,997 messages, 30,848 two-character contents (not all eligible).
 - [x] Implement privacy-safe count-only corpus preview with global heldout dedup and optional 2-character expressions; 2 unit tests.
 - [ ] Verify Windows 192 tests, run local preview, inspect aggregate counts and source-use/contextual privacy before explicitly approved private corpus generation/QLoRA.
+
+## 2026-10-18 — Full persona QLoRA preparation
+- [x] Longer local protocol 300 default steps, every-25 evaluation, best adapter snapshot, early stop, checkpoint snapshots; no automatic unapproved source conversion.
+- [x] PowerShell 5.1 launcher requiring rights/privacy/training opt-ins and preflight success.
+- [ ] Windows 196 regression tests, synthetic end-to-end moderate training load, VRAM/time profile.
+- [ ] Separate expert/manual contextual review and source rights, create approved private corpus; first real QLoRA run and heldout style evaluation still unstarted.
