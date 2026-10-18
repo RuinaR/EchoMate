@@ -444,3 +444,8 @@
 - [x] Separate triple-gated offline Gemma4 12B NF4 LoRA private JSONL trainer and 3 regression tests added.
 - [ ] Windows 174 tests, approved synthetic end-to-end checkpoint save, memory and validation smoke.
 - [ ] Independent private corpus rights and privacy review, representative held-out evaluation before owner-data training.
+
+## 2026-10-18 — Synthetic trainer end-to-end QA
+- [x] Windows user confirmed 174 unit tests all OK.
+- [x] Add separate local-only PowerShell synthetic train/validation JSONL generator and end-to-end adapter-save runner; 2 tests added, expect 176.
+- [ ] Execute 176 unit tests plus GPU synthetic trainer run, verify saved adapter and report. This is not private corpus training authorization.
