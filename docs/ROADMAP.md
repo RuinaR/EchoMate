@@ -439,3 +439,8 @@
 - [x] Windows 171 unittests OK; Gemma4 official tokenizer, fixed synthetic Korean input, 2 NF4 LoRA optimizer steps OK (seq32), peak PyTorch 11,163.6 MiB, free after 2,344.8 MiB.
 - [ ] Validate longer context/multiple diverse synthetic samples, measured OOM headroom.
 - [ ] Implement Gemma4-specific private corpus training path with leakage/privacy checks, tokenizer-safe text formatting and rigorous held-out comparison; do not start private dataset training automatically.
+
+## 2026-10-18 — Gemma4 trainer implementation
+- [x] Separate triple-gated offline Gemma4 12B NF4 LoRA private JSONL trainer and 3 regression tests added.
+- [ ] Windows 174 tests, approved synthetic end-to-end checkpoint save, memory and validation smoke.
+- [ ] Independent private corpus rights and privacy review, representative held-out evaluation before owner-data training.
