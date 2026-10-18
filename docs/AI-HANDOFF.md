@@ -207,3 +207,10 @@
 - `turn_pipeline` 명시적 멘션 분기는 자율 대화 확률이나 enabled 상태와 별개이지만 민감도, 범위, stale, 모델 오류는 차단. 오프라인 정책이며 Discord 송수신은 미구현.
 - 신규 테스트 9개로 사용자 마지막 79개 통과 기준 총 **88개 예상**. Windows 미검증.
 - corpus-audit.json: 채널1 244976 / text 223737 / distinct 156163 / repeated 78024, 채널2 60021 / text 47252 / distinct 36864 / repeated 12607. 공개 GitHub에 원본 미업로드.
+
+## 2026-10-18 — 지속 참여 중 자율 확률/쿨타임 분리
+- 사용자 요청: 봇이 이미 자연스럽게 참여 중이면 자율 진입 확률·쿨타임에 영향받지 않고 대화를 이어가야 함. 단 무조건 발언은 아님.
+- 사용자 Windows 91 tests 중 7 FAIL: `mention_reply.MENTION` regex에서 `\\d` 이중 이스케이프 때문에 Discord `<@ID>` 인식 실패, 파이프라인 관련 연쇄 실패. regex 수정.
+- 신규 `engagement.py`: 최근 참여 상태, 봇에게 말이 향하는지, 주제 지속 여부, 180초 기본 만료에 따른 대화 이어가기 판단. 파이프라인은 이어가기 중 진입 확률/쿨타임/끼어들기 평가를 건너뛰되 유용성, 민감도, allowlist, opt-out, 봇 자기발언, stale 검사 유지.
+- **중요:** ongoing_engagement / addressed_to_bot / topic_continues를 이벤트+맥락으로 신뢰성 있게 산출하는 구현과 Discord API 연동은 아직 미완성. 단순 최근 발언만으로 활성 상태로 취급 금지.
+- 테스트 tests/test_engagement.py 2개 + tests/test_turn_pipeline.py 3개, 기존 91개에서 5개 추가해 **96개 예상**, Windows 미검증.
