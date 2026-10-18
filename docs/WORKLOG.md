@@ -316,3 +316,6 @@
 
 ## 2026-10-18 — Research-driven one-speaker dataset pipeline
 - Implemented private, double-gated local JSONL export with chronological validation and exact cross-split dedup. Synthetic regression tests added (3). Previous 155 Windows OK; new 158 expected. Private corpus generation not executed.
+
+## 2026-10-18 — Private local LoRA runner
+- User 158 QA OK. Added offline Gemma3 4B NF4 LoRA training runner with explicit owner-data approval gate, private output paths, conservative step/token bounds and three unit tests. Expected 161 tests. No user data trained yet.
