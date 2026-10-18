@@ -293,3 +293,7 @@
 - [ ] User Windows 134 tests + qlora-environment report.
 - [ ] Model rights and local data training permission assessment; private training data review.
 - [ ] Prove CUDA/bitsandbytes/transformers/PEFT compatibility, memory feasibility before actual Gemma QLoRA.
+
+## 2026-10-18 QLoRA environment verification
+- [ ] Re-run all 134 Windows tests after mock assertion adjustment.
+- [ ] Run local GPU report and assess CUDA/packages; no model training yet.
