@@ -325,3 +325,10 @@
 
 ## 2026-10-18 — Gemma4 12B model trial
 - User requested Gemma4 12B. Verified official model identifier and approx 23.9 GB base weight download. Implemented opt-in config/CUDA probe and cached-weight synthetic NF4 LoRA smoke test. Four regression tests added. Previous 161 Windows OK; now expect 165; GPU not yet run. Existing Gemma3 working environment remains untouched.
+
+## 2026-10-18 — Gemma4 library import blocker mitigation (Windows pending)
+- Chosen model: google/gemma-4-12B-it, initial conversation-focused preference over base google/gemma-4-12B, subject to empirical comparison.
+- Official model instructions use AutoModelForMultimodalLM. Transformers 4.57.6 Gemma4 direct-class import failed in user report; separate .venv-gemma4 setup uses Transformers >=5.10,<6 and existing CUDA torch baseline, without changing .venv-train.
+- Updated probe and synthetic smoke loader; created tools/setup_gemma4_env.ps1, tests/test_gemma4_staged.py, docs/GEMMA4-SETUP.md; .gitignore protects separate environment.
+- Confirmed user Windows previous 165 tests OK. Newly added 3 tests and modified probes NOT yet executed on RTX 4070 Ti SUPER. No 12B weight load/LoRA training proof; no owner-message training.
+- Next: run isolated installation, unittest, small-file config preflight; review diagnostic JSON before opting into 23.9GB download, NF4 load and synthetic backward.
