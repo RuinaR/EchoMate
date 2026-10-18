@@ -513,3 +513,6 @@
 - Inspected two user-authorized private original exports locally only; 244976 and 60021 records, all with timestamps. Global ~90th percentile timestamp of the combined 304997 records: 2026-04-26 06:56:16 UTC. Before filtering raw timeline split: messages1 pre/heldout 243549/1427 and messages2 30948/29073. Total raw heldout 30500, ~10%. These aggregate metrics reveal strong file-level temporal skew; independent per-file split would not be a global future holdout. No texts, IDs, hashes, exports or derived datasets published.
 - Short messages: length <3: 54927 and 14395; lengths 3..7: 113624 and 23460. Corpus candidate filter still excludes <3 and basic PII hints; do not claim these are all safe or should all be trained.
 - No real training, approved dataset build, or private adapter generation yet. Independent source rights/consent and contextual privacy review still required.
+
+## 2026-10-18 — 183 Windows regression tests green
+- User executed unittest suite following the global chronological split fix: **183 tests OK in 0.463s**. Confirms unit-level behavior, not a full private-data privacy clearance, corpus authorization, or live QLoRA training.
