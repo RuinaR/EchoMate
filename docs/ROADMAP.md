@@ -488,3 +488,7 @@
 - [x] Optional two-character style retention (off by default) with global chronological holdout protection and regression test.
 - [ ] Windows unit suite 184 pass; evaluate tokenizer length distribution and privacy-safe short-sample packing instead of blindly oversampling.
 - [ ] Human data rights/contextual privacy review and approved corpus creation; actual owner-message fine-tuning remains unstarted.
+
+## 2026-10-18 — Windows 184 regression tests passed
+- [x] Windows `unittest discover -s tests -v`: 184/184 OK (0.476s), including opt-in two-character style retention and cross-split test.
+- [ ] Design safe short-message packing, prevent cross-split leakage and ensure selected samples reach Gemma4 optimizer; verify synthetic data before any owner-text training.
