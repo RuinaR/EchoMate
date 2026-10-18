@@ -14,6 +14,7 @@ from .participation import ParticipationPolicy, ContextAssessment, Decision, dec
 from .conversation import sanitize_output
 from .mention_reply import MentionPolicy, mentions_bot, permit_mention_reply
 from .engagement import EngagementPolicy, continue_engagement
+from .engagement_evidence import derive_engagement
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,14 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
             return TurnResult(None, reason, version)
     continuing = False
     if not directed and engagement_policy is not None:
+        # Resolve explicit reply-to-bot chains from the same channel/thread.
+        # Semantic topical continuity still needs a separate contextual signal.
+        _, turns = state.snapshot(channel_id=channel_id, thread_id=thread_id, now=now)
+        evidence = derive_engagement(turns, topic_continues=topic_continues)
+        if evidence.addressed_to_bot:
+            ongoing_engagement = evidence.ongoing_engagement
+            addressed_to_bot = evidence.addressed_to_bot
+            topic_continues = evidence.topic_continues
         continuing = continue_engagement(
             engagement_policy, ongoing=ongoing_engagement,
             seconds_since_last_bot_reply=seconds_since_last_speech,
