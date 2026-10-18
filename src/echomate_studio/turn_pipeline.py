@@ -15,6 +15,7 @@ from .conversation import sanitize_output
 from .mention_reply import MentionPolicy, mentions_bot, permit_mention_reply
 from .engagement import EngagementPolicy, continue_engagement
 from .engagement_evidence import derive_engagement
+from .implicit_address import ImplicitAddress
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,8 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
                   ongoing_engagement: bool = False,
                   addressed_to_bot: bool = False,
                   topic_continues: bool = False,
-                  topic_assessor: Callable[[list], bool] | None = None) -> TurnResult:
+                  topic_assessor: Callable[[list], bool] | None = None,
+                  implicit_assessor: Callable[[list], ImplicitAddress] | None = None) -> TurnResult:
     version, context = state.recent_context(channel_id=channel_id, thread_id=thread_id, now=now)
     if not context or context[-1]["role"] != "user":
         return TurnResult(None, "no_recent_human_context", version)
@@ -70,6 +72,17 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
             ongoing_engagement = evidence.ongoing_engagement
             addressed_to_bot = evidence.addressed_to_bot
             topic_continues = evidence.topic_continues
+        if (not evidence.addressed_to_bot and implicit_assessor is not None
+                and turns and not turns[-1].reply_to
+                and any(t.is_bot for t in turns[:-1])):
+            try:
+                implicit = implicit_assessor(turns)
+                if type(implicit) is ImplicitAddress and implicit.addressed_to_bot and implicit.topic_continues:
+                    ongoing_engagement = True
+                    addressed_to_bot = True
+                    topic_continues = True
+            except Exception:
+                pass
         continuing = continue_engagement(
             engagement_policy, ongoing=ongoing_engagement,
             seconds_since_last_bot_reply=seconds_since_last_speech,
