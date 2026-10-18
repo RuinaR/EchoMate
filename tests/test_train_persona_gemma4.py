@@ -1,4 +1,5 @@
 import importlib.util
+import ast
 import json
 import tempfile
 import unittest
@@ -10,6 +11,10 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 class Gemma4PersonaTrainerTests(unittest.TestCase):
+    def test_trainer_parses_as_python(self):
+        ast.parse(PATH.read_text(encoding="utf-8"), filename=str(PATH))
+
+
     def fixture(self, root):
         p = Path(root) / "local_data"
         p.mkdir()
