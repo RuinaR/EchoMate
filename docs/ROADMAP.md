@@ -333,3 +333,9 @@
 - [ ] User Windows 145 tests, review/accept Gemma license, authenticate locally, opt-in multi-GB base model load.
 - [ ] Confirm VRAM and module placement; then safe small synthetic LoRA backward test without user messages.
 - [ ] Obtain clarity on training permissions and user privacy review before real data preparation/training.
+
+## 2026-10-18 Gemma 3 4B load investigation
+- [x] 145 Windows tests passed, Hugging Face auth identity verified.
+- [ ] 147 Windows tests and categorized real model load result.
+- [ ] Verify Gemma model access accepted; determine OSError cause without exposing tokens or raw exception dumps.
+- [ ] Only after full loading and VRAM checks, attempt synthetic adapter training; personal data rights not verified.
