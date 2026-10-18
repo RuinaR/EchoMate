@@ -292,3 +292,6 @@
 
 ## 2026-10-18 Gemma config access OK
 - User confirmed Windows 149 tests OK and google/gemma-3-4b-it config.json access succeeded. Real weight download/VRAM load still unverified; previously denied. Next is opt-in load retry.
+
+## 2026-10-18 — Gemma 4B real NF4 load successful
+- Two official gated model shards downloaded. Actual NF4 load OK, GPU memory delta 4266 MiB; free_after 10845 MiB; PyTorch peak 4100.9 MiB. Training step not tested yet.
