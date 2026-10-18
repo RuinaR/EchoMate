@@ -26,6 +26,8 @@ def build(paths, output_dir, *, rights_confirmed=False, privacy_reviewed=False,
     for p in paths:
         if p==output_dir or output_dir in p.parents:
             raise ValueError("input must be outside output folder")
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise ValueError("Refusing to overwrite existing private corpus output")
     # Collect chronological cutoffs without retaining private message text.
     thresholds=[]
     for p in paths:
