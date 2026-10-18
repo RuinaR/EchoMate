@@ -29,7 +29,8 @@ def run(*, seq_len=32):
         model=Gemma3ForConditionalGeneration.from_pretrained(MODEL,
             quantization_config=quant,device_map={"":0},dtype=torch.float16,
             attn_implementation="sdpa",local_files_only=True)
-        model=prepare_model_for_kbit_training(model,use_gradient_checkpointing=True)
+        model=prepare_model_for_kbit_training(model,use_gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant":False})
         model=get_peft_model(model,LoraConfig(r=4,lora_alpha=8,lora_dropout=0.0,
             target_modules=["q_proj","v_proj"],bias="none",task_type="CAUSAL_LM"))
         model.train()
