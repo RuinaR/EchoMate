@@ -269,3 +269,9 @@
 - [ ] RTX 4070 리소스 기반 학습 가능한 base weights/4B급 Gemma QLoRA 툴체인 검증 후 로컬 어댑터 학습.
 - [ ] Gemma 추론 기준선과 미세조정 어댑터의 문맥 정확도·말투·반복/유출 검사 A/B 평가.
 - [ ] Windows 123개 테스트 중 SQLite WinError32 수정본 재검증.
+
+## 2026-10-18 Windows 구형 DB QA
+- [x] ReminderStore의 SQLite 연결 명시적 close.
+- [x] 테스트가 직접 생성하는 `old.db` 연결도 closing + commit으로 수정.
+- [ ] Windows 123개 테스트 통과 확인.
+- [ ] 페르소나 실제 학습 데이터의 적법한 사용 조건/학습 파이프라인 작업으로 복귀.
