@@ -418,3 +418,7 @@
 ## 2026-10-18 — Short-example GPU synthetic integration green
 - User Windows 188/188 unit tests OK, 0.425s. Actual Gemma4 12B IT synthetic short-sample QLoRA 2-step trained, saved rank4 q/v LoRA. Uploaded checkpoint header: 176 FP32 tensors, 2,596,864 weights (~10.4 MB), as expected.
 - Report loss on SINGLE synthetic validation sample rose from 18.5799 to 18.6001; do not interpret successful execution as model quality gain. VRAM peak allocation 11163.6 MiB, free after 2893.5 MiB. Actual owner-message training not started.
+
+## 2026-10-18 — Privacy gate and split audit alignment
+- 188 prior Windows tests passed. Count-only local owner export scan: 3,963 URL matches and 7,995 Discord mention matches across both files (some may overlap), no direct token= pattern detected. No original texts copied to GitHub.
+- Added URL/Discord mention/credential-like exclusions to training candidacy; harmonized per-file split audit to global UTC chronological cutoff. Two synthetic tests; expected 190 Windows tests, not yet run. No personal-data model training.
