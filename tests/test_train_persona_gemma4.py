@@ -67,7 +67,7 @@ class Gemma4PersonaTrainerTests(unittest.TestCase):
             a.write_text("".join(json.dumps(x)+"\n" for x in rows),encoding="utf-8")
             class Tokenizer:
                 def __call__(self,text,**kwargs):
-                    return list(range(8)) + [int(text[-2:])]
+                    return {"input_ids":list(range(8)) + [int(text[-2:])]}
             chosen=mod.select_ids(a,Tokenizer(),32,3)
             self.assertEqual([x[-1] for x in chosen],[0,3,7])
 
