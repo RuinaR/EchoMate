@@ -301,3 +301,6 @@
 
 ## 2026-10-18 — First actual GPU LoRA optimizer step successful
 - User 152 tests OK; synthetic Gemma3 4B NF4 forward/backward/AdamW succeeded. Trainable 1,611,776; seq len32; peak allocated 5660.7 MiB; free 8235 MiB. Loss=2.49 synthetic only. Explicit non-reentrant gradient checkpoint patch made; not rerun yet.
+
+## 2026-10-18 — Synthetic LoRA repeat success
+- Repeated private-data-free Gemma3 4B NF4 adapter training report status ok, peak allocation 5660.7 MiB; no real messages used. Console warning state unavailable from JSON.
