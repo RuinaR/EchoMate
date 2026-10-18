@@ -35,10 +35,18 @@ def encode(tokenizer, text, torch):
     encoded = tokenizer.apply_chat_template(
         messages, tokenize=True, add_generation_prompt=True,
         return_tensors="pt")
-    if isinstance(encoded, dict):
+    # Transformers returns BatchEncoding (mapping, not a plain dict).
+    # Some Gemma4 tokenizer versions return an object exposing input_ids.
+    if hasattr(encoded, "input_ids"):
+        encoded = encoded.input_ids
+    elif hasattr(encoded, "keys"):
         encoded = encoded["input_ids"]
     if isinstance(encoded, list):
-        encoded = torch.tensor([encoded], dtype=torch.long)
+        encoded = torch.tensor(encoded, dtype=torch.long)
+    if encoded.ndim == 1:
+        encoded = encoded.unsqueeze(0)
+    if encoded.ndim != 2:
+        raise ValueError("Expected a rank-2 token tensor from chat template")
     return encoded.to("cuda")
 
 def compare(adapter, output, *, max_new_tokens=64):
