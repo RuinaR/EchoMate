@@ -46,7 +46,7 @@ class FakeTransport:
     async def catalog(self,event,cache):return dict(reactions={'👍':'동의'},stickers={})
     async def execute(self,event,action,library,fresh):
         if not await fresh():raise ValueError('stale')
-        self.sent.append((event,action));return 9000+len(self.sent)
+        self.sent.append((event,action));return None if action.kind==Kind.REACTION else 9000+len(self.sent)
 
 
 class BotIntegration(unittest.IsolatedAsyncioTestCase):
@@ -120,6 +120,15 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(replace(self.event(id=11,content='다른 사람 이야기'),author=5))
         self.backend.wait.set();await self.settle()
         self.assertFalse(self.transport.sent);self.assertEqual(self.runtime.pending_mentions,{})
+    async def test_permission_fetch_latency_cannot_reorder_same_channel_burst(self):
+        original=self.transport.permissions
+        async def delayed(event):
+            if event.id==10:await asyncio.sleep(.03)
+            return await original(event)
+        self.transport.permissions=delayed;self.backend.wait=asyncio.Event()
+        await asyncio.gather(self.runtime.ingest(self.event()),self.runtime.ingest(self.event(id=11,content='추가 내용')))
+        self.backend.wait.set();await self.settle()
+        self.assertEqual([e.id for e,a in self.transport.sent],[11])
     async def test_config_change_and_permission_revoke_veto_send(self):
         self.backend.wait=asyncio.Event();await self.runtime.ingest(self.event());await asyncio.sleep(.02)
         self.transport.allow=False;self.backend.wait.set();await self.settle()
@@ -140,6 +149,16 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event());await self.settle()
         self.assertEqual(self.transport.sent[0][1].kind,Kind.REACTION)
         self.assertEqual(self.backend.calls,[])
+        _,turns=self.runtime.states[3].snapshot(channel_id=3,thread_id=None)
+        self.assertEqual(turns[-1].message_id,'reaction:10')
+        self.assertIn('실제 발언 인용이 아님',turns[-1].content)
+    async def test_character_change_cancels_pending_work_without_erasing_history(self):
+        await self.runtime.ingest(self.event());await self.settle()
+        state=self.runtime.states[3]
+        self.settings.set(1,'mood','기쁨');self.runtime.cancel_pending()
+        _,turns=state.snapshot(channel_id=3,thread_id=None)
+        self.assertTrue(any(turn.is_bot for turn in turns))
+        self.assertIs(self.runtime.states[3],state)
     async def test_no_useful_text_can_still_get_contextually_appropriate_reaction(self):
         import random
         self.settings.set_scope(1,2,3,'autonomous');self.settings.set(1,'reactions',True)
@@ -168,6 +187,21 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.backend.calls),1)
         self.assertEqual(self.cache.descriptions(8),{})
         self.cache.retain(2,set(),'emoji:');self.assertEqual(self.cache.descriptions(2),{})
+    async def test_visual_failure_cannot_fall_back_to_emoji_name_guess(self):
+        from unittest.mock import patch,AsyncMock
+        self.settings.set(1,'vision',True)
+        with patch('echomate_bot.runtime.download',AsyncMock(return_value=b'not a raster')):
+            await self.runtime.ingest(replace(self.event(),assets=(('emoji:5','https://cdn.discordapp.com/emojis/5.png'),)))
+            await self.settle()
+        self.assertFalse(self.transport.sent)
+        self.assertFalse(hasattr(self.backend,'catalog'))
+    async def test_disabled_vision_never_downloads_and_declares_absent_evidence(self):
+        from unittest.mock import patch,AsyncMock
+        with patch('echomate_bot.runtime.download',AsyncMock()) as download:
+            await self.runtime.ingest(replace(self.event(),assets=(('emoji:5','https://cdn.discordapp.com/emojis/5.png'),)))
+            await self.settle()
+            download.assert_not_awaited()
+        self.assertIn('시각 분석 비활성화',self.backend.calls[0][-1]['content'])
     async def test_inbound_asset_not_approved_and_media_tamper_denied(self):
         image=BytesIO();Image.new('RGB',(12,12),'red').save(image,format='PNG');data=image.getvalue()
         with self.assertRaises(PermissionError):await self.library.register(2,data,2,'tag','purpose',self.cache,self.backend)
@@ -204,6 +238,23 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await panel.interaction_check(owner))
         response.send_message.assert_called_with('이 작업은 사용할 수 없어.',ephemeral=True)
         panel.stop()
+    async def test_cache_refresh_page_retains_previous_assets_and_clear_is_explicit(self):
+        from echomate_bot.discord_app import EchoClient
+        from unittest.mock import AsyncMock,patch
+        from types import SimpleNamespace
+        import discord
+        image=BytesIO();Image.new('RGB',(12,12),'red').save(image,format='PNG')
+        await self.cache.analyze(2,'emoji:5',image.getvalue(),self.backend)
+        self.settings.set(1,'vision',True)
+        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.MediaLibrary',return_value=self.library),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
+            client=EchoClient(self.settings,self.backend,[2])
+        i=SimpleNamespace(user=SimpleNamespace(id=1),guild_id=2,channel_id=3,channel=SimpleNamespace(),guild=SimpleNamespace(emojis=[],stickers=[]),
+            response=SimpleNamespace(defer=AsyncMock(),send_message=AsyncMock()),followup=SimpleNamespace(send=AsyncMock()))
+        cmd=client.tree.get_commands(guild=discord.Object(2))[0].get_command('cache')
+        await cmd.callback(i,refresh=True,offset=0,limit=1)
+        self.assertIn('emoji:5',self.cache.descriptions(2))
+        await cmd.callback(i,refresh=False,offset=0,limit=1)
+        self.assertEqual(self.cache.descriptions(2),{})
     async def test_transport_rechecks_scope_before_each_output_and_sets_nonce(self):
         from echomate_bot.discord_app import DiscordTransport
         from types import SimpleNamespace
@@ -243,6 +294,25 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         task.cancel()
         with self.assertRaises(asyncio.CancelledError):await task
         self.assertTrue(stopped.is_set());self.assertEqual(backend.pending,0)
+        backend.executor.shutdown(wait=True)
+    async def test_repeated_cancel_cannot_hide_a_still_running_gpu_job(self):
+        from echomate_bot.inference import LocalBackend
+        import threading
+        backend=LocalBackend(max_pending=1);entered=threading.Event();release=threading.Event()
+        def worker(messages,images,budget,weight,stop):
+            entered.set();release.wait(2);raise InterruptedError('finished stopped job')
+        backend._generate=worker
+        task=asyncio.create_task(backend._job([]))
+        while not entered.is_set():await asyncio.sleep(.005)
+        task.cancel();await asyncio.sleep(.01);task.cancel()
+        with self.assertRaises(asyncio.CancelledError):await task
+        self.assertEqual(backend.pending,1)
+        with self.assertRaises(RuntimeError):await backend._job([])
+        release.set()
+        for _ in range(100):
+            if backend.pending==0:break
+            await asyncio.sleep(.005)
+        self.assertEqual(backend.pending,0)
         backend.executor.shutdown(wait=True)
     async def test_download_redirect_and_stream_size_fail_closed(self):
         from echomate_bot.vision import download,MAX_BYTES

@@ -109,7 +109,7 @@ class OwnerPanel(discord.ui.View):
         await interaction.response.send_message("허용 범위에서 활성화했어. 장애 안전 중단은 프로세스를 재시작해 줘.",ephemeral=True)
     @discord.ui.select(placeholder="기분 선택",options=[discord.SelectOption(label=m,value=m) for m in sorted(MOODS)])
     async def mood(self,interaction,select):
-        self.client.settings.set(interaction.user.id,"mood",select.values[0]);self.client.runtime.invalidate_all()
+        self.client.settings.set(interaction.user.id,"mood",select.values[0]);self.client.runtime.cancel_pending()
         await interaction.response.send_message("기분을 저장했어.",ephemeral=True)
     @discord.ui.button(label="상태",style=discord.ButtonStyle.secondary)
     async def status(self,interaction,button):
@@ -126,6 +126,7 @@ class EchoClient(discord.Client):
         self.tree=app_commands.CommandTree(self);self.cache=VisualCache();self.library=MediaLibrary(settings)
         self.runtime=Runtime(settings,backend,DiscordTransport(self),self.cache,self.library)
         self.owner_tasks=set()
+        self.shutdown_lock=asyncio.Lock()
         self.install_commands()
 
     async def owner_check(self,interaction):
@@ -162,7 +163,9 @@ class EchoClient(discord.Client):
             elif type(previous) is int:parsed=int(value)
             elif type(previous) is float:parsed=float(value)
             else:parsed=value
-            self.settings.set(i.user.id,key,parsed);self.runtime.invalidate_all()
+            self.settings.set(i.user.id,key,parsed)
+            if key=='enabled' and not parsed:self.runtime.invalidate_all()
+            else:self.runtime.cancel_pending()
             await i.response.send_message("설정을 저장했어.",ephemeral=True)
         @setting.autocomplete('value')
         async def value_options(i:discord.Interaction,current:str):
@@ -185,28 +188,33 @@ class EchoClient(discord.Client):
             self.settings.change(i.user.id,mutate);self.runtime.invalidate_all()
             await i.response.send_message("서버 설정을 저장했어.",ephemeral=True)
         @group.command(name="cache",description="현재 서버 시각 캐시 삭제 또는 허용 채널에서 에셋 갱신")
-        async def cache_command(i:discord.Interaction,refresh:bool=False,offset:int=0):
-            if not 0<=offset<=1000:raise ValueError("Invalid refresh page")
-            self.cache.clear(i.guild_id)
+        async def cache_command(i:discord.Interaction,refresh:bool=False,offset:int=0,limit:int=5):
+            if not 0<=offset<=1000 or not 1<=limit<=10:raise ValueError("Invalid refresh page")
             self.runtime.blocked_assets={key for key in self.runtime.blocked_assets if key[0]!=i.guild_id}
             if not refresh:
+                self.cache.clear(i.guild_id)
                 await i.response.send_message("이 서버의 시각 캐시를 삭제했어.",ephemeral=True);return
             cfg=self.settings.get();parent=i.channel.parent_id if isinstance(i.channel,discord.Thread) else None
             if not cfg['vision'] or scope(cfg,i.guild_id,i.channel_id,parent)=="silent":raise ValueError("Vision requires an allowed active channel")
             await i.response.defer(ephemeral=True)
             processed=0
-            for asset in [*i.guild.emojis,*i.guild.stickers][offset:offset+50]:
-                self.settings.authorize(i.user.id)
-                if not self.settings.get()['vision'] or scope(self.settings.get(),i.guild_id,i.channel_id,parent)=="silent":break
-                prefix="emoji:" if isinstance(asset,discord.Emoji) else "sticker:"
-                try:await self.cache.analyze(i.guild_id,prefix+str(asset.id),await download(str(asset.url)),self.backend,force=True);processed+=1
-                except (ValueError,RuntimeError,OSError):self.runtime.note("owner_asset_refresh_failed")
-            await i.followup.send(f"실제 이미지 분석 {processed}개 완료. 최대 50개씩 갱신해.",ephemeral=True)
+            task=asyncio.current_task();self.owner_tasks.add(task)
+            try:
+                for asset in [*i.guild.emojis,*i.guild.stickers][offset:offset+limit]:
+                    self.settings.authorize(i.user.id)
+                    if self.runtime.stopped or self.is_closed() or not self.settings.get()['vision'] or scope(self.settings.get(),i.guild_id,i.channel_id,parent)=="silent":break
+                    prefix="emoji:" if isinstance(asset,discord.Emoji) else "sticker:"
+                    try:await self.cache.analyze(i.guild_id,prefix+str(asset.id),await download(str(asset.url)),self.backend,force=True);processed+=1
+                    except (ValueError,RuntimeError,OSError):self.runtime.note("owner_asset_refresh_failed")
+            finally:self.owner_tasks.discard(task)
+            if not self.is_closed():await i.followup.send(f"실제 이미지 분석 {processed}개 완료. 다음 offset은 {offset+limit}이야.",ephemeral=True)
         @group.command(name="media_add",description="승인할 미디어를 실제 시각 분석 후 라이브러리에 등록")
         async def media_add(i:discord.Interaction,file:discord.Attachment,tags:str,purpose:str):
             if file.size>8*1024**2:raise ValueError("File limit")
             await i.response.defer(ephemeral=True)
-            mid=await self.library.register(i.user.id,await download(str(file.url)),i.guild_id,tags,purpose,self.cache,self.backend)
+            task=asyncio.current_task();self.owner_tasks.add(task)
+            try:mid=await self.library.register(i.user.id,await download(str(file.url)),i.guild_id,tags,purpose,self.cache,self.backend)
+            finally:self.owner_tasks.discard(task)
             await i.followup.send("등록 완료: "+mid,ephemeral=True)
         @group.command(name="media",description="등록 미디어 목록·삭제·활성화·태그·허용 서버 관리")
         async def media_manage(i:discord.Interaction,operation:str,media_id:str="",value:str=""):
@@ -253,7 +261,7 @@ class EchoClient(discord.Client):
         if scope(cfg,message.guild.id,message.channel.id,parent)=="silent":return
         await self.runtime.ingest(Event(message.id,message.guild.id,message.channel.id,message.author.id,
             message.content,message.created_at,parent=parent,reply_to=message.reference.message_id if message.reference else None,
-            assets=assets_from_message(message) if cfg['vision'] else ()))
+            assets=assets_from_message(message)))
 
     async def on_raw_message_delete(self,payload):self.runtime.invalidate(payload.channel_id)
     async def on_raw_message_edit(self,payload):self.runtime.invalidate(payload.channel_id)
@@ -271,5 +279,10 @@ class EchoClient(discord.Client):
         self.cache.retain(guild.id,set(),"sticker:");self.runtime.invalidate_all()
 
     async def close(self):
-        await self.runtime.close()
-        await super().close()
+        async with self.shutdown_lock:
+            if self.is_closed():return
+            tasks=[task for task in self.owner_tasks if task is not asyncio.current_task()]
+            for task in tasks:task.cancel()
+            await asyncio.gather(*tasks,return_exceptions=True)
+            await self.runtime.close()
+            await super().close()

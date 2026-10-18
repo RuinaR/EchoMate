@@ -100,8 +100,14 @@ class LocalBackend:
         if self.pending>=self.max_pending:raise RuntimeError("Inference queue full")
         self.pending+=1;stop=threading.Event()
         loop=asyncio.get_running_loop()
-        if choices is None:future=loop.run_in_executor(self.executor,self._generate,messages,images,budget,weight,stop)
-        else:future=loop.run_in_executor(self.executor,lambda:self._generate(messages,images,budget,weight,stop,choices))
+        try:
+            if choices is None:future=loop.run_in_executor(self.executor,self._generate,messages,images,budget,weight,stop)
+            else:future=loop.run_in_executor(self.executor,lambda:self._generate(messages,images,budget,weight,stop,choices))
+        except Exception:self.pending-=1;raise
+        def finished(result):
+            self.pending-=1
+            if not result.cancelled():result.exception()
+        future.add_done_callback(finished)
         try:
             return await asyncio.shield(future)
         except asyncio.CancelledError:
@@ -110,7 +116,6 @@ class LocalBackend:
             try:await asyncio.shield(future)
             except (Exception,asyncio.CancelledError):pass
             raise
-        finally:self.pending-=1
 
     def _generate(self,messages,images,budget,weight,stop,choices=None):
         if stop.is_set():raise InterruptedError("Cancelled queued inference")
