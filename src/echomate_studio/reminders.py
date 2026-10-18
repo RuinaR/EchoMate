@@ -39,6 +39,32 @@ class ReminderStore:
                     CHECK(state IN ('pending','claimed','sent','failed','cancelled'))
             )""")
 
+            # Existing databases used a CHECK without 'cancelled': migrate in place.
+            schema = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='reminders'").fetchone()[0]
+            if "'cancelled'" not in schema:
+                db.execute("BEGIN IMMEDIATE")
+                try:
+                    db.execute("ALTER TABLE reminders RENAME TO reminders_legacy")
+                    db.execute("""CREATE TABLE reminders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        source_message_id TEXT NOT NULL UNIQUE,
+                        guild_id INTEGER NOT NULL,
+                        channel_id INTEGER NOT NULL,
+                        requester_id INTEGER NOT NULL,
+                        due_at TEXT NOT NULL,
+                        state TEXT NOT NULL DEFAULT 'pending'
+                            CHECK(state IN ('pending','claimed','sent','failed','cancelled'))
+                    )""")
+                    db.execute("""INSERT INTO reminders
+                        (id,source_message_id,guild_id,channel_id,requester_id,due_at,state)
+                        SELECT id,source_message_id,guild_id,channel_id,requester_id,due_at,state
+                        FROM reminders_legacy""")
+                    db.execute("DROP TABLE reminders_legacy")
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    raise
+
     def _connect(self):
         db = sqlite3.connect(self.path, timeout=15, isolation_level=None)
         db.execute("PRAGMA busy_timeout=15000")
