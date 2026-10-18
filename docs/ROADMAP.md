@@ -483,3 +483,8 @@
 - [ ] Windows 183 tests; approved local data review, contextual privacy, near duplicates and legal/terms assessment before any real-message training.
 
 - [x] Windows user verified 183/183 unittest OK (0.463s) after global multi-export chronological split regression; real owner-data training remains blocked pending review.
+
+## 2026-10-18 — Short-response corpus fidelity
+- [x] Optional two-character style retention (off by default) with global chronological holdout protection and regression test.
+- [ ] Windows unit suite 184 pass; evaluate tokenizer length distribution and privacy-safe short-sample packing instead of blindly oversampling.
+- [ ] Human data rights/contextual privacy review and approved corpus creation; actual owner-message fine-tuning remains unstarted.
