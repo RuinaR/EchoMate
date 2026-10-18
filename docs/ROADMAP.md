@@ -449,3 +449,8 @@
 - [x] Windows user confirmed 174 unit tests all OK.
 - [x] Add separate local-only PowerShell synthetic train/validation JSONL generator and end-to-end adapter-save runner; 2 tests added, expect 176.
 - [ ] Execute 176 unit tests plus GPU synthetic trainer run, verify saved adapter and report. This is not private corpus training authorization.
+
+## 2026-10-18 — PowerShell parsing regression
+- [x] User 176 tests pass; identify PS 5.1 Korean encoding parse failure in synthetic E2E script.
+- [x] Switch PowerShell source to ASCII-only with fixed UTF-8 Base64 synthetic Korean sentences; add regression test.
+- [ ] Windows 177 tests and actual end-to-end GPU adapter save, report verification.
