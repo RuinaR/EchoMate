@@ -309,3 +309,9 @@
 - [x] Optional training dependencies include NumPy plus pip/import checks.
 - [ ] Install/verify full local QLoRA dependencies, evaluate CUDA/bitsandbytes compatibility.
 - [ ] Confirm source AI-training permissions and inspect sensitive data before generating training corpus or downloading base model.
+
+## 2026-10-18 — QLoRA package imports
+- [x] Python training packages installed into .venv-train; pip check clean.
+- [x] Windows PowerShell -c quote issue replaced by standalone package import script.
+- [ ] Confirm actual native DLL imports and 140 tests on Windows.
+- [ ] GPU bitsandbytes 4-bit quantization dry-run (no model download), training rights review, then controlled base-model access.
