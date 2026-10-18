@@ -249,3 +249,7 @@
 
 ## 2026-10-18: 123 Windows QA green, persona preparation
 - Added local aggregate-only eligibility audit and three unit tests. 126 total expected; fine-tuning not started.
+
+## 2026-10-18 — 실제 페르소나 원본 분석 실측 반영
+- 사용자 Windows 126개 unittest OK. 두 원본 합계 304,997개 중 추가 검수 후보 185,608개. 나머지 초단문 45,455, 동일 문자열 중복 36,275, 정규화 뒤 빈 메시지 34,008, 개인식별 의심 2,060, 반복 단일문자 1,587, 과도한 장문 4.
+- 이 수치는 상호배타적 분류별 건수이지 미세조정 승인 수가 아니다. 개인정보 휴리스틱은 완전하지 않고 실제 QLoRA는 미시작.
