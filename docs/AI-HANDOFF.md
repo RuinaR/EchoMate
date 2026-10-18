@@ -1,5 +1,13 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 最新 — 일시적 콘솔 창 수정 (2026-10-19)
+
+응답/로딩 중 nvidia-smi health 호출과 초기 설정 whoami/icacls에 Windows CREATE_NO_WINDOW를 적용했다. processes.background_options를 공유하고 명령별 timeout/출력 수집을 유지한다. GPU 조회 불능은 RuntimeError로 안전 중단하며 온도/메모리 검사를 생략하지 않는다.
+
+권장 시작은 **EchoMate.vbs** 더블 클릭이다. 저장소 위치를 동적으로 구해 pythonw를 직접 실행하고 cmd/PowerShell을 거치지 않는다. EchoMate.cmd는 호환용으로 보존하지만 Windows가 배치 파일 실행에 여는 최초 콘솔까지 없앨 수 없으므로 완전 무콘솔 시작에는 vbs를 사용한다. VBS /check는 창/앱/설정을 열지 않는 검증 경로다. 기존 앱을 닫고 새 버전을 실행해야 subprocess 변경이 적용된다.
+
+Windows 자식 프로세스 GetConsoleWindow=0, 출력 수집, GPU 안전 임계값/timeout 회귀 및 VBS 파서 검증을 테스트한다. 실제 사용자 화면에서 깜빡임이 사라졌는지의 관찰은 별도다. 화면·마우스·키보드 자동 조작은 사용하지 않는다. 세부 명령/결과는 WORKLOG 최신 절 참조.
+
 > 최신 사용자 설정: 컴퓨터 화면·마우스·키보드 자동 조작을 사용하지 않는다. 전역 권한을 변경한 것이 아니며 파일 수정·명령 기반 검증만 이어간다.
 
 ## 최신 — 활동 목록 필터·서버별 봇 이름·진단 보완 (2026-10-19)

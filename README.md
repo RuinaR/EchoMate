@@ -2,7 +2,7 @@
 
 로컬 AI를 사용하는 Discord 자율 대화 봇과 **독립된 오프라인 페르소나 제작 도구(Studio)**.
 
-> **최신 상태:** `EchoMate.cmd`로 다크 관리 앱 실행. 서버·채널·스레드 선택, 캐릭터/활동, 처리 상태, Unicode/Discord 기본 스티커와 기본 OFF인 실험 시각 분석을 지원합니다. 등록 미디어 기능은 제거했습니다. [앱 안내](docs/DESKTOP-UI.md) · [Bot 실행법](docs/DISCORD-BOT.md) · [실제 검증 상태](docs/CURRENT-STATUS.md) · [모델 품질 미확정 근거](docs/ML-EXPERIMENTS.md). 아래 날짜별 기록은 당시 상태입니다.
+> **최신 상태:** `EchoMate.vbs`로 콘솔 없이 다크 관리 앱 실행 (`EchoMate.cmd`는 호환용). 서버·채널·스레드 선택, 캐릭터/활동, 처리 상태, Unicode/Discord 기본 스티커와 기본 OFF인 실험 시각 분석을 지원합니다. 등록 미디어 기능은 제거했습니다. [앱 안내](docs/DESKTOP-UI.md) · [Bot 실행법](docs/DISCORD-BOT.md) · [실제 검증 상태](docs/CURRENT-STATUS.md) · [모델 품질 미확정 근거](docs/ML-EXPERIMENTS.md). 아래 날짜별 기록은 당시 상태입니다.
 
 처음 확인할 때는 [새 앱 테스트 방법](docs/TESTING-DISCORD-APP.md)을 따르세요. 다음 개발자는 [AI 인수인계서](docs/AI-HANDOFF.md)의 최신 절부터 읽으세요. 구현·GPU 합성 시험·실제 Discord 확인을 구분하며, 과거 기록의 제거된 기능을 현재 기능으로 해석하지 않습니다.
 

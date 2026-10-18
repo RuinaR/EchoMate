@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 백그라운드 프로세스와 무콘솔 진입점 (2026-10-19)
+
+processes.background_options는 Windows에서만 CREATE_NO_WINDOW를 제공한다. pythonw 자식인 nvidia-smi와 초기 설정 whoami/icacls에 적용하며 shell=True를 쓰지 않는다. GPU/ACL 조회의 timeout과 실패 전파는 유지한다. EchoMate.vbs는 자신의 위치에서 pythonw를 직접 실행한다. 환경/작업 경로는 실행 시 구하며 소유자/토큰/개인 경로는 스크립트에 넣지 않는다. /check는 파일 존재와 VBS 구문만 검증하고 앱을 열지 않는다. 기존 .cmd/PowerShell 진입점은 호환용으로 보존한다.
+
 ## 2026-10-19 추가 경계 — 서버별 이름·활동 목록·계측
 
 `naming.py`는 2~32자 이름 검증/서버별 조회/호격 후보만 담당한다. signed guild에 optional name을 추가하며 기존 3필드 guild와 호환한다. Runtime은 configured_bot_name을 실제 발언이 아닌 이벤트 메타데이터로 전달한다. 이름 후보는 참여/대상 의미 평가 후에만 직접 응답 경로로 진입한다. 캐릭터 지침은 해당 서버의 별명과 오인 정정 방식을 제공한다. 이름은 식별자·권한 근거가 아니다. 실제 nickname 수정은 discord.py 자기 Member.edit만 사용하며 설정 변경/재연결 시 적용한다.

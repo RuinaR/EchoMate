@@ -1,5 +1,13 @@
 # 작업 로그
 
+## 2026-10-19 — 시작·응답 중 콘솔 깜빡임 수정
+
+- 시작 Git clean/9cce121. 응답 중 주기적인 nvidia-smi 상태 조회가 pythonw에서 자식 콘솔을 생성할 수 있음을 확인했다. stdout 수집만으로 창이 숨겨지지 않던 경로다.
+- 변경: processes.background_options의 Windows CREATE_NO_WINDOW를 inference.health와 초기 setup의 whoami/icacls에 적용. 조회 timeout/실패 전파/온도·VRAM·RAM 보호 검사는 유지했다. 개인정보를 담을 수 있는 stderr는 직접 콘솔에 내보내지 않는다.
+- EchoMate.vbs 추가: 개인 경로/키 없이 저장소 기준 pythonw 직접 실행, 창 표시0, cmd/PowerShell 미사용. /check는 앱/대화상자를 열지 않는 WSH 검증. .cmd는 호환 유지하며 배치 자체의 첫 콘솔을 피하려면 vbs로 시작하도록 README/앱/테스트/인수인계/상태/아키텍처/RELEASE-QA 문서 갱신.
+- 검증: `PYTHONPATH=src`, `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q` **280개 OK(8.445초)**. 실제 Windows Python 자식 GetConsoleWindow=0와 출력 수집 확인, 실제 cscript VBS /check 종료0, GPU 과열·조회 timeout 회귀 통과. `LocalBackend.health()` 실제 GPU 조회 OK. compileall/diff --check 통과. private 로그 local_data/release-qa-20261019/tests-console-final.log와 console-health.log.
+- 미확인: 사용자가 기존 앱을 닫고 새 vbs로 시작했을 때 실제 화면의 깜빡임이 사라졌는지의 수동 관찰. 화면·마우스·키보드 자동 조작과 실제 Discord 송신/추가 학습은 하지 않았다. 토큰/모델/개인 설정 변경 없음.
+
 > 최신 사용자 설정: 컴퓨터 화면·마우스·키보드 자동 조작을 사용하지 않는다. 전역 권한을 변경한 것이 아니며 파일 수정·명령 기반 검증만 이어간다.
 
 ## 2026-10-19 — 릴리즈 계측·종료 정리·활동 목록·서버별 호칭

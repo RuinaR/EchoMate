@@ -15,6 +15,7 @@ from itertools import product
 
 from .settings import ROOT, private_path
 from .character import instruction, needs_rewrite
+from .processes import background_options
 
 MODEL = "google/gemma-4-12B-it"
 ADAPTER = ROOT.parent / "experiments/style-v2/pilot-r8-qkvo/step-00060"
@@ -95,8 +96,12 @@ class LocalBackend:
         import subprocess
         import torch
         if not torch.cuda.is_available():raise RuntimeError("CUDA unavailable")
-        line=subprocess.check_output(["nvidia-smi","--query-gpu=temperature.gpu,memory.free","--format=csv,noheader,nounits"],text=True).splitlines()[0]
-        temp,free=map(int,line.split(","))
+        try:
+            line=subprocess.check_output(["nvidia-smi","--query-gpu=temperature.gpu,memory.free","--format=csv,noheader,nounits"],
+                text=True,stderr=subprocess.PIPE,timeout=5,**background_options()).splitlines()[0]
+            temp,free=map(int,line.split(","))
+        except (subprocess.SubprocessError,OSError,ValueError,IndexError):
+            raise RuntimeError('GPU health query unavailable') from None
         if temp>=85 or free<512:raise RuntimeError("GPU resource safety stop")
         if os.name=="nt":
             import ctypes

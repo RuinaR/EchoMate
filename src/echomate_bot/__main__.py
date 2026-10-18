@@ -8,6 +8,7 @@ import os
 import secrets
 import subprocess
 from .settings import ROOT,Settings,positive_id
+from .processes import background_options
 
 
 def setup():
@@ -21,8 +22,9 @@ def setup():
     ROOT.mkdir(parents=True,exist_ok=True)
     if os.name=="nt":
         # Windows account is the security boundary; remove inherited broad access.
-        identity=subprocess.check_output(["whoami"],text=True).strip()
-        subprocess.run(["icacls",str(ROOT),"/inheritance:r","/grant:r",identity+":(OI)(CI)F","SYSTEM:(OI)(CI)F"],check=True,capture_output=True)
+        identity=subprocess.check_output(["whoami"],text=True,stderr=subprocess.PIPE,timeout=10,**background_options()).strip()
+        subprocess.run(["icacls",str(ROOT),"/inheritance:r","/grant:r",identity+":(OI)(CI)F","SYSTEM:(OI)(CI)F"],
+            check=True,capture_output=True,timeout=10,**background_options())
     key=secrets.token_hex(32)
     path.write_text(json.dumps(dict(owner_id=owner,token=token,admin_guilds=[guild],signing_key=key)),encoding="utf-8")
     settings=Settings(owner,key)
