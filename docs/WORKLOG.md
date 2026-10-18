@@ -390,3 +390,7 @@
 
 ## 2026-10-18 — Corpus overwrite and near-duplicate protections
 - Inspected current owner export split builder and corpus preflight. Hardened builder against overwriting nonempty existing output folder; extended heuristic prefix/suffix near overlap screening. Added 2 regression tests, expected Windows total 182, execution pending. Existing 180 tests and synthetic GPU adapter reloading already confirmed. No private corpus training run.
+
+## 2026-10-18 — Global multi-file chronology defect fixed
+- After user Windows 182/182 suite passed, reviewed approved raw owner exports privately (244976 + 60021, all timestamps). Combined 90th-percentile time cutoff was 2026-04-26 06:56:16 UTC. Dataset builder previously used independent per-file cutoffs; fixed to global UTC cutoff with one new synthetic test (expected 183 on Windows).
+- Aggregate short-text bins: len<3 54927/14395; len3..7 113624/23460. Originals remain off GitHub. No private training or dataset export run. Global time split alone is not sufficient contextual privacy protection.
