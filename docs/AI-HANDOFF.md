@@ -364,3 +364,8 @@
 - User Windows unittest 149/149 OK and local `check_gemma_access.py` successfully fetched google/gemma-3-4b-it/config.json (855 bytes), `status=ok category=authorized_for_config`.
 - This verifies authenticated config access only, not weight-file access nor model loading. Earlier full load failed under model_access_not_granted. Next user step is opt-in retry `python tools/probe_gemma4b_load.py --allow-download` with .venv-train Python, share gemma4b-vram.json. May download many GB; avoid printing credentials.
 - Real persona tuning remains NOT started; Discord dataset training rights and private data review remain unresolved.
+
+## 2026-10-18 — Real Gemma 3 4B NF4 loading SUCCESS
+- User confirmed real gated model weights downloaded (~8.6GB across two shards) and NF4 load succeeded on RTX 4070 Ti SUPER 16GB.
+- Local report status=ok, GPU VRAM free_before=15111.0 MiB, total=16375.5 MiB, free_after=10845.0 MiB, delta=4266.0 MiB, PyTorch peak allocated=4100.9 MiB.
+- Model loading proves inference-weight quantization fits; gradient/LoRA optimizer activation overhead not yet measured. Next: synthetic, private-data-free LoRA backward and tiny optimizer step, with memory/length guards, no Discord messages. Source training-use rights/privacy review remains unresolved.
