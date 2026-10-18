@@ -440,3 +440,28 @@
 
 ## 2026-10-18 — Prepared gated full training protocol
 - Separate longer Gemma4 12B QLoRA runner, checkpoints (adapter-only), validation average, best adapter, patience stop, JSON-only private metrics, and fail-closed PowerShell launcher. Added 3 tests. Last confirmed 193 Windows tests; now expected 196, Windows/GPU full-run not executed. No personal training executed. Training on screened-NOT-APPROVED archive remains blocked pending data permission and contextual review.
+
+## 2026-10-18 — 실제 ML 불일치 분석 및 bounded pilot 실행
+
+- 최신 사용자의 명시적 지시에 따라 기존 reviewed 자료만 로컬 학습에 사용. 원본/새 원천/유료 GPU·API/Discord 송수신은 사용하지 않음. 과거 문서의 학습 미시작 기록과 실제 로컬 300/2,500 summary가 달라 최신 상태를 문서 첫 절에 정정.
+- 확인: 기존 raw text LM과 chat-template 추론 불일치, turn 종료 미학습, 짧은 검증 표본 0건, A/B 8건 중 3건 완전 동일. 검증 loss 개선과 생성 말투 실패를 구분.
+- 변경 파일: `tools/persona_experiments.py`, `tools/persona_report.py`, `tools/persona_adapter_diagnostics.py`, `tools/prepare_persona_pilots.py`, `tests/test_persona_experiments.py`, README, PROJECT-DEFINITION, ARCHITECTURE, AI-HANDOFF, CURRENT-STATUS, 신규 ML-EXPERIMENTS.
+- 구현 의도: 실제 대화 쌍을 꾸미지 않는 독립 스타일 적응. 응답/종료만 loss, 작은 길이별 표본, NF4/BF16, 후보 큐, 자원/오류/수동 중단, 원자 저장, optimizer/scheduler/RNG 재개, 합성 생성/블라인드/집계 평가. 실제 Bot 정책 코어 변경 없음.
+- 실제 실행: 첫 FP16 pilot은 optimizer 업데이트 전 gradient 비유한 값으로 중단. 기존 모델 보존. BF16 rank4 q/v 및 rank8 q/k/v/o 각 60단계 예비 실험을 순차 실행. 완료 수치는 아래 후속 기록 및 ML-EXPERIMENTS에 기록.
+- 검증 명령: `$env:PYTHONPATH='src'; .\.venv-gemma4\Scripts\python.exe -m unittest discover -s tests -q` → 204건 OK(0.760초, 이후 대시보드/범위 테스트 추가분은 최종 재검증 예정). 실제 tokenizer prefix 133토큰 확인. GPU 접근 및 학습/검증 forward 실제 실행 확인.
+- 미확인: 사람의 화자 말투 평가, 실제 Discord 대화 품질, fresh private 시간축 최종 평가, 중단 재개의 비트 단위 동등성. 구버전 validation은 개발용으로만 사용. 공개 문서에 원문·응답·개인 경로/해시 기록 없음.
+- Git: 작업 시작 HEAD `7e1e77f`, 이번 변경 아직 커밋/푸시하지 않음. 비공개 산출물 `local_data/experiments/`는 Git 추적에서 제외.
+
+## 2026-10-18 — 실제 GPU 비교/실패 수정/최종 인수인계 완료
+
+- BF16 실제 학습: style-v2 rank4 q/v 60단계 best 9.34640, rank8 q/k/v/o 60단계 best 6.84984, style-v3 rank8 LR 절반 120단계 best 6.70987. 동일 새 목적함수 초기 개발 loss 10.38176, validation 32건. GPU 최대 allocated 12,168.4 MiB. 모델 로딩·전처리를 제외한 loop 218.3초 / 50.0+81.8초(중단 재개) / 215.8초. 원래 300/2,500단계 모델 보존.
+- rank8 20단계 checkpoint의 optimizer/scheduler/RNG 상태 복원 후 실제 학습 완료. 비트 단위 재개 동등성 비교는 안 함. 저장 소스/데이터 해시/설정/버전/시간/상태를 로컬 보존. 성공 이전 체크포인트를 삭제하지 않음.
+- 기존 2,500단계 어댑터가 실제 forward에 적용됨을 확인. 단일 합성 raw/chat 입력에서 영향 크기 차이를 측정해 형식 불일치 가설을 보강. 결과 원문·어댑터·원천 데이터는 공개하지 않음.
+- 동일 개발 생성 10상황: 스타일 지시 없는 기본 162.3자, 지시 기준선 36.3자, 제한적 반응 검색 36.3자, legacy+지시 40.2자, 새 rank4 36.4자, rank8 32.3자, 120단계 후속 32.2자. 문자 수는 품질 점수가 아님. 120단계와 60단계 응답 6/10 동일, 추가 생성 이득 정체로 더 학습하지 않고 60단계 rank8을 실험 후보로 보존.
+- 첫 합성 최종 7건에서 실제 참여 수락/요청 절차의 본 작업 누락을 발견. 정상 EOS와 규칙 점수로 잡히지 않는 품질 실패로 기록. 이 집합을 개발용으로 은퇴시키고 응답 원문 보존. evaluator 전용 정책 v2로 능력 한계와 완결성을 지시하고 개발 2건 재시험. 모델 가중치/실행 Bot 정책은 변경하지 않음.
+- 정책 개발 전에 고정한 새 합성 최종 7건을 동일 1,024토큰 상한으로 실제 실행: 양쪽 7/7 종료, 새 chat-role 문맥 변경 답변/정보 부재/보안 요청/실제 참여 불가 확인. 설명은 준비·테스트·시작까지 제시됐으나 기술 사실과 최신성은 평가하지 않음. 개인정보 검출·암기 검사는 휴리스틱이며 안전 보증 아님. 새 최종을 보고 다시 튜닝하지 않음. 인간 말투/선호 평가는 없음.
+- 최종 검증: `$env:PYTHONPATH='src'; .\.venv-gemma4\Scripts\python.exe -m unittest discover -s tests -q` → **208건 OK, 0.715초**. 새 도구 5개 `py_compile` 성공, `git diff --check` 확인. 큐의 child 오류가 비정상 종료로 전파되도록 보강한 합성 회귀는 처음 기본 임시 폴더 rename 권한으로 실패했으나 허용된 저장소 고유 임시 폴더에서 재실행해 통과. 이 실패를 GPU/모델 실패로 혼동하지 않음.
+- 상세 변경 파일: 앞 절 파일들에 버전 정책/실제 chat-role/개발·은퇴·최종 집합 분리/출력 source snapshot/블라인드 Markdown/실패 종료 전파 보강. README, PROJECT-DEFINITION, ARCHITECTURE, AI-HANDOFF, CURRENT-STATUS, ML-EXPERIMENTS 최신 상태 갱신. 기존 Bot 코어 소스 변경 없음.
+- 사람 평가 파일 `local_data/experiments/style-v2/fresh-final-generation.blind.md`, 누적 `local_data/experiments/dashboard.md`, 선정 `local_data/experiments/selection.json`. 키는 별도 보존. Codex 파일 열기는 queued 응답이므로 표시 완료를 보장하지 않음. GPU 작업 종료 후 점유 약 1,601MiB로 확인.
+- 최종 실사용 승인 없음. 다음: 사람 블라인드 평가와 허가된 새 평가/지시 자료 설계. 현재 fresh-final을 보고 추가 튜닝하면 개발용으로 재분류. HF PEFT/기존 Ollama(고정 128토큰) 서빙 연결·실서버 동시성/취소/권한은 별도 검증.
+- Git HEAD `7e1e77f`, 새 변경은 로컬 미커밋. GitHub 커밋/푸시·클라우드 GPU·유료 API·새 데이터 원천 사용 없음. 비공개 자료는 `local_data/` 밖으로 내보내지 않음.

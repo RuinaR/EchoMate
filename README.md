@@ -2,7 +2,7 @@
 
 로컬 AI를 사용하는 Discord 자율 대화 봇과 **독립된 오프라인 페르소나 제작 도구(Studio)**.
 
-> **현재 구현:** Studio의 JSON 메타데이터 분석 CLI와 5개 단위 테스트. Discord 봇 실행, 모델 학습, Studio GUI는 아직 구현되지 않았습니다.
+> **최신 상태:** Studio 전처리·로컬 Gemma 4 QLoRA 학습/생성 비교·오프라인 Bot 정책 코어 구현. Discord 실서비스 연결과 Studio GUI는 미완료. [현재 상태](docs/CURRENT-STATUS.md)와 [ML 실험 기록](docs/ML-EXPERIMENTS.md)을 먼저 확인하세요. 아래 날짜별 누적 기록은 당시 상태입니다.
 
 ## 제품 구성
 | 구성 | 책임 |

@@ -2,7 +2,29 @@
 
 마지막 갱신: 2026-10-18
 저장소: https://github.com/RuinaR/EchoMate
-진행: **Phase 1 Studio 전처리**, 실제 학습과 Bot 실행은 아직 시작 전.
+진행: **로컬 ML 품질 개선 실험**. 기존 300/2,500단계 개인 어댑터 학습 완료를 로컬 결과에서 확인. Discord 실서비스 연결은 미완료.
+
+## 최신 인수인계 — 먼저 읽기 (2026-10-18)
+
+이 절과 `CURRENT-STATUS.md`, `ML-EXPERIMENTS.md`가 아래 누적 과거 기록보다 우선한다. 과거의 “학습 미시작”은 당시 상태다.
+
+1. **실험용 후보: rank8 q/k/v/o 60단계 + 추론 정책 v2. 실사용 최적 모델은 미확정.** raw LM legacy-2500은 생성 개선이 미약했다. 새 rank8은 짧은 반응 변화와 개발 문맥 응답을 확인했으나, loss가 더 낮은 120단계 모델의 추가 생성 이득은 불명확해 60단계 모델을 보존했다. 어댑터는 `local_data/experiments/style-v2/pilot-r8-qkvo/step-00060`, 선정 기록은 `local_data/experiments/selection.json`. 사람의 개인 말투 평가는 없다. 정책 v1의 합성 최종 평가에서 역할/절차 완결성 실패가 발견돼 운영 승인하지 않았다. 그 집합은 개발용으로 은퇴시켰다. v2의 새 합성 7건은 GPU 평가 완료: 7/7 정상 종료와 문맥 요일/정보 부재/보안 요청/실제 참여 불가 응답 확인. 설명 절차의 기술 정확성·최신성은 미검증. 상세는 ML-EXPERIMENTS 및 로컬 fresh-final 결과 참조.
+2. **구현:** 기존 단기 대화 상태/참여·침묵/멘션·이어가기/오래된 생성 폐기 코어 유지. 새 오프라인 도구 `tools/persona_experiments.py`에 응답 마스킹·Gemma turn 종료·길이별 sampling·GPU/RAM 안전 중단·순차 큐·상태 저장·optimizer/RNG 재개 구현. `tools/evaluate_persona_candidate.py`는 실제 적용 probe, 버전별 추론 정책, 개발/은퇴/새 최종 분리, chat-role 문맥, 블라인드 산출과 실행 소스 보존을 제공한다. `tools/persona_report.py`는 비공개 대시보드와 사람 평가용 Markdown을 만든다. `tools/prepare_persona_pilots.py`는 새 제한된 계획만 작성하고 학습하지 않는다.
+3. **미구현/미확인:** 실제 대화 쌍 SFT, 새 데이터 원천, 새 private 최종 시간 분할, 사람의 말투 점수, 비트 단위 재개 동등성, 실제 Discord 연결 및 장시간 운영 QA. 이를 구현 완료라고 쓰지 않는다.
+4. **확인된 학습/평가:** legacy 300/2,500 summary와 기존 8건 A/B 직접 확인. 이번 실제 GPU에서 BF16 60/60/120단계 완료, rank8의 20단계 optimizer/RNG checkpoint 중단·재개 완료. FP16 첫 pilot은 업데이트 전에 비유한 gradient로 중단. 기존/신규 어댑터의 실제 forward 적용과 생성 비교 확인. 단위·회귀 208건 OK(0.715초) 및 문법 검사 통과. 손실·생성 비교·실패·원본 보존은 ML-EXPERIMENTS 참조.
+5. **위험:** text-only 자료에서 진짜 상대 발언/시간/관계 복원 불가. 검증집합 짧은 반응 부족, 반복 사용된 개발 지표. 독립 스타일 적응이 맥락 SFT나 사용자 말투 성공을 증명하지 않음. 검출 규칙으로 개인정보 안전을 확정하지 않음.
+6. **다음 우선순위:** `local_data/experiments/style-v2/fresh-final-generation.blind.md`에서 사람이 말투·설명 충분성·관계/역할 적합성 평가(키는 평가 후 확인) → 새 허가된 평가 자료/명시적으로 작성된 대화 지시 예시 설계 → 필요 시 조건부 길이/역할 학습 대안 검토. 현재 fresh-final을 보고 튜닝하면 다음에는 개발용으로 은퇴시킨다. 기존 단일 화자 자료를 실제 Q/A로 꾸미지 않는다. 승인 전 실제 Bot 연결 금지. 기존 Ollama 경로의 고정 128토큰 예산과 HF PEFT 서빙/취소/동시성 연결도 별도 검증이 필요하다.
+7. **작업 시작 시 Git HEAD:** `7e1e77f`. 이번 변경 커밋 여부는 최신 WORKLOG와 `git status --short`, `git log -1`로 확인. 비공개 데이터·어댑터·생성 출력은 스테이징하지 않는다.
+8. **검증 명령:** 아래를 저장소 루트 PowerShell에서 실행한다. 모든 상세 산출물은 `local_data/experiments/` 내부에 있다.
+
+```powershell
+$env:PYTHONPATH='src'
+.\.venv-gemma4\Scripts\python.exe -m unittest discover -s tests -q
+.\.venv-gemma4\Scripts\python.exe tools/persona_report.py --directory local_data/experiments
+git status --short
+```
+
+상세 재개/평가 명령과 사용 조건은 [ML-EXPERIMENTS.md](ML-EXPERIMENTS.md). 재개는 원래 코드·설정·데이터가 같아야 하며, 마지막 평가 체크포인트 이후 step은 재실행한다.
 
 ## 반드시 유지할 최신 결정
 1. **EchoMate Bot과 EchoMate Studio 완전 분리.** 봇은 읽기 전용 모델 로더/Discord 자율 대화만, Studio는 오프라인 분석·학습/캐시.
@@ -113,7 +135,7 @@
 - `chat_probe.py --profile`로 요약 집계값에서 파생한 스타일 지침을 생성 모델 프롬프트에 적용할 수 있음.
 - `tests/test_style_profile.py` 3건 신규 작성, 총 58건 예상(Windows 검증 전).
 - **기존 Qwen 모델 가중치 학습/QLoRA 아님**. 통계형 프로필 프롬프트의 품질 평가 다음 작업.
-- 실행: `python -m echomate_studio.style_profile "C:\\Users\\user\\Desktop\\학습데이터\\messages1.json" "C:\\Users\\user\\Desktop\\학습데이터\\messages2.json" --output local_data/style-profile.json` 후 `python -m echomate_studio.chat_probe --profile local_data/style-profile.json --message "오늘 메이플 할래?"`.
+- 실행: `python -m echomate_studio.style_profile "<channel-a.json>" "<channel-b.json>" --output local_data/style-profile.json` 후 `python -m echomate_studio.chat_probe --profile local_data/style-profile.json --message "오늘 메이플 할래?"`.
 
 ## 2026-10-18 스타일 QA 실패 / 연구 기반 수정
 - 사용자 Windows 58개 테스트 OK. 생성된 style-profile.json은 2개 채널, 304,997 원본, 270,989 텍스트, 평균 7.25자, 웃음 0.0402, Unicode 이모지 0.0039.
@@ -289,7 +311,7 @@
 - 사용자가 SQLite Windows 파일 잠금 수정 후 unittest **123 tests OK** 확인.
 - `persona_eligibility.py`: 원본 JSON을 로컬 스트리밍해 채널별 분석용 후보/중복/반복글자/짧은 글/개인식별 의심(연락처·이메일·긴 숫자)/빈 메시지를 **숫자로만 집계**. 원문·ID·시간·예시·학습셋은 출력하지 않음. 기존 사용 권한 점검 미완료이므로 실제 LoRA/QLoRA는 여전히 시작하지 않음.
 - `tests/test_persona_eligibility.py` 합성 테스트 3건 추가. 전체 **126개 예상**, Windows 검증 전. 개인정보 검출 정규식은 근사치이며 민감 내용 전체를 탐지한다고 주장 금지.
-- 실행: `python -m echomate_studio.persona_eligibility "C:\\Users\\user\\Desktop\\학습데이터\\messages1.json" "C:\\Users\\user\\Desktop\\학습데이터\\messages2.json"`; 출력 `local_data/persona-eligibility.json`.
+- 실행: `python -m echomate_studio.persona_eligibility "<channel-a.json>" "<channel-b.json>"`; 출력 `local_data/persona-eligibility.json`.
 - 차기 우선순위: 데이터 권리 검토, 학습 데이터 검수·시간 분리·중복 방지 설계, 로컬 QLoRA 환경과 baseline QA. 텍스트 기반 프롬프트 스타일은 모델 가중치 학습과 다름.
 
 ## 2026-10-18 — 페르소나 원본 적격성 실측 (126 tests OK)
