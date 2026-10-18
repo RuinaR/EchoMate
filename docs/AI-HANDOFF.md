@@ -291,3 +291,10 @@
 - `tests/test_persona_eligibility.py` 합성 테스트 3건 추가. 전체 **126개 예상**, Windows 검증 전. 개인정보 검출 정규식은 근사치이며 민감 내용 전체를 탐지한다고 주장 금지.
 - 실행: `python -m echomate_studio.persona_eligibility "C:\\Users\\user\\Desktop\\학습데이터\\messages1.json" "C:\\Users\\user\\Desktop\\학습데이터\\messages2.json"`; 출력 `local_data/persona-eligibility.json`.
 - 차기 우선순위: 데이터 권리 검토, 학습 데이터 검수·시간 분리·중복 방지 설계, 로컬 QLoRA 환경과 baseline QA. 텍스트 기반 프롬프트 스타일은 모델 가중치 학습과 다름.
+
+## 2026-10-18 — 페르소나 원본 적격성 실측 (126 tests OK)
+- 사용자 Windows unittest **126 tests OK**. 로컬 `persona_eligibility` 집계 실행 성공. 원본 메시지 합계 304,997.
+- 채널1: 전체 244,976 / needs_human_review 150,888 / empty 21,239 / too_short 38,293 / duplicate 31,883 / repetition 1,399 / private hints 1,274.
+- 채널2: 전체 60,021 / needs_human_review 34,720 / empty 12,769 / too_short 7,162 / duplicate 4,392 / repetition 188 / private hints 786 / oversized 4.
+- 합: **검수 후보 185,608**, 초단문 45,455, 중복 36,275, 빈 값 34,008, 개인식별 의심 2,060, 반복 1,587, 긴 문장 4. 이는 서로 배타적인 우선순위 분류 집계. 검수 후보=학습 승인 아님. 단일 화자 메시지로 가상의 상대방 Q/A를 만들지 말 것.
+- 실제 fine-tuning 미시작. 다음: 데이터 사용 허가/훈련 대상 문장 수동 검수·시점 분할·국소 학습 환경 점검·baseline 설계. 사용자 원문 GitHub/모델 API에 전송 금지.
