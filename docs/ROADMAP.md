@@ -200,3 +200,9 @@
 - [ ] Windows 96개 테스트 전체 통과 검증.
 - [ ] Discord 이벤트의 실제 발화 대상/답장 참조/주제 추적을 바탕으로 ongoing engagement 판단 및 만료 검증.
 - [ ] 사용자별 멘션·대화 연속성 로그/설정 및 실전 채널 QA.
+
+## 2026-10-18 자율 참여/멘션/이어가기 게이트 QA
+- [x] Windows 96개 실행 시 3개 실패 진단: direct mention usefulness veto, 만료 후 확률 게이트 테스트 오기대, 안전 테스트의 만료된 활성 대화.
+- [x] 코드 1건 및 테스트 기대조건 2건 수정.
+- [ ] 사용자 Windows 96개 재검증.
+- [ ] Discord 실제 mention payload와 발언 대상/주제 이어짐 판별의 회귀 QA 및 이벤트 연동.
