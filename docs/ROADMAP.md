@@ -350,3 +350,9 @@
 - [x] Windows 149 tests OK and official Gemma3 4B config downloaded under current HF authentication.
 - [ ] Confirm weight download and NF4 VRAM loading under real GPU; configure error diagnosis if failure persists.
 - [ ] Synthetic backward LoRA test before private dataset training; rights and privacy review not complete.
+
+## 2026-10-18 — Gemma NF4 load gate passed
+- [x] Actual official Gemma 3 4B IT NF4 4-bit checkpoint loaded successfully on 16GB RTX 4070 Ti SUPER.
+- [x] VRAM: 4266 MiB loading delta, 10845 MiB free afterwards.
+- [ ] Validate LoRA backward and optimizer on entirely synthetic sequence; monitor VRAM/OOM.
+- [ ] Training data rights and sensitive message review before any actual private corpus training.
