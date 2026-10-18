@@ -35,6 +35,18 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(result, "ㅋㅋ 😄")
         self.assertEqual(fake.call_args.kwargs["model"], "test")
 
+    def test_no_regular_text_is_deleted(self):
+        self.assertEqual(sanitize_output("안녕 ㅋㅋ 😂\n좋아"), "안녕 ㅋㅋ 😂\n좋아")
+
+    @patch("echomate_studio.ollama_client.urlopen")
+    def test_empty_model_response_is_error(self, fake_open):
+        from io import BytesIO
+        fake_open.return_value.__enter__.return_value = BytesIO(
+            json.dumps({"message": {"content": "", "thinking": "reasoning"},
+                        "done_reason": "length"}).encode())
+        with self.assertRaisesRegex(OllamaError, "empty content"):
+            chat([{"role": "user", "content": "안녕"}])
+
     def test_remote_ollama_refused(self):
         with self.assertRaises(ValueError):
             chat([{"role": "user", "content": "hi"}], base_url="https://example.org")
