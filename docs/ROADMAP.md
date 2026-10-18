@@ -397,3 +397,8 @@
 - [x] Exact holdout-leak prevention (held-out strings omitted from training), 3 synthetic tests.
 - [ ] Windows 158 tests and source privacy/right review before enabling local personal corpus generation.
 - [ ] Near-duplicate and contextual PII checks, private baseline/adapter evaluation, actual LoRA training only after gates.
+
+## 2026-10-18 — Local QLoRA runner baseline
+- [x] Local private-data LoRA runner and bounded approval flags, three tests.
+- [ ] Verify 161 Windows tests; strengthen privacy, near-duplicate and temporal validation criteria.
+- [ ] Build approved private corpus only after meaningful source and sensitive content review; run small LoRA and fixed-set A/B.
