@@ -36,3 +36,8 @@
 ## 2026-10-18 — Clarification: owner export and content retention
 - Owner preference: do NOT filter out health-related, sexual, or aggressive/profane utterances merely due to their topic or tone. Preserve authentic writing style; distinguish content labeling from exclusion and govern deployment separately. Protect credentials, identifiers, and private third-party information.
 - Discord Developer Policy section 21 refers specifically to **message content obtained through APIs**. The current user supplied an **official owner-requested personal Data Package**, which is a distinct acquisition method. Section 21 alone does not establish a prohibition for this export. Neither does the Data Package help article explicitly grant permission for AI training. Record this distinction rather than treating API-specific rules as a blanket ban or representing personal-export training as definitively authorized. Other terms, privacy and third-party rights may matter.
+
+## 2026-10-18 — Audit is not authorization
+- Private corpus build now rejects overwriting an existing nonempty output directory; manually select a new directory for a new reviewed dataset version.
+- Bounded heuristic cross-split near-duplicate checks use textual anchors and may miss paraphrases or contextual identity leaks. A zero-flag report alone is not sufficient training consent, legal permission or comprehensive privacy review.
+- Never upload training JSONL, owner exports, LoRA derived from private messages, private eval prompts or raw identifiers to the public repository.
