@@ -11,7 +11,7 @@ def check(seq_len=32,enabled=False):
 
 def run(seq_len=32):
     import torch
-    from transformers import BitsAndBytesConfig,Gemma4ForConditionalGeneration
+    from transformers import BitsAndBytesConfig,AutoModelForMultimodalLM
     from peft import LoraConfig,prepare_model_for_kbit_training,get_peft_model
     if not torch.cuda.is_available():return {"status":"failed","reason":"cuda_unavailable"}
     torch.cuda.empty_cache()
@@ -20,7 +20,7 @@ def run(seq_len=32):
     try:
         quant=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,bnb_4bit_compute_dtype=torch.float16)
-        model=Gemma4ForConditionalGeneration.from_pretrained(MODEL,
+        model=AutoModelForMultimodalLM.from_pretrained(MODEL,
             quantization_config=quant,device_map={"":0},dtype=torch.float16,
             local_files_only=True,attn_implementation="sdpa")
         model=prepare_model_for_kbit_training(model,use_gradient_checkpointing=True,
