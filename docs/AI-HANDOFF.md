@@ -502,3 +502,7 @@
 - Expanded `gemma4_corpus_preflight.py` bounded near-duplicate bucket to compare text suffix as well as prefix (detects samples with altered openings); still not exhaustive or a substitute for source/permission/context privacy review.
 - Two new no-GPU regression tests check no-overwrite and changed-prefix near-duplicate flagging. Previously 180 Windows tests OK; expected 182 after this change, not executed on Windows. No actual private data used, no training started.
 - Last technical GPU test verified cached synthetic adapter reload with base vs LoRA losses. Remaining human gates: source use rights, third-party contextual privacy, chronological split/provenance and near-duplicate audit on reviewed private data.
+
+## 2026-10-18 — Windows 182 test suite GREEN
+- User reported `Ran 182 tests in 0.439s` and `OK` after JSONL newline test correction. Previous regression failure resolved.
+- Owner supplied two private Discord export files for local review only; never commit raw texts, derived private data or train adapters to GitHub. No owner-data model training yet.
