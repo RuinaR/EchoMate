@@ -359,3 +359,8 @@
 - User Windows 147 tests OK. Real model loading failed OSError classified model_access_not_granted; VRAM free before load 15111 MiB. Previous Hugging Face CLI `auth whoami` succeeded, but token validity does NOT ensure this gated model has been granted or a fine-grained token covers gated repos.
 - Added tools/check_gemma_access.py to request ONLY google/gemma-3-4b-it/config.json, no weight downloads; outputs sanitized local_data/gemma-access.json. Two tests added; expected 149 tests (Windows unverified).
 - User should log into the same Hugging Face account on browser, explicitly accept/access model terms at https://huggingface.co/google/gemma-3-4b-it ; for fine-grained tokens check public gated repositories permission. No token values in chat/log. Recheck tiny config before retrying multi-GB load. Actual training rights for Discord messages are separate and remain unresolved.
+
+## 2026-10-18 — Gemma gated config access recovered
+- User Windows unittest 149/149 OK and local `check_gemma_access.py` successfully fetched google/gemma-3-4b-it/config.json (855 bytes), `status=ok category=authorized_for_config`.
+- This verifies authenticated config access only, not weight-file access nor model loading. Earlier full load failed under model_access_not_granted. Next user step is opt-in retry `python tools/probe_gemma4b_load.py --allow-download` with .venv-train Python, share gemma4b-vram.json. May download many GB; avoid printing credentials.
+- Real persona tuning remains NOT started; Discord dataset training rights and private data review remain unresolved.
