@@ -408,3 +408,6 @@
 
 ## 2026-10-18 — Short independent sample path
 - Implemented explicit `--include-short-samples` in Gemma4 private trainer (min 3 token IDs rather than 8) to support short Discord writing style without artificially joining separate messages. Kept default behavior and privacy approval gates unchanged; new synthetic selection unit test. Previous Windows 184 pass; now expect 185, unverified.
+
+## 2026-10-18 — Short-sample syntax failure corrected
+- Windows log: failure to import `test_train_persona_gemma4` due to literal `\\n` in trainer source; 182 discovered tests, one import error, no GPU work. Fixed trainer Python syntax and malformed new JSONL fixture, added AST regression guard. Expected after fix: 186 tests, pending Windows run.
