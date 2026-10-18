@@ -60,6 +60,17 @@ class Gemma4PersonaTrainerTests(unittest.TestCase):
             self.assertEqual(mod.select_ids(a,tok,32,2,min_tokens=3),
                              [[1,2,3,4],list(range(9))])
 
+    def test_even_sampling_covers_beginning_middle_and_end(self):
+        with tempfile.TemporaryDirectory() as d:
+            a,b,o=self.fixture(d)
+            rows=[{"text":f"invented-example-{i:02d}"} for i in range(11)]
+            a.write_text("".join(json.dumps(x)+"\\n" for x in rows),encoding="utf-8")
+            class Tokenizer:
+                def __call__(self,text,**kwargs):
+                    return list(range(8)) + [int(text[-2:])]
+            chosen=mod.select_ids(a,Tokenizer(),32,3)
+            self.assertEqual([x[-1] for x in chosen],[0,3,7])
+
     def test_schema_strict_and_no_model_import(self):
         with tempfile.TemporaryDirectory() as d:
             a,b,o=self.fixture(d)
