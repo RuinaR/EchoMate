@@ -246,3 +246,6 @@
 
 ## 2026-10-18 — Windows 임시 SQLite 테스트 파일 잠금 수정
 - Windows 123개 중 1 ERROR 재발. 테스트 자체의 sqlite3.connect 컨텍스트가 커넥션을 닫지 않아 old.db 임시 파일 삭제 실패. closing + 명시 commit으로 수정, 재검증 대기.
+
+## 2026-10-18: 123 Windows QA green, persona preparation
+- Added local aggregate-only eligibility audit and three unit tests. 126 total expected; fine-tuning not started.
