@@ -70,3 +70,10 @@
 - `src/echomate_studio/participation.py`는 확률을 강제 발언 수단으로 쓰지 않고 상황 평가와 차단 규칙을 먼저 적용. 대응 테스트 `tests/test_participation.py` 7개 신규 작성.
 - **현재 ContextAssessment 값은 실제 Discord 대화로부터 계산되지 않음**. 생성 판단 파이프라인/라이브 Bot은 미구현. 테스트 7개는 사용자 Windows 검증 전이며 총 30개 예상.
 - 다음: 상황 평가기 작성 및 Bot과 연결, 자연스러움/실수로 끼어듦/침묵의 정확도 테스트.
+
+## 2026-10-18 — 대화 연속성 모듈
+- 사용자 Windows QA로 기존 30개 unittest 모두 OK 확인.
+- 추가 최신 요구: 자율 개입 전후로 대화 맥락 연속성 유지, 화자/답장 관계 분리, 최근 상황 변화에 따라 생성 중 답변 취소.
+- `src/echomate_studio/dialogue_state.py` 구현: 채널/스레드별 TTL 및 최대 메시지 수, 중복/역순 이벤트 제한, 화자 라벨·답장 참조를 LLM 컨텍스트로 정리, 상태 버전 검증.
+- `tests/test_dialogue_state.py` 5개 추가. 총 35개 테스트 예정. **신규 테스트는 아직 Windows 실행 확인 전**.
+- 맥락 의미 이해나 실제 Discord 입출력은 아직 구현되지 않았음. 모델에 붙이는 구체적 통합은 후속 작업.
