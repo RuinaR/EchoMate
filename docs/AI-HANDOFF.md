@@ -252,3 +252,9 @@
 - 사용자 Windows `python -m unittest discover -s tests -v`: **111 tests OK**.
 - 사용자 로컬 `python -m echomate_studio.topic_qa --model gemma3:12b`: 합성 6개 중 **6개 정답**, `boss_time_reply` 9.306s 최초 요청, 이후 0.249~0.285s (외부 호출 없는 다른 사람 답장 경로 0.0s). 성공 사례: 시간 제안/변경, 주제 전환, 게임 후속, 타인에 대한 답장 제외, 짧은 `ㅇㅋ`.
 - 근거는 표본 6개일 뿐 실전 정밀도/재현율 보장하지 않음. 다음 우선순위: 여러 사람이 말하는 복합 상황, 주제 전환, 답장 없는 구어체 후속, 부정사례를 평가하는 테스트 확장 후 Discord Gateway 연동. 개인정보/사용자 원본은 GitHub 업로드 금지.
+
+## 2026-10-18 — Windows 111 OK / 암묵적 대상 판정 1차 연결
+- 사용자 Windows 111 tests OK 및 실제 Gemma topic QA 6/6. 원본 메시지 Github 미업로드.
+- `implicit_address.py`: 멘션이나 명시적 reply-to 없는 최근 인간 발언에 대해 로컬 Gemma가 addressed_to_bot/topic_continues 두 boolean을 반환하는 엄격 JSON 분류 도구. 봇이 최근 맥락에 참여한 경우만 호출하며 미확실·모델 오류는 False/False.
+- `turn_pipeline`에 선택적 `implicit_assessor` 콜백 연결. 두 필드 모두 true인 경우만 확률/자율 쿨타임을 우회하며 채널 범위, 민감도, 타임스탬프 버전 검사는 그대로 적용. **아직 Discord Gateway 이벤트와 자동 연결되지 않았음.**
+- 합성 테스트 4개 추가해 현재 **115개 예상**(Windows 미검증). 실제 모델 오판 가능성 있으므로 실서버 도입 전에 평가 케이스 보강 필요.
