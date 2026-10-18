@@ -375,3 +375,9 @@
 - [ ] Windows 155 unittest checks and aggregate persona split report; examine leakage and sample adequacy.
 - [ ] Source-use clarification, human review of private/sensitive information and explicit dataset approval BEFORE training corpora or LoRA.
 - [ ] Privacy-safe validation with baseline comparisons and memory budget constraints before releasing trained adapter.
+
+## 2026-10-18 — Chronological split verified
+- [x] 155 Windows tests and 2-file local split audit run successfully.
+- [x] Cross-split duplicate texts measured (2,130); validation candidates remaining after overlap removal: 18,226.
+- [ ] Rights and privacy-review clearance before any real message-based QLoRA.
+- [ ] Ensure final approved corpus deduplication actually enforces the split, not just audit estimates.
