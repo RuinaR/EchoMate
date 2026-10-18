@@ -2,6 +2,8 @@
 
 ## 2026-10-18 최신 ML 실행 경계
 
+추가 품질 단계: `src/echomate_studio/response_policy.py`는 응답 목적에 따른 지침과 선택적 train 집계 prior만 만든다. 발언 권한·멘션·침묵·상태/취소를 변경하지 않는다. `tools/persona_quality_v3.py`는 별도의 고정 pilot/holdout에서 가중치 × 정책 비교, 적용/masking GPU 진단, 동일 프롬프트 검사, 원자 진행 저장, 블라인드 평가를 수행한다. 자율 참여 문항만 기존 판단/참여 코어를 공통으로 호출하며 실제 송신은 없다. 기술/일상 가중치 라우팅 후보는 캐시된 동일 생성 결과로 평가한다. `tools/persona_memorization_probe.py`는 비공개 prefix 노출 진단이며 추론 안전성 보증이나 추가 학습이 아니다. 이 모든 경로는 오프라인 실험이며 기존 Ollama Bot 경로에 연결하지 않았다.
+
 `tools/persona_experiments.py`: reviewed text-only 자료 → 누수/식별자 휴리스틱 검사 → 독립 스타일 예시 + 실제 Gemma 생성 prefix → 응답/turn 마스킹 loss → NF4/BF16 decoder LoRA → 로컬 체크포인트/상태 → 동일 조건 생성/블라인드 평가. `tools/persona_report.py`는 로컬 집계 대시보드만 작성한다. 상세 제한은 `ML-EXPERIMENTS.md`.
 
 원문·체크포인트·optimizer/RNG·생성·블라인드 키는 저장소의 `local_data/` 하위 경계로 제한한다. HTTP/API 업로드·자동 모델 다운로드·클라우드 추적 없음. 봇의 참여/침묵/멘션/취소 정책과 학습/실험 도구는 분리하며 새 어댑터를 실행 봇에 자동 연결하지 않는다. 단일 화자 자료로 화자 관계 학습을 주장하지 않는다.
