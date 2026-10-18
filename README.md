@@ -160,3 +160,7 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 ## 맥락 기반 대화 참여 증거
 - `engagement_evidence.py`는 최근 같은 채널/스레드 대화에서 실제 봇 발언에 대한 Discord 답장을 확인하여 대상 추적. 단순 인접 메시지와 타인 간 답장은 참여 증거가 아님.
 - 주제 연속성은 아직 별도 맥락 판정이 필요하며, 답장 여부만으로 무조건 발언하지 않음. 실제 Discord API 연동은 작업 전.
+
+## 실제 주제 이어가기 판별 (오프라인)
+- `topic_assessor.py`: Discord 봇 발언에 대한 실제 reply-to 메시지일 경우에만 로컬 Ollama(Gemma 3 12B)에 대화 화제 연속성 JSON 판단 요청. 잘못된 응답/오류는 이어가기 불승인.
+- `turn_pipeline.evaluate_turn(..., topic_assessor=...)`에 콜백 주입 가능. 봇 멘션 및 일반 자율 발언과 구분. 실제 Discord 이벤트 수신/전송은 향후 작업.
