@@ -234,3 +234,10 @@
 - `turn_pipeline`은 `state.snapshot()`에서 reply 대상 확인 후 명시적 봇 대상이면 이어가기 분기에 반영. 단 현재 topic_continues 외부 판정과 실제 Discord 수집·송신은 미구현.
 - tests/test_engagement_evidence.py 5개 + tests/test_turn_pipeline.py 1개. 기존 97개에서 총 **103개 예상**, Windows 새 QA 전.
 - 원본 Discord 데이터와 비공개 학습 내용 GitHub 비업로드 원칙 유지.
+
+## 2026-10-18 — 103개 통과 / 로컬 주제 연속성 판정기
+- 사용자 Windows 103개 unittest 모두 OK.
+- `topic_assessor.py`: 실제 같은 채널/스레드 `reply_to` 대상 봇 발언과 사용자 답장을 로컬 Ollama Gemma3:12b에 전달하여 JSON 단일 boolean `topic_continues`를 엄격 판독. 모델 오류/부정확한 JSON은 False. 시간/인접성만으론 연속성 불인정.
+- `turn_pipeline.evaluate_turn`에 선택적 topic_assessor 콜백을 추가. 실제 bot reply reference가 있는 경우 평가기를 호출하고 에러는 연속성 거부. 기존 외부 명시 조건 호출은 호환 유지. 네트워크 Discord Gateway/발신 미구현.
+- tests/test_topic_assessor.py 4개, tests/test_turn_pipeline.py 2개 추가. **109개 예상, Windows 실행 미확인**. 실제 Ollama 판정 정밀도는 따로 실측 필요.
+- 비공개 Discord 원본 및 발언/모델 평가 로그를 GitHub에 올리지 않음.
