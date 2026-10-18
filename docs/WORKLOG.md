@@ -304,3 +304,6 @@
 
 ## 2026-10-18 — Synthetic LoRA repeat success
 - Repeated private-data-free Gemma3 4B NF4 adapter training report status ok, peak allocation 5660.7 MiB; no real messages used. Console warning state unavailable from JSON.
+
+## 2026-10-18 — Persona split audit and rights review
+- After synthetic Gemma 3 4B QLoRA optimizer success, implemented local aggregate-only chronological train/validation and cross-split dedup analysis. Added 3 unit tests; expected 155. Current user personal Discord messages not trained. Official API content ML training requires Discord express permission; personal-data export route still requires independent review.
