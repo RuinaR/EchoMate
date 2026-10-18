@@ -86,9 +86,15 @@ def train(args):
                 if args.checkpoint_every and step%args.checkpoint_every==0:
                     model.save_pretrained(args.output/("step-%05d"%step),
                                           safe_serialization=True)
+                # Write aggregate-only progress after every evaluation, so unattended
+                # runs have inspectable metrics even if interrupted.
+                (args.output/"metrics.json").write_text(
+                    json.dumps(metrics,indent=2,ensure_ascii=False),encoding="utf-8")
+                print("Evaluation step %d/%d, heldout_loss=%.5f, best_step=%d" %
+                      (step,args.steps,val,best_step),flush=True)
                 if stale>=args.patience:
                     break
-        report={"status":"finished_or_early_stopped","model":MODEL,
+        report={"status":"finished" if step==args.steps else "early_stopped","model":MODEL,
                 "steps_completed":step,"planned_steps":args.steps,
                 "best_step":best_step,"validation_baseline":round(initial,5),
                 "best_validation_loss":round(best,5),
@@ -125,8 +131,8 @@ def main():
     p.add_argument("--confirm-rights",action="store_true")
     p.add_argument("--confirm-privacy-review",action="store_true")
     args=p.parse_args()
-    if not 20<=args.steps<=2000 or not 32<=args.seq_len<=256:
-        p.error("steps must be 20..2000 and seq_len 32..256")
+    if not 20<=args.steps<=3000 or not 32<=args.seq_len<=256:
+        p.error("steps must be 20..3000 and seq_len 32..256")
     if not 0<args.lr<=0.0001 or not 4<=args.validation_samples<=64:
         p.error("invalid learning rate or validation count")
     if not 1<=args.eval_every<=args.steps or not 1<=args.patience<=30:
