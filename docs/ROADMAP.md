@@ -386,3 +386,8 @@
 - [x] Retain health, sexual and aggressive expressions as stylistic content, without category-level automatic exclusion.
 - [x] Differentiate official owner Data Package from API-obtained content under Discord Developer Policy §21.
 - [ ] Keep identity/secret/third-party privacy filters, and maintain separate runtime response boundaries.
+
+## 2026-10-18 — Evidence-based personalization
+- [x] Research bibliography and EchoMate-specific persona experiment protocol in docs/PERSONA-RESEARCH.md.
+- [ ] Local approved owner-only LM corpus, near-duplicate and privacy checks.
+- [ ] Holdout baseline vs adapter evaluation and 16GB longer-context VRAM test.
