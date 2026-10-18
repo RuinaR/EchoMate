@@ -39,26 +39,26 @@ def iter_text(path: Path, limit=300000):
             if record["text"].strip():
                 yield record["text"]
 
-def select_ids(path, tokenizer, seq_len, count):
+def select_ids(path, tokenizer, seq_len, count, *, min_tokens=8):
     items = []
     for text in iter_text(path):
         ids = tokenizer(text, add_special_tokens=True, truncation=True,
                         max_length=seq_len)["input_ids"]
-        if 8 <= len(ids) <= seq_len:
+        if min_tokens <= len(ids) <= seq_len:
             items.append(ids)
         if len(items) >= count:
             break
     return items
 
-def run(train, valid, out, *, max_steps=2, seq_len=32):
+def run(train, valid, out, *, max_steps=2, seq_len=32, include_short_samples=False):
     import torch
     from transformers import AutoTokenizer, AutoModelForMultimodalLM, BitsAndBytesConfig
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA unavailable")
     tokenizer = AutoTokenizer.from_pretrained(MODEL, local_files_only=True)
-    train_ids = select_ids(train, tokenizer, seq_len, max_steps)
-    val_ids = select_ids(valid, tokenizer, seq_len, 1)
+    # Each text is an independent LM example; never concatenate unrelated chats.\n    min_tokens = 3 if include_short_samples else 8\n    train_ids = select_ids(train, tokenizer, seq_len, max_steps, min_tokens=min_tokens)
+    val_ids = select_ids(valid, tokenizer, seq_len, 1, min_tokens=min_tokens)
     if not train_ids or not val_ids:
         raise ValueError("Insufficient nontrivial train or validation examples")
     # Only aggregate counters and losses leave GPU; no decoded strings or token IDs logged.
@@ -112,7 +112,7 @@ def run(train, valid, out, *, max_steps=2, seq_len=32):
         free, _ = torch.cuda.mem_get_info(0)
         report = {
             "status": "trained_local_smoke", "model": MODEL,
-            "single_speaker_lm": True, "steps": len(losses), "seq_len": seq_len,
+            "single_speaker_lm": True, "steps": len(losses), "seq_len": seq_len,\n            "short_samples_enabled": bool(include_short_samples),\n            "min_token_length": min_tokens,
             "trainable_params": sum(p.numel() for p in model.parameters() if p.requires_grad),
             "validation_loss_before_adapter_update": round(before, 4),
             "validation_loss_after_adapter_update": round(after, 4),
@@ -136,7 +136,7 @@ def main():
     ap.add_argument("--output", type=Path, default=Path("local_data/persona-adapters/gemma4-first"))
     ap.add_argument("--max-steps", type=int, default=2)
     ap.add_argument("--seq-len", type=int, default=32)
-    ap.add_argument("--approve-private-training", action="store_true")
+    ap.add_argument("--include-short-samples", action="store_true",\n                    help="Opt-in standalone short texts (>=3 token IDs), never join unrelated messages")\n    ap.add_argument("--approve-private-training", action="store_true")
     ap.add_argument("--confirm-rights", action="store_true")
     ap.add_argument("--confirm-privacy-review", action="store_true")
     args = ap.parse_args()
@@ -145,7 +145,7 @@ def main():
         privacy_reviewed=args.confirm_privacy_review,
         max_steps=args.max_steps, seq_len=args.seq_len)
     print("Starting explicitly approved local-only Gemma4 training; no remote model API.")
-    report = run(train, valid, out, max_steps=args.max_steps, seq_len=args.seq_len)
+    report = run(train, valid, out, max_steps=args.max_steps, seq_len=args.seq_len,\n                 include_short_samples=args.include_short_samples)
     print("Training result:", report["status"], "Private report:", out/"training-summary.json")
     return 0
 
