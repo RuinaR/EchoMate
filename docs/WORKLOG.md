@@ -125,3 +125,9 @@
 - 현 대화 흐름을 Qwen 로컬 모델로 JSON 평가하는 `context_assessor.py` 구현. 실패한 평가는 침묵으로 처리.
 - `autonomy_probe.py`(합성 대화 프로브) 및 파서/오류/전달 검증 단위 테스트 7개 추가.
 - 실제 Discord 메시지, 실제 사람 대화에 대한 품질 검증/봇 연동은 아직 없음. Windows QA 요청 예정.
+
+## 2026-10-18 — Ollama 실문맥 침묵 확인 및 발언 오케스트레이션
+- 사용자 Windows unittest 44개 모두 OK.
+- Qwen 실문맥 샘플(보스 모집→9시 가능→9시 확정): sensitive=false, useful=false, interrupt=false, 결과 no_useful_contribution 침묵.
+- `turn_pipeline.py` 새 단일 턴 오케스트레이터 구현: 대화 스냅샷→활동 제어→맥락 평가→조건부 생성→stale 검사; 전송은 하지 않음.
+- 6개 합성 테스트 작성(정상 생성, 민감 차단, 비활성, 동시 새 메시지, 예외, 빈 컨텍스트). 사용자 Windows 새 테스트 미확인.
