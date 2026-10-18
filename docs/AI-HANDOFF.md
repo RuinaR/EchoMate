@@ -317,3 +317,8 @@
 ## 2026-10-18 — QLoRA environment Windows QA 134 tests, 1 failure
 - User reported `Ran 134 tests`: all passed except `test_gpu_query`; assertion observed timeout=None from mock's last call despite code supplying subprocess.run(timeout=10).
 - Updated test to look for the NVIDIA query-specific call within mock.call_args_list rather than assuming last call. No production GPU inspector behavior changed. Windows 134-test rerun needed; GPU diagnostic report has not yet been supplied.
+
+## 2026-10-18 — 134 green; isolated CUDA training bootstrap
+- User verified Windows unittest 134 OK. Actual local report: Windows Python 3.10.11; RTX 4070 Ti SUPER 16GB (16376 MiB total, 12746 MiB free); torch 2.6.0+cpu and transformers 5.9.0, remaining five training dependencies absent.
+- Added tools/setup_persona_training.ps1: creates .venv-train isolated Python 3.10, installs PyTorch CUDA 12.8 wheel torch==2.9.1, verifies CUDA calculation before optional -InstallTrainingLibraries. No private corpus or base weights used. tools/verify_training_cuda.py and three mocked tests added; expected 137 tests Windows QA pending. .gitignore now excludes .venv-train.
+- Run PowerShell: `.\tools\setup_persona_training.ps1`, optionally later `-SkipTorchInstall -InstallTrainingLibraries`. Driver/PyTorch wheel compatibility to confirm from results. Do not claim actual CUDA works yet. No persona model trained; training rights review still outstanding.
