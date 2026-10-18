@@ -5,6 +5,7 @@ at the cost of a possible missed reminder if the process crashes during send.
 """
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
+from contextlib import closing
 from pathlib import Path
 import re
 import sqlite3
@@ -27,7 +28,7 @@ class ReminderStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as db:
+        with closing(self._connect()) as db:
             db.execute("""CREATE TABLE IF NOT EXISTS reminders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_message_id TEXT NOT NULL UNIQUE,
@@ -76,7 +77,7 @@ class ReminderStore:
                 for x in (guild_id, channel_id, requester_id)) or
                 due_at.tzinfo is None):
             raise ValueError("valid message and Discord IDs, aware datetime required")
-        with self._connect() as db:
+        with closing(self._connect()) as db:
             cursor = db.execute("""INSERT OR IGNORE INTO reminders
                 (source_message_id,guild_id,channel_id,requester_id,due_at)
                 VALUES (?,?,?,?,?)""",
@@ -105,7 +106,7 @@ class ReminderStore:
             db.close()
 
     def finish(self, reminder_id: int, *, sent: bool) -> bool:
-        with self._connect() as db:
+        with closing(self._connect()) as db:
             return db.execute("UPDATE reminders SET state=? WHERE id=? AND state='claimed'",
                               ("sent" if sent else "failed",reminder_id)).rowcount == 1
 
@@ -113,7 +114,7 @@ class ReminderStore:
         """Only return this user's pending reminders within this guild."""
         if any(type(v) is not int or v <= 0 for v in (guild_id, requester_id)) or not 1 <= limit <= 100:
             raise ValueError("invalid list scope or limit")
-        with self._connect() as db:
+        with closing(self._connect()) as db:
             rows = db.execute("""SELECT id,channel_id,due_at FROM reminders
                 WHERE guild_id=? AND requester_id=? AND state='pending'
                 ORDER BY due_at,id LIMIT ?""",(guild_id,requester_id,limit)).fetchall()
@@ -123,7 +124,7 @@ class ReminderStore:
         """Atomically cancel pending reminder only. Claimed reminders cannot be canceled."""
         if any(type(v) is not int or v <= 0 for v in (guild_id, requester_id, reminder_id)):
             raise ValueError("invalid cancellation scope")
-        with self._connect() as db:
+        with closing(self._connect()) as db:
             return db.execute("""UPDATE reminders SET state='cancelled'
                 WHERE id=? AND guild_id=? AND requester_id=? AND state='pending'""",
                 (reminder_id,guild_id,requester_id)).rowcount == 1
@@ -131,7 +132,7 @@ class ReminderStore:
     def cancel_all(self, *, guild_id: int, requester_id: int) -> int:
         if any(type(v) is not int or v <= 0 for v in (guild_id, requester_id)):
             raise ValueError("invalid cancellation scope")
-        with self._connect() as db:
+        with closing(self._connect()) as db:
             return db.execute("""UPDATE reminders SET state='cancelled'
                 WHERE guild_id=? AND requester_id=? AND state='pending'""",
                 (guild_id,requester_id)).rowcount
