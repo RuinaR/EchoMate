@@ -274,3 +274,6 @@
 
 ## 2026-10-18 — QLoRA library setup: quote bug fixed
 - Training library installation and pip check succeeded. Final Python -c verification failed due to PowerShell quote parsing, NOT package installation. Replaced it with standalone import smoke test and three mock unit tests. New expected baseline 140.
+
+## 2026-10-18 — QLoRA 140 QA pass and NF4 GPU probe
+- Confirmed 140 Windows unit tests OK and isolated training stack imported fully. Added synthetic GPU NF4 Linear4bit operation probe with privacy-safe memory summary, 3 mocked unit tests. Next: 143 tests and native NF4 result, no model downloaded/trained.
