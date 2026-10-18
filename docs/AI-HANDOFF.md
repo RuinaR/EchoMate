@@ -301,3 +301,8 @@
 
 ## 2026-10-18 — Emoji reply alternative
 - User wants emoji-only replies within ongoing conversation (e.g. mentioning bot then saying love you => ❓ reaction). Added reaction_reply.py ResponseChoice, selecting one of reaction/text/silent from validated conversation signals and ReactionPolicy allowlist; no Discord send yet. Tests/test_reaction_reply.py adds 5 cases. Expected 131 total, Windows QA pending. Existing automatic emoji reactions remain separate; actual integration must prevent double responding and validate contextual emoji selector; reaction is not based on arbitrary randomness.
+
+## 2026-10-18 — Contextual emoji replies Windows QA
+- User ran Python unittest suite: **131 tests, OK**. All five new reaction_reply tests pass.
+- Offline text/reaction/silent choice verified. Semantic emoji selection and real Discord API sending remain unimplemented; never imply these work in Discord already.
+- Next top priority remains permission-aware persona fine-tuning preparation and local QLoRA feasibility. Current persona audit: 304,997 messages, 185,608 human-review candidates; training NOT started.
