@@ -394,3 +394,6 @@
 ## 2026-10-18 — Global multi-file chronology defect fixed
 - After user Windows 182/182 suite passed, reviewed approved raw owner exports privately (244976 + 60021, all timestamps). Combined 90th-percentile time cutoff was 2026-04-26 06:56:16 UTC. Dataset builder previously used independent per-file cutoffs; fixed to global UTC cutoff with one new synthetic test (expected 183 on Windows).
 - Aggregate short-text bins: len<3 54927/14395; len3..7 113624/23460. Originals remain off GitHub. No private training or dataset export run. Global time split alone is not sufficient contextual privacy protection.
+
+## 2026-10-18 — 183 Windows regression tests green
+- User executed unittest suite following the global chronological split fix: **183 tests OK in 0.463s**. Confirms unit-level behavior, not a full private-data privacy clearance, corpus authorization, or live QLoRA training.
