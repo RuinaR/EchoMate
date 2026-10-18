@@ -322,3 +322,6 @@
 
 ## 2026-10-18 — Fix Windows training-runner import syntax
 - User reported 159 tests with one module-import SyntaxError (`tools/train_persona_lora.py` validation sample generator expression, unmatched `)`). Replaced with clear `for` loop and candidate length check. Source change committed, Windows rerun pending. Expected 161 passing cases with the three new tests imported.
+
+## 2026-10-18 — Gemma4 12B model trial
+- User requested Gemma4 12B. Verified official model identifier and approx 23.9 GB base weight download. Implemented opt-in config/CUDA probe and cached-weight synthetic NF4 LoRA smoke test. Four regression tests added. Previous 161 Windows OK; now expect 165; GPU not yet run. Existing Gemma3 working environment remains untouched.
