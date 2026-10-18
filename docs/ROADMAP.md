@@ -275,3 +275,8 @@
 - [x] 테스트가 직접 생성하는 `old.db` 연결도 closing + commit으로 수정.
 - [ ] Windows 123개 테스트 통과 확인.
 - [ ] 페르소나 실제 학습 데이터의 적법한 사용 조건/학습 파이프라인 작업으로 복귀.
+
+## 2026-10-18: Persona priority
+- [x] Windows 123 tests OK.
+- [x] Aggregate-only privacy/duplicate eligibility audit implemented.
+- [ ] Windows 126 tests and local report; verify data usage rights; prepare QLoRA environment.
