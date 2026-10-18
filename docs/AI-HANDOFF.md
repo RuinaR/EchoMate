@@ -413,3 +413,6 @@
 ## 2026-10-18 — Local owner-data LoRA trainer added, not run
 - User confirmed Windows 158 tests OK. Added tools/train_persona_lora.py gated `--approve-private-training` and existing local_data/train+validation files. Offline Gemma 3 4B NF4 q/v LoRA rank4, max 100 steps/seq512 (defaults 20 steps/128), local-only PEFT checkpoint, single held-out loss smoke comparison. Must not claim full model evaluation from one example.
 - New tests/test_train_persona_lora.py 3 tests. Expected Windows suite 161, not yet verified. **No private corpus export, actual user-message training or final evaluation performed.** The dataset builder requires independent rights and privacy-review flags. Need improve sensitive contextual data handling, near duplicate leakage, training sample quality and evaluation before user flags are asserted.
+
+## 2026-10-18 Windows syntax blocker fixed in repository
+- Initial Windows QA: 159 tests with one discovery module error at tools/train_persona_lora.py:51 unmatched parenthesis. Rewrote validation token sample selection using an explicit loop. Needs user Windows rerun; expected 161 tests OK. No private corpus training run.
