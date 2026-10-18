@@ -11,12 +11,12 @@ import re
 from .analyze import iter_json_array, normalize_text
 
 ENDING = {
-    "question": re.compile(r"[?？]+\\s*$"),
-    "exclamation": re.compile(r"[!！]+\\s*$"),
-    "period": re.compile(r"[.。]+\\s*$"),
-    "laughter": re.compile(r"[ㅋㅎ]{2,}\\s*$"),
-    "crying": re.compile(r"[ㅠㅜ]{2,}\\s*$"),
-    "ellipsis": re.compile(r"(?:…|\\.{2,})\\s*$"),
+    "question": re.compile(r"[?？]+\s*$"),
+    "exclamation": re.compile(r"[!！]+\s*$"),
+    "period": re.compile(r"[.。]+\s*$"),
+    "laughter": re.compile(r"[ㅋㅎ]{2,}\s*$"),
+    "crying": re.compile(r"[ㅠㅜ]{2,}\s*$"),
+    "ellipsis": re.compile(r"(?:…|\.{2,})\s*$"),
 }
 BANDS = ((0, 5), (6, 12), (13, 25), (26, 50), (51, None))
 
