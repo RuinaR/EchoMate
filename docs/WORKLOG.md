@@ -405,3 +405,6 @@
 ## 2026-10-18 — Windows 184 tests successful
 - User ran `python -m unittest discover -s tests -v`: 184 tests, 0.476s, OK. Includes new two-character expression retention/heldout synthetic unit test.
 - This validates unit behavior only. Gemma4 current trainer still skips token sequences under 8 IDs; short-style corpus retention is not proof of short-expression learning. No original Discord messages trained or committed.
+
+## 2026-10-18 — Short independent sample path
+- Implemented explicit `--include-short-samples` in Gemma4 private trainer (min 3 token IDs rather than 8) to support short Discord writing style without artificially joining separate messages. Kept default behavior and privacy approval gates unchanged; new synthetic selection unit test. Previous Windows 184 pass; now expect 185, unverified.
