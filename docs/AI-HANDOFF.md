@@ -123,3 +123,11 @@
 - 새 테스트 1개 추가(예상 총 59개, 사용자 Windows 확인 전).
 - 문헌·프로젝트 검토: docs/PERSONA-RESEARCH-AND-QA.md (Lost in the Middle, mimic-bot, PersonaAgent, llmcord).
 - 실제 품질 향상과 지연 개선은 미검증; 별도 다중 프롬프트 A/B QA 필요.
+
+## 2026-10-18 — 교차 A/B 재평가 단계
+- 사용자 Windows unittest 59개 OK.
+- 기본 모델 `오늘 메이플 할래?`: `네, 지금 바로 시작할까? 준비됐으면 같이 들어올게.` 4.55초. 스타일 프로필 적용: `그거 지금 언제 하는 거야?` 0.23초.
+- 프롬프트 하나로 평가 불가능. 캐시/모델 로딩 영향 때문에 시간 차이를 모델 유형의 속도차로 해석하지 않을 것.
+- `conversation.py`에 AI가 게임에 실제 접속하는 듯 약속하는 것을 금지하고, 이미 이해한 초대는 되묻지 않도록 수정.
+- `echomate_studio.ab_probe` 신규: 기본 vs 프로필을 4개 시나리오에서 번갈아 테스트하여 `local_data/ab-results.json` 생성. CLI 실기기 미검증.
+- 다음은 사용자 Windows A/B 결과 보고 반복, 부적절성, 속도 분포 및 개인 말투 적합성 평가. 모델 미세조정은 아직 착수 전.
