@@ -354,3 +354,8 @@
 - User Windows tests 145 OK, no-download probe not_run expected. HF CLI `auth whoami` succeeded; canceled `auth login` with KeyboardInterrupt (not a login failure).
 - `--allow-download` failed OSError, 15111 MiB VRAM free before loading. Old diagnostic hid exception detail. Failure cannot yet be attributed to HF gating, network, cache, or compatibility.
 - Updated probe to classify exception into safe categories with no original exception strings or credentials, and changed deprecated `torch_dtype` to `dtype`; added 2 tests (147 expected, Windows unverified). User should verify access acceptance to google/gemma-3-4b-it and rerun probe once to share `failure_category`. No proof of successful download or QLoRA training yet.
+
+## 2026-10-18 — Hugging Face gated Gemma diagnosis
+- User Windows 147 tests OK. Real model loading failed OSError classified model_access_not_granted; VRAM free before load 15111 MiB. Previous Hugging Face CLI `auth whoami` succeeded, but token validity does NOT ensure this gated model has been granted or a fine-grained token covers gated repos.
+- Added tools/check_gemma_access.py to request ONLY google/gemma-3-4b-it/config.json, no weight downloads; outputs sanitized local_data/gemma-access.json. Two tests added; expected 149 tests (Windows unverified).
+- User should log into the same Hugging Face account on browser, explicitly accept/access model terms at https://huggingface.co/google/gemma-3-4b-it ; for fine-grained tokens check public gated repositories permission. No token values in chat/log. Recheck tiny config before retrying multi-GB load. Actual training rights for Discord messages are separate and remain unresolved.
