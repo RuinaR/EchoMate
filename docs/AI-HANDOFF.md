@@ -400,3 +400,6 @@
 ## 2026-10-18 — User-directed corpus inclusion policy
 - User explicitly requested retention of health, sexual, and aggressive language in their own historical voice corpus; do NOT exclude based solely on these semantic categories. Continue identifying actual credentials, identifiers, private third-party disclosures, and corrupted/repeated data separately. Production response safety is distinct from training-corpus topic inclusion.
 - Re-read official Discord Developer Policy §21: limitation specifically concerns API-obtained messages; current exports are owner-requested Data Package. Must not assert this specific clause bans their use. Nor claim a definitive license grant for training. Address remaining terms/privacy issues independently.
+
+## 2026-10-18 — Persona academic research protocol
+- New docs/PERSONA-RESEARCH.md summarizes LoRA (Hu), QLoRA (Dettmers), DoRA (Liu), unintended memorization (Carlini), TRL and PEFT implementations. Protocol: owner-only language modeling, no fake Q&A, chronological held-out validation, privacy and memorization testing, baseline vs adapter. Subject matter (health/sexual/aggressive) not automatically removed per user preference. Actual owner message fine-tuning not started.
