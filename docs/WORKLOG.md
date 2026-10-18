@@ -256,3 +256,6 @@
 
 ## 2026-10-18
 - Implemented reaction_reply.py for exclusive text, emoji, or silence decisions. Five offline tests added; Discord send integration pending.
+
+## 2026-10-18 — 131 tests OK / QLoRA environment diagnostics
+- Added read-only qlora_environment CLI with optional nvidia-smi and seven local package version checks. No weights download, no data extraction, no training. 3 tests added; expected 134 Windows tests.
