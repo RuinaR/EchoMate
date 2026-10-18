@@ -60,3 +60,10 @@
 - [ ] Ollama 단발 모델 답변 실제 표시 확인
 - [ ] Bot에서 별도 반응 설정 UI/Discord Add Reactions 권한·API 연결
 - [ ] 메시지 문맥에 따른 적절한 반응 선택·중복/한도 및 사용자 opt-out QA
+
+## 상황별 침묵 판단 요구 및 착수 (2026-10-18)
+- [x] 발언 확률과 실제 발언 허용을 구분하는 `ParticipationPolicy`·`ContextAssessment`·Decision 모듈 작성.
+- [x] 높은 빈도에도 민감/불필요/부적절/장시간 침묵 상황에서 발언하지 않는 단위 테스트 7개 작성.
+- [ ] 사용자 Windows 전체 30개 테스트 확인(기존 23개 + 신규 7개).
+- [ ] 실제 최근 Discord 대화로부터 신뢰할 수 있는 ContextAssessment 생성(휴리스틱·로컬 LLM 평가 검증).
+- [ ] Discord 봇 연결 및 대화 발언·이모지 반응의 각각 다른 독립 활동 설정/실전 QA.
