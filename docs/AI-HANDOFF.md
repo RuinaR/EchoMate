@@ -284,3 +284,10 @@
 - 원인은 `tests/test_reminder_management.py`의 `with sqlite3.connect(p) as db:` 구문. Python SQLite connection context manager는 commit/rollback만 수행하고 close를 보장하지 않음. Windows에서는 임시 파일 잠금이 남음.
 - 테스트에 `from contextlib import closing` 추가하고 구형 DB 생성에 `with closing(sqlite3.connect(p)) as db:` 사용, `db.commit()` 명시. 기존 `ReminderStore` 측 closing 패치 유지. **123개 테스트 Windows 재실행 미확인.**
 - 사용자의 핵심 목표인 원본 메시지 페르소나 QLoRA 학습은 여전히 미시작. 예약 QA 이슈 해결 뒤 개인정보 보호/권한 확인/학습환경 준비에 집중.
+
+## 2026-10-18 — Windows 123/123 OK, 실제 페르소나 준비 재개
+- 사용자가 SQLite Windows 파일 잠금 수정 후 unittest **123 tests OK** 확인.
+- `persona_eligibility.py`: 원본 JSON을 로컬 스트리밍해 채널별 분석용 후보/중복/반복글자/짧은 글/개인식별 의심(연락처·이메일·긴 숫자)/빈 메시지를 **숫자로만 집계**. 원문·ID·시간·예시·학습셋은 출력하지 않음. 기존 사용 권한 점검 미완료이므로 실제 LoRA/QLoRA는 여전히 시작하지 않음.
+- `tests/test_persona_eligibility.py` 합성 테스트 3건 추가. 전체 **126개 예상**, Windows 검증 전. 개인정보 검출 정규식은 근사치이며 민감 내용 전체를 탐지한다고 주장 금지.
+- 실행: `python -m echomate_studio.persona_eligibility "C:\\Users\\user\\Desktop\\학습데이터\\messages1.json" "C:\\Users\\user\\Desktop\\학습데이터\\messages2.json"`; 출력 `local_data/persona-eligibility.json`.
+- 차기 우선순위: 데이터 권리 검토, 학습 데이터 검수·시간 분리·중복 방지 설계, 로컬 QLoRA 환경과 baseline QA. 텍스트 기반 프롬프트 스타일은 모델 가중치 학습과 다름.
