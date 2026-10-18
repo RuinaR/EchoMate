@@ -88,6 +88,43 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.settings.set_scope(1,2,7,'silent',thread=True)
         self.assertEqual(scope(self.settings.get(),2,7,3),'silent')
         self.assertEqual(scope(self.settings.get(),8,3),'silent')
+
+    async def test_independent_text_reaction_scopes_persist_and_inherit(self):
+        self.settings.set_activity_scope(1,2,3,'silent','autonomous',inherit=True)
+        cfg=Settings(1,self.settings._key.decode(),self.settings.path).get()
+        self.assertEqual(scope(cfg,2,3),'reaction')
+        self.assertEqual(scope(cfg,2,7,3,action='text'),'silent')
+        self.assertEqual(scope(cfg,2,7,3,action='reaction'),'autonomous')
+        self.settings.set_activity_scope(1,2,7,'autonomous','silent',thread=True)
+        cfg=self.settings.get()
+        self.assertEqual(scope(cfg,2,7,3),'autonomous')
+        self.assertEqual(scope(cfg,2,7,3,action='reaction'),'silent')
+        with self.assertRaises(PermissionError):self.settings.set_activity_scope(4,2,3,'autonomous','autonomous')
+
+    async def test_separate_reaction_block_survives_model_proposal(self):
+        self.settings.set(1,'reactions',True)
+        self.settings.set_activity_scope(1,2,3,'mention','silent')
+        self.backend.action='REACTION'
+        await self.runtime.ingest(self.event());await self.settle()
+        self.assertFalse(self.transport.sent)
+
+    async def test_compact_joint_assessment_fast_text_and_unmentioned_continuation(self):
+        from echomate_bot.inference import parse_turn_assessment
+        self.settings.set(1,'reactions',True)
+        calls=[]
+        async def assess(context):calls.append(context);return parse_turn_assessment('0 1 1 1 1')
+        async def forbidden(*args):raise AssertionError('Redundant model call')
+        self.backend.assess_turn=assess;self.backend.fast_text_path=True
+        self.backend.classify=forbidden;self.backend.continuity=forbidden;self.backend.propose=forbidden
+        await self.runtime.ingest(self.event());await self.settle()
+        with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-3')
+        # Default new-conversation cooldown stays 60 seconds. This is a follow-up.
+        await self.runtime.ingest(self.event(id=11,content='그럼 다음 단계는?'));await self.settle()
+        self.assertEqual(len(calls),2);self.assertEqual(len(self.transport.sent),2)
+        self.assertFalse(self.runtime.progress)
+        self.assertEqual(len(self.runtime.latencies),2)
+        with self.assertRaises(ValueError):parse_turn_assessment('0 1 1 1 1 extra')
+        with self.assertRaises(ValueError):parse_turn_assessment('1 1 1')
     async def test_mention_sends_once_and_persists_replay_guard(self):
         event=self.event();await self.runtime.ingest(event);await self.settle()
         self.assertEqual(len(self.transport.sent),1)
@@ -151,7 +188,8 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.backend.calls,[])
         _,turns=self.runtime.states[3].snapshot(channel_id=3,thread_id=None)
         self.assertEqual(turns[-1].message_id,'reaction:10')
-        self.assertIn('실제 발언 인용이 아님',turns[-1].content)
+        self.assertEqual(turns[-1].content,'')
+        self.assertIn('REACTION',turns[-1].context_metadata)
     async def test_character_change_cancels_pending_work_without_erasing_history(self):
         await self.runtime.ingest(self.event());await self.settle()
         state=self.runtime.states[3]
@@ -270,6 +308,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         current.reply.assert_awaited_once()
         current.add_reaction.assert_not_awaited()
         self.assertEqual(current.reply.call_args.kwargs['nonce'],10)
+        self.assertTrue(current.reply.call_args.kwargs['suppress_embeds'])
     async def test_animation_work_limit_and_mood_bounds(self):
         from echomate_bot.character import effective_character
         self.settings.set(1,'auto_mood',True)
@@ -279,6 +318,18 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.settings.get()['mood'],'평온')
         with self.assertRaises(ValueError):self.settings.set(1,'warmth',101)
         with self.assertRaises(ValueError):self.settings.set(1,'model','untrusted_remote')
+        self.settings.set(1,'media_probability',1)
+        with self.assertRaises(ValueError):self.settings.set(1,'media_probability',2)
+    async def test_visual_presence_reaches_assessment_without_fabricating_user_text(self):
+        captured=[]
+        async def classify(context):captured.append(context);return ContextAssessment(False,True,True)
+        self.backend.classify=classify
+        await self.runtime.ingest(replace(self.event(content='<@999>'),assets=(('attachment:5','https://cdn.discordapp.com/attachments/1/5.png'),)))
+        await self.settle()
+        self.assertIn('visual_inputs',captured[0][-1]['content'])
+        _,turns=self.runtime.states[3].snapshot(channel_id=3,thread_id=None)
+        self.assertEqual(turns[0].content,'<@999>')
+        self.assertIsNotNone(turns[0].context_metadata)
     async def test_gpu_worker_queue_cancellation_retains_single_owner(self):
         from echomate_bot.inference import LocalBackend
         import threading,time

@@ -1,0 +1,6 @@
+$ErrorActionPreference = 'Stop'
+Set-Location (Split-Path $PSScriptRoot -Parent)
+$env:PYTHONPATH = 'src'
+$env:HF_HUB_OFFLINE = '1'
+$env:TRANSFORMERS_OFFLINE = '1'
+Start-Process -FilePath '.\.venv-gemma4\Scripts\pythonw.exe' -ArgumentList '-m','echomate_bot.desktop' -WorkingDirectory (Get-Location).Path -WindowStyle Normal

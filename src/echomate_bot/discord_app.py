@@ -78,7 +78,7 @@ class DiscordTransport:
         if not await fresh():raise ValueError("Stale output")
         sent=None
         if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
-            kwargs=dict(content=action.text,allowed_mentions=discord.AllowedMentions.none(),mention_author=False,nonce=event.id)
+            kwargs=dict(content=action.text,allowed_mentions=discord.AllowedMentions.none(),mention_author=False,nonce=event.id,suppress_embeds=True)
             if action.kind==Kind.TEXT_MEDIA:
                 kwargs["file"]=discord.File(library.resolve(action.asset,event.guild))
             sent=await current.reply(**kwargs)

@@ -66,7 +66,7 @@ class Runtime:
         self.states={};self.tasks={};self.seen={};self.blocked_assets=set();self.failures=0
         self.pending_mentions={}
         self.ingest_locks=weakref.WeakValueDictionary()
-        self.stopped=False;self.diagnostics=[]
+        self.stopped=False;self.diagnostics=[];self.progress={};self.latencies=[]
 
     def note(self,code):
         record=dict(at=time.time(),code=code)
@@ -76,6 +76,10 @@ class Runtime:
             if path.exists() and path.stat().st_size>1024**2:path.replace(path.with_suffix('.previous.jsonl'))
             with path.open('a',encoding='utf-8') as handle:handle.write(json.dumps(record)+'\n')
         except OSError:self.stopped=True
+
+    def stage(self,event,name,started):
+        self.progress[event.channel]=dict(stage=name,started=started,updated=time.time())
+        self.note('stage_'+name)
 
     def invalidate(self,channel):
         task=self.tasks.get(channel)
@@ -107,7 +111,9 @@ class Runtime:
         if event.channel not in self.states and len(self.states)>=32:
             self.invalidate(next(iter(self.states)))
         state=self.states.setdefault(event.channel,DialogueState(limit=100,max_age_seconds=3600))
-        if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None)):return
+        metadata=json.dumps(dict(visual_inputs=len(event.assets),kinds=sorted({a.split(':')[0] for a,_ in event.assets}),
+            analysis_state='not_analyzed',vision_enabled=self.settings.get()['vision'])) if event.assets else None
+        if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None,context_metadata=metadata)):return
         request_content=None
         if mentions_bot(event.content,self.transport.bot_id):
             self.pending_mentions[event.channel]=(event.author,event.timestamp,event.content)
@@ -132,14 +138,17 @@ class Runtime:
                 (await self.transport.permissions(event)).get("view",False))
 
     async def process(self,event,state,request_content=None):
+        started=time.time();self.stage(event,'assessment',started)
         revision=self.settings.revision;cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
+        text_mode=scope(cfg,event.guild,event.channel,event.parent,action='text')
+        reaction_mode=scope(cfg,event.guild,event.channel,event.parent,action='reaction')
         version,context=state.recent_context(channel_id=event.channel,thread_id=None,max_chars=6000)
         try:
             since=time.time()-self.ledger.last(event.channel)
             verified_request=request_content if request_content is not None else event.content
             direct=mentions_bot(verified_request,self.transport.bot_id)
             if direct:
-                allowed,_=permit_mention_reply(MentionPolicy(allowed_channel_ids=frozenset({event.channel}),cooldown_seconds=cfg["cooldown"]),
+                allowed,_=permit_mention_reply(MentionPolicy(allowed_channel_ids=frozenset({event.channel}),cooldown_seconds=2),
                     content=verified_request,bot_user_id=self.transport.bot_id,channel_id=event.channel,thread_id=None,
                     author_is_bot=False,opted_out=False,seconds_since_last_reply=since)
                 if not allowed:return
@@ -147,14 +156,16 @@ class Runtime:
                 # Verified reply/semantic addressee may continue existing participation.
                 _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
                 if not any(t.is_bot for t in turns):return
-            self.note('stage_assessment')
-            assessment=await self.backend.classify(context)
+            evidence=None
+            if hasattr(self.backend,'assess_turn'):assessment,evidence=await self.backend.assess_turn(context)
+            else:assessment=await self.backend.classify(context)
             if assessment.is_sensitive_moment:return
             continuing=False
             _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
             if not direct and any(t.is_bot for t in turns[:-1]):
-                self.note('stage_continuity')
-                evidence=await self.backend.continuity(context)
+                if evidence is None:
+                    self.stage(event,'continuity',started)
+                    evidence=await self.backend.continuity(context)
                 reply_verified=any(t.is_bot and t.message_id==str(event.reply_to) for t in turns[:-1])
                 continuing=continue_engagement(EngagementPolicy(max_gap_seconds=cfg["engagement_seconds"]),ongoing=True,
                     seconds_since_last_bot_reply=since,addressed_to_bot=reply_verified or evidence.addressed_to_bot,topic_continues=evidence.topic_continues)
@@ -166,25 +177,28 @@ class Runtime:
                     seconds_since_last_speech=since,seconds_since_last_human_message=max(0,(datetime.now(timezone.utc)-event.timestamp).total_seconds()),rng=self.rng)
                 speech_eligible=decision.speak
             else:speech_eligible=direct or assessment.has_useful_contribution
+            reply_cooldown=2 if direct or continuing else cfg['cooldown']
+            if text_mode=='silent' or (text_mode=='mention' and not direct and not continuing):speech_eligible=False
             # A useful text contribution and an appropriate reaction are distinct.
             # The existing reaction gate supplies opportunity only; AI/catalog
             # select the actual Unicode/custom asset after visual validation.
             reaction_only=mode=='reaction' or not speech_eligible
+            reaction_permitted=reaction_mode!='silent' and (reaction_mode!='mention' or direct or continuing)
             if reaction_only:
                 if not (direct or assessment.interruption_is_appropriate):return
-                chance=choose_reaction(ReactionPolicy(enabled=cfg['reactions'],allowed_channel_ids=frozenset({event.channel}),
-                    probability=1.0 if direct else ACTIVITY[cfg['activity']],cooldown_seconds=cfg['cooldown'],emojis=('👍',)),
+                chance=choose_reaction(ReactionPolicy(enabled=cfg['reactions'] and reaction_permitted,allowed_channel_ids=frozenset({event.channel}),
+                    probability=1.0 if direct or continuing else ACTIVITY[cfg['activity']],cooldown_seconds=reply_cooldown,emojis=('👍',)),
                     channel_id=event.channel,thread_id=None,is_bot_message=False,is_own_message=False,opted_out=False,
                     seconds_since_reaction=since,rng=self.rng)
                 if chance is None:return
-            if since<cfg["cooldown"] or not await self.fresh(event,state,version,revision):return
+            if since<reply_cooldown or not await self.fresh(event,state,version,revision):return
             visual=[]
             if cfg["vision"]:
                 for asset,url in event.assets[:4]:
                     if not await self.fresh(event,state,version,revision):return
                     try:
                         data=await download(url)
-                        self.note('stage_visual')
+                        self.stage(event,'visual',started)
                         result=await self.cache.analyze(event.guild,asset,data,self.backend)
                         visual.append(dict(asset=asset,result=result))
                     except (ValueError,OSError,RuntimeError):
@@ -198,7 +212,7 @@ class Runtime:
             catalog["media"]={mid:dict(analysis=r["analysis"],tags=r["tags"],purpose=r["purpose"]) for mid,r in self.library.records.items()
                 if r["enabled"] and event.guild in r["guilds"]}
             # Denied modes are also hidden from the model's candidate catalog.
-            if not cfg["reactions"]:catalog["reactions"]={}
+            if not cfg["reactions"] or not reaction_permitted:catalog["reactions"]={}
             if not cfg["stickers"]:catalog["stickers"]={}
             if not cfg["media"] or self.rng.random()>=cfg["media_probability"]:catalog["media"]={}
             allowed=['SILENCE']
@@ -213,8 +227,14 @@ class Runtime:
                     if cfg['text']:allowed.append('TEXT_MEDIA')
             catalog['allowed_actions']=allowed
             catalog['directed_to_bot']=direct or continuing
-            self.note('stage_action')
-            proposed=parse_action(await self.backend.propose(context,catalog))
+            self.stage(event,'action',started)
+            fast_text=(allowed==['SILENCE','TEXT'] or
+                       ('TEXT' in allowed and assessment.has_useful_contribution and not catalog['media'] and not catalog['stickers']))
+            if getattr(self.backend,'fast_text_path',False) and fast_text:
+                # The semantic participation gate already approved this reply.
+                # Useful text takes priority over optional decorative reactions.
+                proposed=Action(Kind.TEXT)
+            else:proposed=parse_action(await self.backend.propose(context,catalog))
             self.note('proposed_'+proposed.kind.value)
             if proposed.kind.value not in allowed:
                 self.note('disabled_candidate_veto');return
@@ -224,12 +244,15 @@ class Runtime:
                 self.note('reaction_mode_veto');return
             action=proposed
             if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
-                self.note('stage_text')
-                answer=await self.backend.text(context,effective_character(cfg,event.content))
+                self.stage(event,'text',started)
+                character=effective_character(cfg,event.content);character['_selected_action']=action.kind.value
+                answer=await self.backend.text(context,character)
                 action=Action(action.kind,answer,action.asset)
             if (event.guild,action.asset) in self.blocked_assets:
                 self.note('blocked_asset_veto');return
             permissions=await self.transport.permissions(event)
+            if action.kind in {Kind.REACTION,Kind.TEXT_REACTION} and not reaction_permitted:return
+            if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA,Kind.MEDIA,Kind.STICKER} and text_mode=='silent':return
             # Catalog membership is re-fetched at send time to detect deleted assets.
             latest_catalog=await self.transport.catalog(event,self.cache)
             if not validate_action(action,self.settings.get(),mode,permissions,latest_catalog,self.library,event.guild):
@@ -237,26 +260,30 @@ class Runtime:
             if not await self.fresh(event,state,version,revision):
                 self.note('stale_output_veto');return
             # Conservative at-most-once reservation: ambiguous HTTP failures are never replayed.
-            if not self.ledger.reserve(event,cfg["daily_limit"],cfg["cooldown"]):
+            if not self.ledger.reserve(event,cfg["daily_limit"],reply_cooldown):
                 self.note('duplicate_or_rate_veto');return
             try:
+                self.stage(event,'sending',started)
                 sent=await self.transport.execute(event,action,self.library,
                     lambda:self.fresh(event,state,version,revision))
                 self.ledger.completed(event,"sent")
                 self.pending_mentions.pop(event.channel,None)
                 if action.kind in {Kind.MEDIA,Kind.TEXT_MEDIA}:self.library.used(action.asset)
                 bot_content=action.text
+                output_metadata={}
                 if action.asset:
                     description=(self.library.records[action.asset]['analysis'] if action.kind in {Kind.MEDIA,Kind.TEXT_MEDIA} else
                                  latest_catalog.get('stickers' if action.kind==Kind.STICKER else 'reactions',{}).get(action.asset,''))
                     if isinstance(description,dict):
                         description={k:([str(v)[:100] for v in value[:3]] if isinstance(value,list) else str(value)[:180]) for k,value in description.items()}
-                    bot_content+='\n[확인된 출력행동 메타데이터 — 실제 발언 인용이 아님: '+json.dumps(
-                        dict(kind=action.kind.value,asset=action.asset,visual_observation_candidate=description),ensure_ascii=False)+']'
+                    output_metadata=dict(kind=action.kind.value,asset=action.asset,visual_observation_candidate=description)
+                if visual:
+                    output_metadata['visual_input_summaries']=[dict(asset=v['asset'],observation={k:([str(s)[:60] for s in value[:2]] if isinstance(value,list) else str(value)[:100]) for k,value in v['result'].items()}) for v in visual]
                 if sent or action.kind==Kind.REACTION:
                     state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(sent) if sent else 'reaction:'+str(event.id),str(self.transport.bot_id),bot_content,
-                        datetime.now(timezone.utc),is_bot=True,reply_to=str(event.id)))
+                        datetime.now(timezone.utc),is_bot=True,reply_to=str(event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
                 self.failures=0
+                self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
             except Exception:
                 self.ledger.completed(event,"failed_or_uncertain")
                 if action.asset:self.blocked_assets.add((event.guild,action.asset))
@@ -266,6 +293,9 @@ class Runtime:
             self.failures+=1;self.note("turn_failed_"+type(exc).__name__)
             if self.failures>=3 or getattr(self.backend,"failed",False):
                 self.stopped=True;self.note("safe_disabled")
+        finally:
+            current=self.progress.get(event.channel)
+            if current and current['started']==started:self.progress.pop(event.channel,None)
 
     async def close(self):
         self.stopped=True

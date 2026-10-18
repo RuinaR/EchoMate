@@ -31,6 +31,8 @@ def setup():
 
 
 async def run():
+    from .instance import InstanceLease
+    lease=InstanceLease()
     from .inference import LocalBackend
     from .discord_app import EchoClient
     path=ROOT/"bootstrap.json"
@@ -49,6 +51,7 @@ async def run():
         (ROOT/"diagnostics.json").write_text(json.dumps(client.runtime.diagnostics,indent=2),encoding="utf-8")
         (ROOT/"performance.json").write_text(json.dumps(client.backend.metrics,indent=2),encoding="utf-8")
         if not client.is_closed():await client.close()
+        lease.close()
 
 
 def main():

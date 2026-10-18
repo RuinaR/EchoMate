@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import asyncio
 from .settings import ROOT, private_path,atomic_private_json
 from .vision import frames
 
@@ -36,7 +37,7 @@ class MediaLibrary:
         if len(self.records) >= 100: raise ValueError("Media library limit")
         if sum(p.stat().st_size for p in self.root.iterdir() if p.is_file())+len(data)>128*1024**2:
             raise ValueError("Media library storage limit")
-        _, metadata = frames(data)
+        _, metadata = await asyncio.to_thread(frames,data)
         digest=hashlib.sha256(data).hexdigest()
         mid=digest[:20]
         analysis=await cache.analyze(guild_id,"library:"+mid,data,backend)

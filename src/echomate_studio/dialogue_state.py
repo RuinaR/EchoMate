@@ -15,6 +15,7 @@ class Turn:
     timestamp: datetime
     is_bot: bool = False
     reply_to: str | None = None
+    context_metadata: str | None = None
 
 
 class DialogueState:
@@ -74,13 +75,14 @@ class DialogueState:
         selected: list[Turn] = []
         used = 0
         for turn in reversed(turns):
-            cost = len(turn.content) + len(turn.author_id) + 64
+            cost = len(turn.content) + len(turn.author_id) + 64 + len(turn.context_metadata or '')
             if selected and used + cost > budget:
                 break
             if not selected and cost > budget:
+                extra=turn.context_metadata if len(turn.context_metadata or '')<max(0,budget-64) else None
                 selected.append(Turn(turn.message_id, turn.author_id,
-                                     turn.content[-max(1, budget - 64):],
-                                     turn.timestamp, turn.is_bot, turn.reply_to))
+                                     turn.content[-max(1, budget - 64 - len(extra or '')):],
+                                     turn.timestamp, turn.is_bot, turn.reply_to,extra))
                 break
             selected.append(turn)
             used += cost
@@ -98,5 +100,7 @@ class DialogueState:
                 content = f"[참여자 {turn.author_id}] {turn.content}"
                 if turn.reply_to:
                     content = f"[답장 대상 메시지 {turn.reply_to}] " + content
+            if turn.context_metadata:
+                content+='\n[관측된 이벤트 메타데이터 / 실제 발언 인용이 아님] '+turn.context_metadata
             context.append({"role": role, "content": content})
         return context

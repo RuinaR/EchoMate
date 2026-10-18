@@ -61,8 +61,8 @@ def validate(cfg):
                         ("cooldown", 2, 3600), ("engagement_seconds", 10, 86400), ("daily_limit", 1, 1000)):
         if type(cfg[key]) is not int or not lo <= cfg[key] <= hi:
             raise ValueError("Setting outside permitted range")
-    if type(cfg["media_probability"]) not in (int, float) or not 0 <= cfg["media_probability"] <= .5:
-        raise ValueError("Media probability must be 0..0.5")
+    if type(cfg["media_probability"]) not in (int, float) or not 0 <= cfg["media_probability"] <= 1:
+        raise ValueError("Media probability must be 0..1")
     if not isinstance(cfg["guilds"], dict) or len(cfg["guilds"]) > 20:
         raise ValueError("Guild limit")
     for gid, g in cfg["guilds"].items():
@@ -74,14 +74,15 @@ def validate(cfg):
         for table, rules in (("channels", g["channels"]), ("threads", g["threads"])):
             for cid, rule in rules.items():
                 positive_id(int(cid))
-                if set(rule) != {"mode", "inherit"} or rule["mode"] not in MODES or type(rule["inherit"]) is not bool:
+                if set(rule) not in ({"mode", "inherit"},{"mode", "inherit","reaction_mode"}) or rule["mode"] not in MODES or type(rule["inherit"]) is not bool:
                     raise ValueError("Invalid scope")
+                if rule.get('reaction_mode','mention') not in {'silent','mention','autonomous'}:raise ValueError('Invalid reaction scope')
                 if table == "threads" and rule["inherit"]:
                     raise ValueError("Only a parent channel can grant inheritance")
     return cfg
 
 
-def scope(cfg, guild_id, channel_id, parent_id=None):
+def scope(cfg, guild_id, channel_id, parent_id=None, *, action=None):
     if not cfg["enabled"]:
         return "silent"
     g = cfg["guilds"].get(str(guild_id))
@@ -89,11 +90,20 @@ def scope(cfg, guild_id, channel_id, parent_id=None):
         return "silent"
     if parent_id is not None:
         rule = g["threads"].get(str(channel_id))
-        if rule:
-            return rule["mode"]
-        parent = g["channels"].get(str(parent_id))
-        return parent["mode"] if parent and parent["inherit"] else "silent"
-    return g["channels"].get(str(channel_id), {}).get("mode", "silent")
+        if not rule:
+            parent = g["channels"].get(str(parent_id))
+            rule=parent if parent and parent['inherit'] else None
+    else:rule=g['channels'].get(str(channel_id))
+    if not rule:return 'silent'
+    mode=rule['mode']
+    # Legacy scopes retain their exact behavior until explicitly separated.
+    if 'reaction_mode' not in rule:
+        return ('silent' if mode=='reaction' else mode) if action=='text' else mode
+    reaction=rule['reaction_mode']
+    if action=='text':return mode
+    if action=='reaction':return reaction
+    if mode=='silent':return 'reaction' if reaction!='silent' else 'silent'
+    return 'autonomous' if reaction=='autonomous' else mode
 
 
 class Settings:
@@ -141,3 +151,11 @@ class Settings:
             g = cfg["guilds"].setdefault(str(guild_id), dict(enabled=True, channels={}, threads={}))
             g["threads" if thread else "channels"][str(channel_id)] = dict(mode=mode, inherit=inherit)
         self.change(user_id, mutate)
+
+    def set_activity_scope(self,user_id,guild_id,channel_id,text_mode,reaction_mode,*,thread=False,inherit=False):
+        positive_id(guild_id);positive_id(channel_id)
+        if text_mode not in {'silent','mention','autonomous'}:raise ValueError('Invalid text scope')
+        def mutate(cfg):
+            g=cfg['guilds'].setdefault(str(guild_id),dict(enabled=True,channels={},threads={}))
+            g['threads' if thread else 'channels'][str(channel_id)]=dict(mode=text_mode,reaction_mode=reaction_mode,inherit=inherit)
+        self.change(user_id,mutate)
