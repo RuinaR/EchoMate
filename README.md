@@ -178,3 +178,6 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - `reminder_commands.py`의 `handle_reminder_management`가 `내 예약 확인`/`예약 목록`, `예약 1 취소`, `내 예약 전부 취소`를 인식해 구조화된 결과를 돌려줌. 예약 번호는 조회한 항목의 `id` 사용.
 - 예약은 서버와 요청자 ID로 범위를 한정해 다른 사람 예약 조회/취소를 차단. 이미 발송 선점된(claimed) 예약은 취소하지 않음. 이전 SQLite 예약 DB는 시작 시 데이터 보존 마이그레이션.
 - 실제 Discord 메시지로 예약 목록을 보여주고 명령을 수신·전송하는 연결은 **아직 미구현**, 실서버 사용 가능 판정은 아님.
+
+## 페르소나 QLoRA 로컬 환경 검사
+- `python -m echomate_studio.qlora_environment --gpu`는 NVIDIA GPU와 PyTorch/Transformers/PEFT/TRL/Accelerate/bitsandbytes/datasets 설치 버전만 조사해 `local_data/qlora-environment.json` 생성. 다운로드·설치·학습하지 않음. Ollama GGUF 추론 모델은 훈련 가능한 가중치와 별개.
