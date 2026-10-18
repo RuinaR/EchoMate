@@ -313,3 +313,7 @@
 - tests/test_qlora_environment.py 신규 3개, 예상 **134개 Windows unittest**. Python 버전과 CUDA 가능 여부는 사용자 Windows 보고서로 확인 필요.
 - 후보 기반은 Gemma3 4B 모델이며 학습 가능한 HF base weights 및 게이트 접근·약관 검토가 필요. Ollama GGUF는 직접 QLoRA 대상 아님. 권한/민감자료 검토 전 개인 메시지 학습셋 생성 및 훈련 시작 금지.
 - CLI: `python -m echomate_studio.qlora_environment --gpu` -> `local_data/qlora-environment.json`.
+
+## 2026-10-18 — QLoRA environment Windows QA 134 tests, 1 failure
+- User reported `Ran 134 tests`: all passed except `test_gpu_query`; assertion observed timeout=None from mock's last call despite code supplying subprocess.run(timeout=10).
+- Updated test to look for the NVIDIA query-specific call within mock.call_args_list rather than assuming last call. No production GPU inspector behavior changed. Windows 134-test rerun needed; GPU diagnostic report has not yet been supplied.
