@@ -416,3 +416,6 @@
 
 ## 2026-10-18 Windows syntax blocker fixed in repository
 - Initial Windows QA: 159 tests with one discovery module error at tools/train_persona_lora.py:51 unmatched parenthesis. Rewrote validation token sample selection using an explicit loop. Needs user Windows rerun; expected 161 tests OK. No private corpus training run.
+
+## 2026-10-18 — Windows regression now green
+- User confirmed `Ran 161 tests in 0.400s OK` after syntax fix in tools/train_persona_lora.py. This confirms unit tests only; real owner-data training, complete privacy review and model quality validation are still pending.
