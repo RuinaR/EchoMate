@@ -40,15 +40,32 @@ def iter_text(path: Path, limit=300000):
                 yield record["text"]
 
 def select_ids(path, tokenizer, seq_len, count, *, min_tokens=8):
-    items = []
+    """Spread sample selection across corpus rather than taking its first rows."""
+    if count < 1:
+        return []
+    # Count pass keeps large private corpora off in-memory buffers.
+    eligible_count = 0
     for text in iter_text(path):
         ids = tokenizer(text, add_special_tokens=True, truncation=True,
                         max_length=seq_len)["input_ids"]
         if min_tokens <= len(ids) <= seq_len:
-            items.append(ids)
-        if len(items) >= count:
-            break
-    return items
+            eligible_count += 1
+    if not eligible_count:
+        return []
+    target = min(count, eligible_count)
+    positions = {(i * eligible_count) // target for i in range(target)}
+    selected = []
+    eligible_index = 0
+    for text in iter_text(path):
+        ids = tokenizer(text, add_special_tokens=True, truncation=True,
+                        max_length=seq_len)["input_ids"]
+        if min_tokens <= len(ids) <= seq_len:
+            if eligible_index in positions:
+                selected.append(ids)
+                if len(selected) == target:
+                    break
+            eligible_index += 1
+    return selected
 
 def run(train, valid, out, *, max_steps=2, seq_len=32, include_short_samples=False):
     import torch
@@ -60,7 +77,7 @@ def run(train, valid, out, *, max_steps=2, seq_len=32, include_short_samples=Fal
     # Each text is an independent LM example; never concatenate unrelated chats.
     min_tokens = 3 if include_short_samples else 8
     train_ids = select_ids(train, tokenizer, seq_len, max_steps, min_tokens=min_tokens)
-    val_ids = select_ids(valid, tokenizer, seq_len, 1, min_tokens=min_tokens)
+    val_ids = select_ids(valid, tokenizer, seq_len, min(8, max_steps), min_tokens=min_tokens)
     if not train_ids or not val_ids:
         raise ValueError("Insufficient nontrivial train or validation examples")
     # Only aggregate counters and losses leave GPU; no decoded strings or token IDs logged.
@@ -89,7 +106,7 @@ def run(train, valid, out, *, max_steps=2, seq_len=32, include_short_samples=Fal
                         labels=labels, use_cache=False)
         model.eval()
         with torch.no_grad():
-            before = float(model(**inputs(val_ids[0])).loss.item())
+            before = sum(float(model(**inputs(ids)).loss.item()) for ids in val_ids) / len(val_ids)
         if not math.isfinite(before):
             raise RuntimeError("Nonfinite validation baseline")
         model.train()
@@ -107,7 +124,7 @@ def run(train, valid, out, *, max_steps=2, seq_len=32, include_short_samples=Fal
             del res
         model.eval()
         with torch.no_grad():
-            after = float(model(**inputs(val_ids[0])).loss.item())
+            after = sum(float(model(**inputs(ids)).loss.item()) for ids in val_ids) / len(val_ids)
         if not math.isfinite(after):
             raise RuntimeError("Nonfinite validation after")
         torch.cuda.synchronize()
@@ -116,6 +133,8 @@ def run(train, valid, out, *, max_steps=2, seq_len=32, include_short_samples=Fal
             "status": "trained_local_smoke", "model": MODEL,
             "single_speaker_lm": True, "steps": len(losses), "seq_len": seq_len,
             "short_samples_enabled": bool(include_short_samples),
+            "validation_samples": len(val_ids),
+            "sampling": "deterministic_even_spread",
             "min_token_length": min_tokens,
             "trainable_params": sum(p.numel() for p in model.parameters() if p.requires_grad),
             "validation_loss_before_adapter_update": round(before, 4),
@@ -123,7 +142,7 @@ def run(train, valid, out, *, max_steps=2, seq_len=32, include_short_samples=Fal
             "last_training_loss": losses[-1],
             "peak_allocated_mib": round(torch.cuda.max_memory_allocated()/1048576, 1),
             "free_after_mib": round(free/1048576, 1),
-            "warning": "One validation sample and a few steps are not a model-quality evaluation. Before value is an untrained adapter, not a separate untuned-base benchmark."
+            "warning": "Few validation samples and steps are not a model-quality evaluation. Before value is an untrained adapter, not a separate untuned-base benchmark."
         }
         out.mkdir(parents=True, exist_ok=True)
         model.save_pretrained(out, safe_serialization=True)
