@@ -419,3 +419,9 @@
 
 ## 2026-10-18 — Windows regression now green
 - User confirmed `Ran 161 tests in 0.400s OK` after syntax fix in tools/train_persona_lora.py. This confirms unit tests only; real owner-data training, complete privacy review and model quality validation are still pending.
+
+## 2026-10-18 — Gemma 4 12B transition (NOT YET WINDOWS VALIDATED)
+- User selected Gemma4 12B IT as primary candidate. Official HF model google/gemma-4-12B-it, standalone ~23.9 GB safetensors download; official current Transformers examples use multimodal auto model. Official Transformers Gemma4ForConditionalGeneration class available on supported recent releases. Source: https://huggingface.co/google/gemma-4-12B-it and https://huggingface.co/docs/transformers/model_doc/gemma4 .
+- Keep existing fully verified Gemma3 4B scripts and .venv-train intact; installed transformers 4.57.6 previously, so Gemma4 might require newer version in a new isolated environment, do not silently update other project envs.
+- Added tools/probe_gemma4_12b.py: lightweight config access/CUDA/class preflight by default. To explicitly download and load ~24GB weights requires BOTH --allow-load and --allow-download. Results to local_data/gemma4-12b-probe.json. Added tools/smoke_gemma4_12b_lora.py synthetic cached NF4 LoRA optimizer test, --allow-synthetic-step, no user messages. Added 4 static unit tests. Expected Windows total 165 (previous 161), not verified.
+- Gemma4 12B NF4 and LoRA compatibility/VRAM not verified! User must run staged checks and share sanitized reports before selecting training strategy. Hardware 16GB RTX 4070 Ti SUPER; 12B QLoRA OOM is possible, do not promise it fits. Local approved corpus and private training still not run.
