@@ -454,3 +454,9 @@
 - [x] User 176 tests pass; identify PS 5.1 Korean encoding parse failure in synthetic E2E script.
 - [x] Switch PowerShell source to ASCII-only with fixed UTF-8 Base64 synthetic Korean sentences; add regression test.
 - [ ] Windows 177 tests and actual end-to-end GPU adapter save, report verification.
+
+## 2026-10-18 — Gemma4 synthetic end-to-end successful
+- [x] Windows 177/177 unittest OK and 2-step Gemma4 NF4 synthetic training with validated local safetensors adapter output.
+- [x] Verify uploaded adapter header contains 176 float32 tensors, 2,596,864 scalar weights and expected q/v LoRA configuration.
+- [ ] Reload saved LoRA into cached Gemma4 12B base and run controlled safe inference; compare no-adapter path on same fixed prompt.
+- [ ] Review owner-data source rights and contextual privacy, near-duplicate/temporal leakage, then approved real-data training and held-out quality checks.
