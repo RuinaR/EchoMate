@@ -345,3 +345,8 @@
 - [x] Tiny authenticated config-only gated access probe implemented.
 - [ ] Browser acceptance on same account and fine-grained token scopes; 149 tests and config probe result.
 - [ ] Once granted, opt-in model load VRAM and synthetic adapter gradient QA. Discord corpus rights and privacy gating still pending.
+
+## 2026-10-18 Gemma access cleared for config
+- [x] Windows 149 tests OK and official Gemma3 4B config downloaded under current HF authentication.
+- [ ] Confirm weight download and NF4 VRAM loading under real GPU; configure error diagnosis if failure persists.
+- [ ] Synthetic backward LoRA test before private dataset training; rights and privacy review not complete.
