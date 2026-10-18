@@ -133,16 +133,16 @@ def main():
         p.error("invalid evaluation frequency or patience")
     if not 0<=args.checkpoint_every<=args.steps or args.min_delta<0:
         p.error("invalid checkpoint frequency or min delta")
-    train,valid,out=validate(args.train,args.validation,args.output,
+    train_path,valid_path,out=validate(args.train,args.validation,args.output,
         approved=args.approve_private_training,
         rights_confirmed=args.confirm_rights,
         privacy_reviewed=args.confirm_privacy_review,
         max_steps=2,seq_len=32)
     if out.exists():
         p.error("output must not exist; use a new local directory")
-    args.train,args.validation,args.output=train,valid,out
+    args.train,args.validation,args.output=train_path,valid_path,out
     print("Starting approved LOCAL Gemma4 QLoRA protocol; no upload.")
-    result=train_run=train(args)
+    result=train(args)
     print("Run completed:",result["status"],"summary:",out/"summary.json")
     return 0
 
