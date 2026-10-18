@@ -268,3 +268,6 @@
 
 ## 2026-10-18 CUDA persona bootstrap
 - User 134 Windows tests OK. GPU RTX 4070 Ti SUPER 16GB, torch CPU-only. Added isolated Python 3.10 environment PowerShell setup, CUDA tensor verification, optional training libraries, 3 tests. Expected 137 tests; user GPU result pending. No dataset or model weights involved.
+
+## 2026-10-18 — CUDA GPU ready, toolchain pending
+- Windows user reports 137 tests OK, isolated torch 2.9.1+cu128 runtime 12.8 RTX 4070 Ti SUPER CUDA calculation success. NumPy missing warning observed; optional install now includes NumPy and import smoke test. Actual QLoRA fine-tuning not started.
