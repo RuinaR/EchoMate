@@ -182,3 +182,9 @@
 - 신규 `style_diagnostics.py`: 다중 채널 스트리밍 입력의 글자 수 분포와 문장 종료 패턴 최근 가중 집계. **내용·예시·고유 ID·시각·단어는 내보내지 않음**. 정규식 이스케이프 교정까지 완료. Windows 아직 미검증.
 - 신규 `tuning_readiness.py`: 로컬 권리·보안·분할·환경·QA 준비상태 리포트. 실제 학습/원문 출력 없음. 테스트 4개 추가(기존 72개 + 신규 4개 = 76개 예상). 원본 JSON/비공개 파일 GitHub 커밋 금지.
 - 다음: 76개 테스트와 진단 리포트 사용자 Windows 실행 확인, 권리 확인 이후에만 안전한 데이터셋 추출 및 학습 파이프라인 구현.
+
+## 2026-10-18 — Windows 76개 QA 및 스타일 진단 정규식 오류 수정
+- 사용자 Windows 76개 테스트 모두 OK. 로컬 style-diagnostics.json: 원본 304,997건, 필터된 텍스트 270,989건. 최근 가중 길이 0–5자 48.18%, 6–12자 38.76%, 13–25자 11.68%, 26–50자 1.31%, 51+자 0.07%.
+- 그러나 ending_rates 전체 0.0: `style_diagnostics.py` 정규식이 raw string 안에서 `\\s`/`\\.`로 이중 이스케이프되어 정상 문장 끝을 감지하지 못한 것 확인. 정규식 교정하고 `tests/test_style_diagnostics.py` 3건 추가. 기존 76 + 신규 3 = 총 79개 예상, Windows 실행 전.
+- 튜닝 준비 보고서 status not_ready: rights_reviewed, owner_reviewed, training_data_screened, train_validation_split, compatible_base_weights_ready, qlora_environment_ready, baseline_quality_comparison_ready 모두 미완료. 실제 학습은 실행되지 않음.
+- 다음: 79개 테스트 및 사용자 원본 2개에서 style_diagnostics 재실행, 출력 확인. 데이터 사용 허가 판단 전 QLoRA 실학습은 보류.
