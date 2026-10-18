@@ -129,3 +129,10 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - 새 `echomate_studio.model_compare`: 동일 Style Profile 및 질문 5개를 두 모델에 번갈아 적용, 시간·실제 답변·QA 경고를 `local_data/model-comparison.json`에 기록.
 - 실행: `python -m echomate_studio.model_compare --models "qwen3.5:9b-q4_K_M" "gemma3:12b" --profile "local_data/style-profile.json" --rounds 2`
 - 실행 결과에는 대화 샘플·응답이 포함되므로 GitHub 커밋 금지. 모델별 로딩/VRAM 교체 비용이 포함될 수 있으므로 이 테스트만으로 순수 추론 속도 결론 내리지 말 것.
+
+## 2026-10-18 실제 Qwen vs Gemma 평가
+- 사용자 Windows 단위 테스트 66개 OK. Qwen3.5 9B와 Gemma3 12B 동일 Style Profile 적용 20응답 실측.
+- Gemma는 한국어 일상 반응이 상대적으로 자연스러우나 과거 정보가 제공되지 않은 질문에서 `7시`를 두 번 만들어 냄. Qwen은 `ㅋㅋㅋㅋ`에 중국어 응답 반복. 따라서 모델 선정은 보류.
+- `context_compare.py` 추가: 약속 시각 미제공, 9시 확정, 10시 변경, 웃음 맞장구의 합성 다중 턴 입력을 두 모델에 동일 비교.
+- 실행: `python -m echomate_studio.context_compare --models "qwen3.5:9b-q4_K_M" "gemma3:12b" --profile "local_data/style-profile.json"`
+- 리포트 `local_data/context-comparison.json`은 생성 텍스트 포함하므로 비공개·로컬 유지. 테스트 추가 4개, 총 70개 예상(Windows 검증 전).
