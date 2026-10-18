@@ -10,11 +10,11 @@ $out = Join-Path $root "adapter"
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 # Invented short snippets: no user content and no external API.
 [System.IO.File]::WriteAllLines($train, [string[]]@(
-    '{"text":"hi"}',
-    '{"text":"ok"}'
+    '{"text":"hello there friend"}',
+    '{"text":"sounds good to me"}'
 ), $utf8)
 [System.IO.File]::WriteAllLines($valid, [string[]]@(
-    '{"text":"yes"}'
+    '{"text":"thanks a lot"}'
 ), $utf8)
 $py = Join-Path $PWD ".venv-gemma4\Scripts\python.exe"
 if (-not (Test-Path $py)) { throw "Missing local Gemma4 Python environment." }
