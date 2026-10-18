@@ -23,3 +23,17 @@ The probe records safe category, stage, versions, and GPU memory in ignored `loc
 - Confirmed from user Windows report: 165 previous unit tests OK, but old Gemma4 probe failed to import under Transformers 4.57.6.
 - This change supplies a separate installation script and replaces direct model class import with official multimodal auto class; **Windows environment installation, HF config preflight, NF4 checkpoint load and Gemma4 optimizer step remain unverified**.
 - Original owner-exported Discord private messages are NOT used in any of these stages. Corpus rights, review and leakage testing remain independent blockers before actual personal-data fine-tuning.
+
+## 2026-10-18 — Final pre-persona-training checks
+After the Windows-saved synthetic adapter exists, execute from project root:
+```powershell
+$env:PYTHONPATH = 'src'
+python -m unittest discover -s tests -v
+.\\.venv-gemma4\\Scripts\\python.exe .\\tools\\probe_gemma4_adapter_reload.py --run-gpu
+```
+The adapter reload report is `local_data/gemma4-adapter-reload.json` and compares exactly two invented short prompts with adapter disabled versus loaded; this cannot prove persona quality.
+An optional private-data gate exists (only after local approved JSONL is created):
+```powershell
+python .\\tools\\gemma4_corpus_preflight.py
+```
+Preflight may report exact overlap, basic ID/URL hints and bounded approximate near duplicates. It does not validate timestamps, semantics, actual consent or training rights and must never be taken as automatic authorization. No owner-message training has been run.
