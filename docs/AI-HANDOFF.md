@@ -409,3 +409,7 @@
 
 ## 2026-10-18 — Windows 158 tests confirmed
 - User ran `python -m unittest discover -s tests -v`: 158 tests OK. `persona_dataset.py` synthetic approval, chronological split and leakage tests passed. Actual private data corpus export and QLoRA on owner data remain NOT executed. Next: contextual privacy/near-duplicate review and measured adapter evaluation.
+
+## 2026-10-18 — Local owner-data LoRA trainer added, not run
+- User confirmed Windows 158 tests OK. Added tools/train_persona_lora.py gated `--approve-private-training` and existing local_data/train+validation files. Offline Gemma 3 4B NF4 q/v LoRA rank4, max 100 steps/seq512 (defaults 20 steps/128), local-only PEFT checkpoint, single held-out loss smoke comparison. Must not claim full model evaluation from one example.
+- New tests/test_train_persona_lora.py 3 tests. Expected Windows suite 161, not yet verified. **No private corpus export, actual user-message training or final evaluation performed.** The dataset builder requires independent rights and privacy-review flags. Need improve sensitive contextual data handling, near duplicate leakage, training sample quality and evaluation before user flags are asserted.
