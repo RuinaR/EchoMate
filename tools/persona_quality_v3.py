@@ -107,6 +107,40 @@ def generate(tokenizer, model, messages, budget, seed):
         seconds=round(time.monotonic()-start,3))
 
 
+def generate_policy_batch(tokenizer, model, prompts, budget, seed, width):
+    """Same three slots and left-padding width across weights; no cross-row context.
+
+    Legacy/120 slot three duplicates v3, so only declared prior variants are
+    scored. Batch time is shared, never summed as per-response GPU time.
+    """
+    import torch
+    from transformers import set_seed
+    if torch.cuda.mem_get_info()[0] < 2*1024**3:
+        raise RuntimeError("Insufficient free VRAM for fixed policy batch")
+    set_seed(seed)
+    encoded = [encode(tokenizer,m) for m in prompts]
+    if len(encoded)!=3 or any(len(ids)>width for ids in encoded):
+        raise ValueError("Fixed three-slot width required")
+    pad=tokenizer.eos_token_id
+    ids=torch.tensor([[pad]*(width-len(row))+row for row in encoded],device="cuda")
+    mask=torch.tensor([[0]*(width-len(row))+[1]*len(row) for row in encoded],device="cuda")
+    end=tokenizer.convert_tokens_to_ids("<turn|>")
+    started=time.monotonic()
+    with torch.inference_mode():
+        output=model.generate(input_ids=ids,attention_mask=mask,max_new_tokens=budget,
+            do_sample=False,use_cache=True,eos_token_id=[pad,end],pad_token_id=pad)
+    duration=round(time.monotonic()-started,3)
+    results=[]
+    for i,row in enumerate(output[:,width:].tolist()):
+        stop=next((j+1 for j,t in enumerate(row) if t in (pad,end)),len(row))
+        tokens=row[:stop]
+        results.append(dict(response=tokenizer.decode(tokens,skip_special_tokens=True).strip(),
+            tokens=len(tokens),input_tokens=len(encoded[i]),padded_input_tokens=width,
+            ended=bool(tokens and tokens[-1] in (pad,end)),seconds=duration,
+            timing="shared_batch_wall_time",batch_slot=i,batch_size=3))
+    return results
+
+
 def load(plan):
     tokenizer, model = exp.load_model(exp.private_path(plan["adapters"]["r8_60"]))
     for name in ("legacy", "r8_120"):
@@ -207,7 +241,7 @@ def systems(stage):
     return values
 
 
-def run(root, stage, name, pilot_cases=None):
+def run(root, stage, name, pilot_cases=None, pilot_v3_only=False, batch_policies=False):
     import torch, transformers, peft
     root = exp.private_path(root)
     if not re.fullmatch(r"[a-z0-9-]+", name):
@@ -219,6 +253,10 @@ def run(root, stage, name, pilot_cases=None):
             exp.PRIVATE/"reviewed/validation.jsonl") != plan["validation_sha256"]:
         raise ValueError("Reviewed data changed since plan freeze")
     cases = PILOT if stage == "pilot" else HOLDOUT
+    if pilot_v3_only and stage != "pilot":
+        raise ValueError("Reduced policy repeats are pilot-only; holdout matrix is fixed")
+    if pilot_v3_only and batch_policies:
+        raise ValueError("Batch repeats retain all pilot policy controls")
     if fingerprint(cases) != plan[stage+"_sha256"]:
         raise ValueError("Frozen case set changed")
     if pilot_cases:
@@ -253,9 +291,13 @@ def run(root, stage, name, pilot_cases=None):
         started_utc=datetime.now(timezone.utc).isoformat(),
         torch=torch.__version__, transformers=transformers.__version__, peft=peft.__version__,
         precision="bf16_nf4", do_sample=False, seed=plan["seed"],
-        policy_weight_factorial=True, human_review="pending", production_approved=False)
+        policy_weight_factorial=not pilot_v3_only, pilot_v3_only=pilot_v3_only,
+        generation_batch_size=3 if batch_policies else 1,
+        batch_note=("Fixed width/slots across weights. Third legacy/120 slot duplicates v3, retained only as diagnostic."
+                    if batch_policies else "Single-sequence independent calls."),
+        human_review="pending", production_approved=False)
     exp.write_json(out/"manifest.json", metadata)
-    results, decisions = [], {}
+    results, decisions, shadows = [], {}, []
     exp.write_json(out/"progress.json", dict(status="loading", completed_cases=0, total_cases=len(cases)))
     started = time.monotonic()
     try:
@@ -266,14 +308,23 @@ def run(root, stage, name, pilot_cases=None):
         exp.write_json(out/"manifest.json", metadata)
         torch.cuda.reset_peak_memory_stats()
         for i, case in enumerate(cases):
+            case_seed = plan["seed"]+(PILOT if stage == "pilot" else HOLDOUT).index(case)
+            batch_cache = {}
+            common_prompts = [
+                [{"role":"system","content":exp.STYLE+POLICY_V2}, *case["context"]],
+                build_v3_messages(case["context"])[0],
+                build_v3_messages(case["context"],profile=profile)[0]]
+            batch_width = max(len(encode(tokenizer,m)) for m in common_prompts) if batch_policies else 0
             if (root/"STOP").exists():
                 raise InterruptedError("Manual evaluation stop")
             exp.gpu_health()
-            autonomy = assess_autonomy(tokenizer, model, case, plan["seed"]+i) if case["autonomous"] else None
+            autonomy = assess_autonomy(tokenizer, model, case, case_seed) if case["autonomous"] else None
             if autonomy:
                 decisions[case["id"]] = autonomy
                 exp.write_json(out/"participation.json", decisions)
             for weight, policy, prior in systems(stage):
+                if pilot_v3_only and (policy != "v3" or prior):
+                    continue
                 if (root/"STOP").exists():
                     raise InterruptedError("Manual evaluation stop between responses")
                 health = exp.gpu_health()
@@ -288,12 +339,25 @@ def run(root, stage, name, pilot_cases=None):
                     generated = dict(response="", tokens=0, input_tokens=0, ended=True, seconds=0., silence=True)
                 else:
                     with activate(model, weight):
-                        generated = generate(tokenizer, model, messages, case["max_new_tokens"], plan["seed"]+i)
+                        if batch_policies:
+                            if weight not in batch_cache:
+                                prompts = common_prompts if weight in ("base","r8_60") else common_prompts[:2]+[common_prompts[1]]
+                                batch_cache[weight] = generate_policy_batch(tokenizer,model,prompts,
+                                    case["max_new_tokens"],case_seed,batch_width)
+                                if weight not in ("base","r8_60"):
+                                    shadows.append(dict(case=case["id"],weight=weight,
+                                        **batch_cache[weight][2],
+                                        identical_to_v3=batch_cache[weight][1]["response"]==batch_cache[weight][2]["response"]))
+                                    exp.write_json(out/"batch-shadow.json",shadows)
+                            generated = batch_cache[weight][2 if prior else 0 if policy=="v2" else 1]
+                        else:
+                            generated = generate(tokenizer, model, messages, case["max_new_tokens"], case_seed)
                 text = generated["response"]
                 normalized = exp.normalize(text)
                 row = dict(case=case["id"], category=case["category"], system=label,
                     weight=weight, policy=policy, profile=prior, intent=intent,
                     budget=case["max_new_tokens"], **generated, chars=len(text),
+                    generation_seed=case_seed,
                     prompt_sha256=fingerprint(messages), style_features=text_features(text),
                     signals=reference_signals(text, case["checks"]),
                     exact_train_match=bool(normalized and normalized in texts),
@@ -346,7 +410,8 @@ def report(root, name):
     prompt_groups = defaultdict(set)
     for row in data["results"]:
         if not row.get("derived_from"):
-            prompt_groups[(row["case"], row["policy"], row["profile"])].add((row["prompt_sha256"], row["budget"]))
+            prompt_groups[(row["case"], row["policy"], row["profile"])].add((row["prompt_sha256"], row["budget"],
+                row.get("generation_seed"), row.get("batch_size"), row.get("padded_input_tokens")))
     if any(len(values) != 1 for values in prompt_groups.values()):
         raise ValueError("Same-policy weight comparisons must have identical prompts/budgets")
     summary = {}
@@ -409,9 +474,11 @@ def main():
     p.add_argument("--stage",choices=["pilot","holdout"],default="pilot")
     p.add_argument("--name",default="pilot-a")
     p.add_argument("--pilot-cases", nargs="+", help="Optional pilot-only repeat subset; holdout cannot be subset")
+    p.add_argument("--pilot-v3-only", action="store_true", help="Repeat changed pilot v3 only; preserved v2 controls remain in pilot-a")
+    p.add_argument("--batch-policies",action="store_true",help="Three-slot policy batches with identical padding width across weights")
     args=p.parse_args()
     if args.mode=="prepare": prepare(args.root)
-    elif args.mode=="run": run(args.root,args.stage,args.name,args.pilot_cases)
+    elif args.mode=="run": run(args.root,args.stage,args.name,args.pilot_cases,args.pilot_v3_only,args.batch_policies)
     else: report(args.root,args.name)
 
 

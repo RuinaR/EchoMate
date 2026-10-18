@@ -59,6 +59,9 @@ def run(root):
             labels[:,:len(prefix)+8] = -100
             expected = tokenizer.decode(body[8:],skip_special_tokens=True)
             for weight in ("base","legacy","r8_60","r8_120"):
+                if (root/"STOP").exists():
+                    raise InterruptedError("Manual prefix diagnostic stop")
+                exp.gpu_health()
                 with quality.activate(model,weight), torch.inference_mode():
                     target_nll = float(model(input_ids=full_ids,labels=labels,use_cache=False).loss)
                     output = model.generate(input_ids=ids,attention_mask=torch.ones_like(ids),
