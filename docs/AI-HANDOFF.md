@@ -220,3 +220,10 @@
 - `test_engagement_expires_or_changes_topic`: 참여 지속 만료 300초는 cooldown 180초도 이미 지나 일반 자율 확률 0 때문에 `frequency_gate`가 맞음. 테스트 기대값 수정.
 - `test_engagement_still_respects_safety`: 테스트의 마지막 발언 300초 후는 기본 180초 연속성 TTL 초과였음. 5초로 변경해 실제 지속 참여 중 민감도 차단 검증.
 - 기존 코드 기준 96개 테스트 유지, 수정 후 Windows 재검증 전. 멘션·참여 지속은 아직 Discord Gateway 미연동.
+
+## 2026-10-18 — 활성 참여 판단: 시간보다 실제 대화 맥락 우선
+- 사용자 Windows 96개 unittest 전체 OK 확인.
+- Discord 대화에서 몇 분 이상의 텀도 자연스러움: 기본 `EngagementPolicy.max_gap_seconds=None`으로 하드 타임아웃 제거. 선택적으로 양수 제한 설정 가능.
+- `continue_engagement`는 이전 참여 상태, 봇에게 향한 발언, 주제 연속성이라는 **세 신호 모두 참일 때만** 확률/자율 쿨타임 우회. 단순 시간 근접만으로 참여 상태를 만들 수 없으며, 시간이 길어도 세 신호가 살아 있으면 연속 대화로 허용.
+- tests/test_engagement.py: 1시간 연속성, 즉각 주제 전환 종료; tests/test_turn_pipeline.py: 기본 300초 이어짐, 관련 증거 없으면 자동 진입 안 함 테스트 추가. **총 97개 예상, 새 Windows 검증 전.**
+- 중요: 실제 Discord 이벤트 기반으로 발언 대상/스레드/답장 대상/주제 연속성 판정하는 구현은 여전히 미연결. 이 세 인자를 무조건 true로 전달하면 안 됨.
