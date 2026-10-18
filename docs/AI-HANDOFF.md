@@ -328,3 +328,8 @@
 - `.venv-train` creation succeeded. PyTorch 2.9.1+cu128 installed, CUDA runtime 12.8, actual tensor operation succeeded on NVIDIA RTX 4070 Ti SUPER. PyTorch emitted warning `No module named numpy`; this warning did NOT fail CUDA test.
 - Updated optional training library installation to include `numpy>=1.26,<3`, `pip check`, and import smoke test for NumPy, Torch, Transformers, PEFT, TRL, Accelerate, bitsandbytes, datasets.
 - Next Windows step: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`; `.\tools\setup_persona_training.ps1 -SkipTorchInstall -InstallTrainingLibraries`. Confirm output before any model download; training data permissions/manual review remain pending. No training performed.
+
+## 2026-10-18 — Windows full QLoRA stack install succeeded; PowerShell import check quoting bug
+- User: local torch 2.9.1+cu128 RTX 4070 Ti SUPER GPU test OK, Python packages numpy 2.2.6 / transformers 4.57.6 / peft 0.21.2 / trl 0.29.1 / accelerate 1.15.0 / bitsandbytes 0.50.2 / datasets 4.8.5 installed. `pip check`: No broken requirements found.
+- Setup errored ONLY at Python inline `-c` PowerShell quote parsing; imports not tested. Replaced with local tools/verify_training_stack.py and added 3 mocked tests; 140 expected user Windows tests. Avoid repeating multi-GB torch downloads; run `.venv-train\Scripts\python.exe tools\verify_training_stack.py` and `python -m unittest discover -s tests -v`.
+- Real fine-tuning / weights downloads have NOT started. Dataset rights and manual private data review still pending.
