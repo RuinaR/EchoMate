@@ -525,3 +525,7 @@
 ## 2026-10-18 — Windows 184 tests successful
 - User ran `python -m unittest discover -s tests -v`: 184 tests, 0.476s, OK. Includes new two-character expression retention/heldout synthetic unit test.
 - This validates unit behavior only. Gemma4 current trainer still skips token sequences under 8 IDs; short-style corpus retention is not proof of short-expression learning. No original Discord messages trained or committed.
+
+## 2026-10-18 — Standalone short-token Gemma4 training selection implementation
+- Windows previously verified 184/184 unit tests OK (0.476s). Updated `tools/train_persona_gemma4.py` with explicit optional `--include-short-samples` lowering minimum tokenized sample length from 8 to 3 IDs; defaults unchanged. Every JSONL record stays an independent causal-LM example: **do not pack unrelated conversations together**. Added sample-selection regression test, expect 185 Windows tests (NOT run yet).
+- `--preserve-two-char` approved corpus builder option and new trainer flag are separate; neither option authorizes source reuse or privacy clearance. Very short examples may be skipped if fewer than 3 tokenizer IDs; results reflect experiment selection only, not learned speaking style. No owner data trained.
