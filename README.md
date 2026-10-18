@@ -147,3 +147,8 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - 직접 확인한 두 공식 개인 메시지 파일은 각각 독립 채널의 역시간순 단일 화자 기록. 인접한 메시지를 대화 Q/A로 취급하지 않음.
 - `python -m echomate_studio.corpus_audit <file1.json> <file2.json> --output local_data/corpus-audit.json`으로 중복 횟수·민감문구 가능성·시간 정렬 등을 집계(원문/ID/예시 출력하지 않음).
 - 원본은 **절대 공개 GitHub에 커밋 금지**. `.gitignore`는 무심코 새로 추가하는 것을 줄일 뿐, 이미 추적 중인 내용을 삭제하지 않으므로 사전 확인 필요.
+
+## 활성 대화 중 답변 규칙
+- 봇이 처음 자율적으로 끼어들 때는 자율 확률/쿨타임을 적용하지만 이미 대화에 참여 중이면 `engagement.py`의 연속성 조건이 충족되는 한 그 제한을 재적용하지 않음.
+- 무조건 모든 메시지에 반응하지 않도록 봇을 향한 말인지, 같은 주제인지, 최근 대화인지 구분하고 유용성·민감도·허용 범위와 최신 스냅샷을 확인.
+- Discord gateway 실제 연속성 판별은 아직 연결 전. 기존 bot mention regex 오류 수정 및 테스트 보강.
