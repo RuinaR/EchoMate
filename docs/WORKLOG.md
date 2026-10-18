@@ -401,3 +401,7 @@
 ## 2026-10-18 — Two-character style preservation opt-in
 - Extended local-only approved dataset builder to optionally retain two-character expressions (e.g. laughter reactions) while keeping global holdout duplicate protection. Default exclusion unchanged. One regression test added, expect Windows 184 tests. No owner-data training or corpus build.
 - Follow-up required: short records may fail trainer >=8-token sampling; do not equate corpus retention with model learning.
+
+## 2026-10-18 — Windows 184 tests successful
+- User ran `python -m unittest discover -s tests -v`: 184 tests, 0.476s, OK. Includes new two-character expression retention/heldout synthetic unit test.
+- This validates unit behavior only. Gemma4 current trainer still skips token sequences under 8 IDs; short-style corpus retention is not proof of short-expression learning. No original Discord messages trained or committed.
