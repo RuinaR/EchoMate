@@ -422,3 +422,6 @@
 ## 2026-10-18 — Privacy gate and split audit alignment
 - 188 prior Windows tests passed. Count-only local owner export scan: 3,963 URL matches and 7,995 Discord mention matches across both files (some may overlap), no direct token= pattern detected. No original texts copied to GitHub.
 - Added URL/Discord mention/credential-like exclusions to training candidacy; harmonized per-file split audit to global UTC chronological cutoff. Two synthetic tests; expected 190 Windows tests, not yet run. No personal-data model training.
+
+## 2026-10-18 — 190-test privacy classifier fix awaiting Windows verification
+- Windows 190 suite had one failed classifier test: raw URL-only text was normalized to empty before identifier scan. Regexes for URL and secret markers also had excess backslash escaping. Corrected both: identify sensitive raw patterns before normalization and use single regex escapes. No model failure and no owner-data training. Re-run Windows 190 tests.
