@@ -321,3 +321,8 @@
 - [x] Synthetic CUDA bitsandbytes NF4 operation and VRAM probe added.
 - [ ] Windows 143 tests and actual GPU NF4 report.
 - [ ] Model access/rights and memory-constrained controlled 4B QLoRA feasibility, after private dataset review and source policy checks.
+
+## 2026-10-18 — Verified GPU NF4 baseline
+- [x] Windows 143/143 unit tests and synthetic bitsandbytes NF4 kernel succeeded.
+- [ ] Verify actual Gemma 3 base weights access/license, local 4-bit model load and VRAM.
+- [ ] Verify user export training rights and sensitive content screening before creating private tuning dataset.
