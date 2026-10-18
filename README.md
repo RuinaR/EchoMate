@@ -118,3 +118,8 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - 단일 질문 1회 결과로 평가하지 않고, `python -m echomate_studio.ab_probe --profile local_data/style-profile.json --rounds 2`로 4개 합성 질문을 프로필 사용/미사용 교차순서로 비교 가능.
 - 결과는 `local_data/ab-results.json`에 저장되며 **대화 예시와 생성 응답**이 포함되므로 GitHub에 올리지 말 것.
 - 실제 품질 개선/속도 단축은 아직 Windows 반복 테스트 전.
+
+## 2026-10-18 A/B 품질 경고 기반
+- 이전 실험 16회에서 기본/스타일 프롬프트 모두 역할 혼동과 문맥 벗어남이 관찰돼 시스템 프롬프트를 단순화.
+- `reply_quality.inspect_reply`는 게임 접속 약속·검증되지 않은 서비스 종료·화제 이탈 등 **검토 후보**를 자동 기록. 의미적 정확도 확정 판정기가 아님.
+- `ab_probe` 출력 JSON에 `quality_flags` 추가. 신규 테스트 4개는 Windows 검증 전.
