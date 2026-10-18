@@ -181,3 +181,6 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 
 ## 페르소나 QLoRA 로컬 환경 검사
 - `python -m echomate_studio.qlora_environment --gpu`는 NVIDIA GPU와 PyTorch/Transformers/PEFT/TRL/Accelerate/bitsandbytes/datasets 설치 버전만 조사해 `local_data/qlora-environment.json` 생성. 다운로드·설치·학습하지 않음. Ollama GGUF 추론 모델은 훈련 가능한 가중치와 별개.
+
+## Persona training environment bootstrap (not model training)
+- Windows: `.\tools\setup_persona_training.ps1` creates ignored `.venv-train` using Python 3.10, installs CUDA PyTorch 2.9.1 from official cu128 index, and verifies a CUDA tensor operation; existing Python stays unchanged. Optional `-SkipTorchInstall -InstallTrainingLibraries` installs training toolchain only after CUDA check and pip dependency validation. Requires compatible NVIDIA driver and internet, potentially multi-GB downloads. No private data accessed or model trained; training rights and model access are separate gates.
