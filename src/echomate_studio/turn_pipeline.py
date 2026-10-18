@@ -78,7 +78,7 @@ def evaluate_turn(*, state: DialogueState, policy: ParticipationPolicy,
         return TurnResult(None, "assessor_error", version)
     if not isinstance(assessment, ContextAssessment):
         return TurnResult(None, "invalid_assessment", version)
-    if assessment.is_sensitive_moment or not assessment.has_useful_contribution or (
+    if assessment.is_sensitive_moment or (not directed and not assessment.has_useful_contribution) or (
             not directed and not continuing and not assessment.interruption_is_appropriate):
         return TurnResult(None, "context_veto", version)
     if not state.is_current(channel_id=channel_id, thread_id=thread_id, version=version):
