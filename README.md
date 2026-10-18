@@ -142,3 +142,8 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - `python -m echomate_studio.style_diagnostics <채널JSON들> --output local_data/style-diagnostics.json`: 원문/고유 표현을 저장하지 않는 집계형 스타일 분석.
 - `python -m echomate_studio.tuning_readiness --source-kind official-personal-data-package`: 학습 권한 및 안전성 준비 게이트 리포트. `--permission-confirmed`는 독립적으로 학습 권한을 확인하기 전에는 사용하지 말 것.
 - 메시지 학습셋·원본·어댑터 및 개인정보는 GitHub에 커밋 금지. 학습 가능한 Hugging Face 기반 가중치는 Ollama 설치 모델과 별개.
+
+## 원본 JSON 안전 코퍼스 점검
+- 직접 확인한 두 공식 개인 메시지 파일은 각각 독립 채널의 역시간순 단일 화자 기록. 인접한 메시지를 대화 Q/A로 취급하지 않음.
+- `python -m echomate_studio.corpus_audit <file1.json> <file2.json> --output local_data/corpus-audit.json`으로 중복 횟수·민감문구 가능성·시간 정렬 등을 집계(원문/ID/예시 출력하지 않음).
+- 원본은 **절대 공개 GitHub에 커밋 금지**. `.gitignore`는 무심코 새로 추가하는 것을 줄일 뿐, 이미 추적 중인 내용을 삭제하지 않으므로 사전 확인 필요.
