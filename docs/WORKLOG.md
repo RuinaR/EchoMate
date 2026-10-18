@@ -289,3 +289,6 @@
 
 ## 2026-10-18 Gemma 3 4B access diagnostic
 - Windows 147 QA OK, full-model load OSError categorized as access denied; HF whoami succeeded. Added config.json-only auth probe and 2 tests, no weights download. Expected 149 Windows tests.
+
+## 2026-10-18 Gemma config access OK
+- User confirmed Windows 149 tests OK and google/gemma-3-4b-it config.json access succeeded. Real weight download/VRAM load still unverified; previously denied. Next is opt-in load retry.
