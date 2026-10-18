@@ -350,3 +350,7 @@
 - Local private-data-free JSON report: model google/gemma-4-12B-it, status=ok, synthetic_only=true, seq_len=32, trainable_params=2,596,864, loss=32.8467, peak_allocated_mib=11163.6, free_after_mib=2418.9.
 - Confirms a single NF4 LoRA forward/loss/backward/AdamW optimizer step on RTX 4070 Ti SUPER 16GB. Loss is from repeated synthetic tokens and NOT a language quality score. Free-after is only ~2.36 GiB; longer sequences/batches, concurrent GPU apps and full corpus training remain unverified/OOM risks.
 - Keep `.venv-train` and Gemma3 fallback unchanged. Next: conservative length32 multi-step synthetic GPU memory/stability, validate tokenizer/actual Gemma4 text-only label masking, ensure private reviewed corpus governance, then small approved offline training and held-out baseline/adapter evaluation. No personal Discord messages trained yet.
+
+## 2026-10-18 — Gemma4 synthetic tokenizer / repeated-step QA implementation
+- Preserved working Gemma3 and Gemma4 single-step results. Enhanced Gemma4 synthetic-only smoke with `--steps` (1..3), `--tokenizer-smoke` (fixed synthetic Korean words), finite loss checks, stage-coded failures and aggregate-only loss/memory metrics.
+- Added tests/test_gemma4_extended_synthetic.py (3 regression tests). Previously user reported 168 tests OK. New suite and CUDA multi-step paths remain Windows UNVERIFIED. No private messages read or output.
