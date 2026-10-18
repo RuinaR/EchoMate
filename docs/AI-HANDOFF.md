@@ -1,12 +1,30 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
-마지막 갱신: 2026-10-18
+마지막 갱신: 2026-10-19
 저장소: https://github.com/RuinaR/EchoMate
 진행: **로컬 ML 품질 개선 실험**. 기존 300/2,500단계 개인 어댑터 학습 완료를 로컬 결과에서 확인. Discord 실서비스 연결은 미완료.
 
-## 최신 인수인계 — 먼저 읽기 (2026-10-18)
+## 추가 품질 단계 — 이 절을 먼저 읽기 (2026-10-19)
 
-이 절과 `CURRENT-STATUS.md`, `ML-EXPERIMENTS.md`가 아래 누적 과거 기록보다 우선한다. 과거의 “학습 미시작”은 당시 상태다.
+1. **실사용 최적 모델 미확정.** 기존 rank8 q/k/v/o 60단계 + 정책 v2는 보존된 잠정 후보다. 정책 v3/prior/가중치 hybrid/보수적 selective는 새 오프라인 비교 후보이며 자동 승격하지 않는다. bounded native thinking은 개발 문항의 응답 완결성 실패로 독립 평가에서 제외했다.
+2. **새 구현:** `response_policy.py`의 의도별 응답 지침, train만 쓰는 고정 표현·끝부분 문자열 prior, `persona_quality_v3.py`의 신규 pilot/holdout·가중치×정책 비교·원자 진행/부분 결과·GPU 적용/loss 검사·블라인드 보고서. `persona_memorization_probe.py`는 별도 비공개 prefix 노출 진단을 제공한다. 기존 참여/침묵/멘션/대화 지속/취소 코어와 실제 Bot 생성 경로는 변경하지 않았다.
+3. **미구현/미확인:** 대화 쌍 SFT, 상황별 개인 말투 감독, 사람의 말투 평가, 실제 Discord 서비스·GPU 서빙/동시성/취소 연동. 평가 KV cache의 정확한 재개는 없으며 기존 학습기의 optimizer/RNG 재개와 구분한다.
+4. **실제 검증:** 시작 시 기존 208건 통과, 추가 후 217건 통과(0.862초). GPU에서 정확한 masking/shifted CE 일치, 어댑터 3개의 logit 변화, 새 개발 8건·수정 재시험 5건·native 진단 1건을 실행했다. 추가 학습은 0단계다. 고정 독립 26건 × 실제 10조건/파생 2조건 완료: 2,482.5초, peak 8,498.6 MiB, 250개 실제 발화와 공통 침묵/재사용을 포함한 저장 312행. prefix 노출 16생성 및 출력 채널 forensic 6생성도 GPU 완료. 최종 테스트 217건 OK(0.935초). 상세는 `ML-EXPERIMENTS.md`. 고정 정책은 결과를 보고 수정하지 않았다.
+5. **위험:** full-v3의 장문/상한 도달, 농담·감정 keyword 라우팅 실패, 얕은 복사 설명 모순과 prior 응답의 채널 표시 혼입을 실제 확인했다. 신규 정책의 전반적 이득은 미확인이라 잠정 v2를 유지한다. 정확한 masking은 문맥 감독을 대체하지 않는다. 단일 화자 JSONL에서 상황/상대/관계·시간축 분리 복원 불가. prior의 접미 문자열/어휘는 형태소 분석이 아니며 질문 기호는 되묻기 근거가 아니다. 규칙 점수/짧은 출력/정상 EOS만으로 자연스러움·사실성·암기 안전을 선언하지 않는다.
+6. **다음:** 별도 key를 열기 전에 새 루트 `REVIEW-GUIDE.md` 및 `holdout-a/weights-v2.blind.md` 등으로 사용자 블라인드 평가 → 근거가 충분할 때만 다음 학습/서빙 실험 결정. holdout 결과로 다음 튜닝을 하면 그 집합을 개발용으로 은퇴시키고 새 최종 자료를 만든다. 승인되지 않은 원천/실제 상대 발언 추정 추가 금지.
+7. **Git:** 기존 변경 보존 `e6b6f6d`, 정책/평가 기반 `7342757`, 예비 보완 `af06093`, 독립 평가 고정 코드 `b62633e`, GPU 검증한 채널 진단 코드 `6493f7a`. 최종 문서 갱신을 포함한 실제 최신 HEAD는 `git log -1`, `git status --short`로 확인. GitHub push 없음. 모든 원문·응답·개인 모델은 `local_data/` 안에만 있다.
+8. **후속 검증:** 아래 명령과 `ML-EXPERIMENTS.md`의 신규 평가 명령을 사용한다. 새 산출물 루트는 `local_data/quality-v3-20261018/`. `preservation.json`에는 작업 전 217개 비공개 산출물 목록과 기존 13개 변경 소스의 백업 식별값이 있다. 기존 실험 폴더를 덮어쓰지 않는다.
+
+```powershell
+$env:PYTHONPATH='src'
+.\.venv-gemma4\Scripts\python.exe -m unittest discover -s tests -q
+git status --short
+git log -3 --oneline
+```
+
+## 이전 단계 인수인계 — 정책 v2 시점 기록 (2026-10-18)
+
+이 절은 정책 v2 당시 기록이다. 현재 상태는 상단 추가 품질 단계와 `CURRENT-STATUS.md`, `ML-EXPERIMENTS.md`가 우선한다. 과거의 “학습 미시작”은 당시 상태다.
 
 1. **실험용 후보: rank8 q/k/v/o 60단계 + 추론 정책 v2. 실사용 최적 모델은 미확정.** raw LM legacy-2500은 생성 개선이 미약했다. 새 rank8은 짧은 반응 변화와 개발 문맥 응답을 확인했으나, loss가 더 낮은 120단계 모델의 추가 생성 이득은 불명확해 60단계 모델을 보존했다. 어댑터는 `local_data/experiments/style-v2/pilot-r8-qkvo/step-00060`, 선정 기록은 `local_data/experiments/selection.json`. 사람의 개인 말투 평가는 없다. 정책 v1의 합성 최종 평가에서 역할/절차 완결성 실패가 발견돼 운영 승인하지 않았다. 그 집합은 개발용으로 은퇴시켰다. v2의 새 합성 7건은 GPU 평가 완료: 7/7 정상 종료와 문맥 요일/정보 부재/보안 요청/실제 참여 불가 응답 확인. 설명 절차의 기술 정확성·최신성은 미검증. 상세는 ML-EXPERIMENTS 및 로컬 fresh-final 결과 참조.
 2. **구현:** 기존 단기 대화 상태/참여·침묵/멘션·이어가기/오래된 생성 폐기 코어 유지. 새 오프라인 도구 `tools/persona_experiments.py`에 응답 마스킹·Gemma turn 종료·길이별 sampling·GPU/RAM 안전 중단·순차 큐·상태 저장·optimizer/RNG 재개 구현. `tools/evaluate_persona_candidate.py`는 실제 적용 probe, 버전별 추론 정책, 개발/은퇴/새 최종 분리, chat-role 문맥, 블라인드 산출과 실행 소스 보존을 제공한다. `tools/persona_report.py`는 비공개 대시보드와 사람 평가용 Markdown을 만든다. `tools/prepare_persona_pilots.py`는 새 제한된 계획만 작성하고 학습하지 않는다.

@@ -465,3 +465,28 @@
 - 사람 평가 파일 `local_data/experiments/style-v2/fresh-final-generation.blind.md`, 누적 `local_data/experiments/dashboard.md`, 선정 `local_data/experiments/selection.json`. 키는 별도 보존. Codex 파일 열기는 queued 응답이므로 표시 완료를 보장하지 않음. GPU 작업 종료 후 점유 약 1,601MiB로 확인.
 - 최종 실사용 승인 없음. 다음: 사람 블라인드 평가와 허가된 새 평가/지시 자료 설계. 현재 fresh-final을 보고 추가 튜닝하면 개발용으로 재분류. HF PEFT/기존 Ollama(고정 128토큰) 서빙 연결·실서버 동시성/취소/권한은 별도 검증.
 - Git HEAD `7e1e77f`, 새 변경은 로컬 미커밋. GitHub 커밋/푸시·클라우드 GPU·유료 API·새 데이터 원천 사용 없음. 비공개 자료는 `local_data/` 밖으로 내보내지 않음.
+
+## 2026-10-18 — 추가 품질 단계 v3 시작/예비 평가
+
+- 기존 변경 13개를 비공개 source-before에 보존하고 기존 비공개 파일 217개의 경로/크기/수정 시각을 기록했다. 저장소 기준 재점검에서 217개 모두 보존 확인. 처음 검사 스크립트의 기준 경로 중복 결합을 수정한 뒤 재검증했으며 실제 누락은 없었다. 기존 문서의 개인 홈 경로 4곳만 비식별 입력 예시로 치환했다.
+- 시작 시 기존 208개 테스트 OK(0.904초). 기존 변경의 로컬 보존 커밋 `e6b6f6d`, 새 정책/평가 기반 커밋 `7342757`. GitHub push 없음. 추적 파일 및 신규 소스 133개에서 홈 절대 경로·일반 키 패턴을 검사해 검출 없음, `git ls-files local_data` 비어 있음. 자동 검사만으로 개인정보 검수를 확정하지 않는다.
+- 변경: `src/echomate_studio/response_policy.py`, `tools/persona_quality_cases.py`, `tools/persona_quality_v3.py`, `tools/persona_memorization_probe.py`, `tests/test_response_policy_v3.py`, ARCHITECTURE/ML-EXPERIMENTS/CURRENT-STATUS/AI-HANDOFF/WORKLOG. 기존 Bot 실행/참여·침묵·멘션·대화 지속·취소 코어는 변경하지 않았다.
+- 의도: 실제 말투/응답 품질을 가중치·정책·집계 prior별로 분리 비교. 새 합성 pilot 8건, 사전 고정 holdout 26건/13범주, 같은 정책 프롬프트와 greedy/예산, 블라인드와 별도 key. 상황/정답 라벨을 모델에 전달하지 않는다. 독립 메시지에서 실제 대화 쌍을 조작하지 않는다. 추가 학습 0단계를 사전 결정했다.
+- 실제 GPU: 합성 짧은 응답의 prefix 전체 마스킹/shifted CE 직접 계산 일치와 legacy/rank8-60/rank8-120 어댑터의 적용을 확인했다. 예비 생성에서 과한 감정 상담/되묻기, 기술 결론 모순, 절차의 반복·상한 도달·원본 보존 제약 이탈을 발견했다. 개발용 pilot에서만 정책을 수정하고 소스/실패 응답을 모두 보존한다. 새 holdout을 보고 정책을 고치지 않는다.
+- 실행 안정성: 진행/부분 결과/실패를 원자 저장, 응답 사이 STOP/자원 검사, 새 run ID로만 출력. 예비 재시험용 선택 문항/정책 제한은 pilot에만 허용. 더 긴 기술 평가의 비용 절감을 위해 동일 폭/3슬롯 정책 배치를 예비 검증하며 홀드아웃 가중치 간 배치 조건도 동일하게 유지한다. 평가 KV cache 복원은 구현하지 않았고 기존 학습 optimizer/RNG 재개와 다르다.
+- 검증: `$env:PYTHONPATH='src'; .\.venv-gemma4\Scripts\python.exe -m unittest discover -s tests -q` → 216개 OK(0.906초). 새 도구/정책 py_compile 및 diff whitespace 검사 성공. 실제 GPU 평가 완료 수치는 아래 후속 기록에 추가한다. 테스트 통과를 말투 개선의 근거로 사용하지 않는다.
+- 상세 비공개 산출물은 `local_data/quality-v3-20261018/`. 새 대화 원천·외부 GPU·유료 API·실제 Discord 송수신 사용 없음. 사람 말투 평가/운영 승인/최종 모델 선정은 미실시.
+
+
+## 2026-10-19 — quality-v3 독립 평가 완료/선정 보류
+
+- 실행일 2026-10-18 UTC의 고정 코드 `b62633e`로 새 독립 26문항/13범주 GPU 평가 완료. 실제 10조건의 250발화 + 공통 침묵 10행 + 파생 재사용 52행 = 저장 312행. 2,482.5초(로딩 포함), peak allocated 8,498.6 MiB. 중복 배치 진단 50개 모두 대응 v3와 일치, 별도 참여 판단 2회. 새로운 GPU 학습은 0단계다.
+- 같은 정책의 가중치별 prompt/seed/예산/배치 조건 일치 검사 통과. 전 문항의 비블라인드 AI 의미 검토를 private agent-semantic-review에 보존했다. 사람 평점과 구분한다. 일부 v3의 원칙적 개인정보 거절/복원 설명 이득은 있었으나 과한 장문·절차 상한 도달·기술 설명 모순·keyword 의도 오인으로 일관된 우위 미확인. prior/hybrid/selective도 승격하지 않는다. 기존 rank8-60 + v2는 잠정 후보로만 유지하고 새 selection을 별도 루트에 저장했다.
+- 실패도 보존: native thinking 개발 진단은 올바른 첫 결론에도 응답 미완결로 후보 제외. 독립 얕은 복사 문항은 전 실제 조건에서 첫 결론/뒤 설명 모순, 다른 기술 대화는 full-v3가 대입과 얕은 복사를 혼동. 규칙 정답 포함/정상 종료를 정확성으로 취급하지 않는다. 독립 결과를 본 뒤 정책/문항/가중치를 변경하지 않았다.
+- 별도 GPU prefix 노출 진단은 학습 2/기존 validation 2표본 × 4가중치 16생성, 남은 원문 전체 복원 0. 매우 작은 비대응 표본이며 암기/PII 안전 보증 아님. 이 도구는 시간/peak 별도 계측 없음. 원문은 local_data에만 있다.
+- 신규 `tools/persona_generation_trace.py`는 소비된 정보 부재 문항을 고정 조건으로 forensic 재현하고 원 평가를 변경하지 않는다. GPU 6개 보이는 출력 모두 일치(52.0초, peak 8,236.9 MiB). prior 2조건에서 channel 제어/표시 혼입을 확인했다. 원시 토큰은 private 파일에만 남겼으며 내부 내용은 공개하지 않았다. 운영 채널 파싱 검증은 미완료. 진단 소스 커밋 `6493f7a`.
+- 비공개 holdout 보고서 및 balanced/same-policy/same-weight/candidate-vs-provisional/weights-v2/duration-v2 블라인드 자료 생성. 각 고정 비교는 전 26문항 포함, key 별도. REVIEW-GUIDE에 7개 항목 및 N/A/평가 후 key 확인 절차 기록. 아직 사람 평점 없음. 사용자 말투 재현 성공을 선언하지 않는다.
+- 최종 검증: `$env:PYTHONPATH='src'; .\.venv-gemma4\Scripts\python.exe -m unittest discover -s tests -q` → **217건 OK, 0.935초**. 기존 208건 유지. `py_compile tools/persona_generation_trace.py`, `git diff --check` 성공. `persona_quality_v3.py report --root local_data/quality-v3-20261018 --name holdout-a` 성공. 실제 Discord/Ollama 서빙·외부 관찰은 미실시. Bot 참여/침묵/멘션/취소 코어 소스 변경 없음.
+- 최종 보존 확인: 시작 시 217개 private 파일의 크기/mtime 전부 동일, 기존 어댑터/학습·검증 자료/스타일 집계 SHA 동일, holdout 추론 3소스 해시 동일. 종료 후 GPU 38도, 사용 2,481MiB/여유 13,581MiB 확인. 추가 GPU 작업 종료.
+- 공개 대상은 진단 소스와 AI-HANDOFF/CURRENT-STATUS/ML-EXPERIMENTS/WORKLOG 비식별 문서다. 추적/신규 135경로의 홈 경로/일반 키·토큰 패턴 검출 없음과 원문/결과 미포함을 검토했다. `git ls-files local_data` 비어 있음. 자동 검사가 권한/개인정보 검수의 충분조건은 아니다. 로컬 커밋만 사용, GitHub push 없음. 실제 최신 문서 커밋은 `git log -1`, 상태는 `git status --short`로 확인한다.
+- 다음: 블라인드 개인 말투 평가 후, 소비한 holdout을 회귀용으로 은퇴시키고 별도 개발 자료에서 의도/채널 처리 개선 검토. 실제 응답 감독 자료는 허가된 범위에서만 설계한다. 새 최종 자료를 고정하기 전 이번 결과를 재튜닝 점수로 재사용하지 않는다. 비공개 경로 `local_data/quality-v3-20261018/`; 이전 체크포인트/선정 기록 그대로 보존.
