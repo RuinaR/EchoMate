@@ -278,3 +278,9 @@
 - 공식 Discord 개인 데이터 패키지/Discord API 정책 등 출처별 모델 훈련 이용 권한은 별도 검토해야 한다. 실제 원본 학습데이터·비밀 키는 GitHub에 커밋하지 않음. 사용자 본인 메시지 원본 열람은 허락했지만 AI 훈련 허용 권한을 확정한 것은 아님.
 - 다음 **최우선 기술 과제**: (1) 데이터 출처 및 훈련 이용 권한 검토, (2) 개인정보·중복·반복·짧은 맞장구를 고려한 로컬 학습셋 품질/검수 설계, (3) Windows RTX4070 용량 확인과 4B급 QLoRA feasibility, (4) baseline vs adapter A/B 검증, (5) 로컬 체크포인트 Studio/Bot 배포. 학습 진행 중 사용자 원본 외부 전송 금지.
 - 사용자 최신 Windows 123 tests 1 ERROR: 구형 SQLite 마이그레이션 테스트가 Windows 임시 `old.db` 삭제 중 WinError32. 원인은 `with sqlite3.Connection`이 커넥션 close를 보장하지 않음. 모든 `with self._connect() as db`을 `with closing(self._connect()) as db`로 변경해 명시적으로 close. 아직 Windows 재실행 미검증.
+
+## 2026-10-18 — Windows 123 중 1 ERROR 지속, 테스트 측 SQLite 핸들 확정 수정
+- 사용자가 수정 뒤에도 Windows 123개 중 1개 ERROR 보고: `test_legacy_schema_migrates_without_losing_data`에서 `old.db` 삭제 중 WinError32.
+- 원인은 `tests/test_reminder_management.py`의 `with sqlite3.connect(p) as db:` 구문. Python SQLite connection context manager는 commit/rollback만 수행하고 close를 보장하지 않음. Windows에서는 임시 파일 잠금이 남음.
+- 테스트에 `from contextlib import closing` 추가하고 구형 DB 생성에 `with closing(sqlite3.connect(p)) as db:` 사용, `db.commit()` 명시. 기존 `ReminderStore` 측 closing 패치 유지. **123개 테스트 Windows 재실행 미확인.**
+- 사용자의 핵심 목표인 원본 메시지 페르소나 QLoRA 학습은 여전히 미시작. 예약 QA 이슈 해결 뒤 개인정보 보호/권한 확인/학습환경 준비에 집중.
