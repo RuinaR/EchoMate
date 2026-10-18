@@ -241,3 +241,9 @@
 - `turn_pipeline.evaluate_turn`에 선택적 topic_assessor 콜백을 추가. 실제 bot reply reference가 있는 경우 평가기를 호출하고 에러는 연속성 거부. 기존 외부 명시 조건 호출은 호환 유지. 네트워크 Discord Gateway/발신 미구현.
 - tests/test_topic_assessor.py 4개, tests/test_turn_pipeline.py 2개 추가. **109개 예상, Windows 실행 미확인**. 실제 Ollama 판정 정밀도는 따로 실측 필요.
 - 비공개 Discord 원본 및 발언/모델 평가 로그를 GitHub에 올리지 않음.
+
+## 2026-10-18 — 109 tests OK, 실모델 주제연속성 QA CLI
+- 사용자 Windows 109개 unittest 전부 통과.
+- 신규 `src/echomate_studio/topic_qa.py`: 개인 메시지 원본을 포함하지 않는 합성 Discord 대화 6건(보스 시간·변경·주제 전환·사냥 후속·타인 대화·짧은 맞장구), 로컬 Gemma 3 12B의 topic_assessor 실제 판정/소요시간/정답 여부를 `local_data/topic-qa.json`으로 기록.
+- `tests/test_topic_qa.py` 2건 추가, **111개 예상**. 실제 Ollama QA 및 Windows 신규 테스트 미검증. 이 6건만으로 실제 운용 안정성 단정 금지.
+- 원본 메시지와 비공개 학습셋 GitHub 업로드 금지, 개인 정보 제거 원칙 유지.
