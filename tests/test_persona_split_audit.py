@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"src"))
-from echomate_studio.persona_split_audit import audit
+from echomate_studio.persona_split_audit import audit, classify
 
 def rec(text,year):
     return {"Contents":text,"Timestamp":f"{year}-01-01T00:00:00+00:00"}
@@ -22,6 +22,13 @@ class PersonaSplitAuditTests(unittest.TestCase):
             self.assertEqual(out["cross_split_duplicate_unique_texts"],1)
             self.assertEqual(out["validation_unique_after_overlap_removal"],0)
             self.assertNotIn("shared words",str(out))
+    def test_direct_identifier_safety_hints(self):
+        for message in ("https://example.invalid/a", "www.example.invalid",
+                        "<@123456789012345678>", "token=abcdefghijklmnop",
+                        "test@example.com"):
+            self.assertEqual(classify({"Contents":message})[0], "identifier_hint")
+        self.assertEqual(classify({"Contents":"invented ordinary phrase"})[0],"candidate")
+
     def test_reject_bad_fraction(self):
         with self.assertRaises(ValueError):
             audit([],validation_fraction=0.9)
