@@ -151,3 +151,12 @@
 - `tests/test_model_compare.py` 3개 신규. 기존 사용자 63개 테스트 OK이므로 **총 66개 예상**, 신규 Windows 검증 전.
 - 모델 변경 결정은 한국어 자연스러움, 상황 이해, 사실성, 4070 실행 중 GPU/RAM 사용량과 지연으로 평가. Gemma 12B가 빠르거나 우수하다는 결론 아직 없음.
 - `local_data/model-comparison.json`은 생성 내용 포함해 무조건 로컬 보관.
+
+## 2026-10-18 — Qwen/Gemma 대조 실측 + 다중 턴 QA
+- Windows 66개 테스트 OK. 사용자 model-comparison.json에 20회 응답 포함.
+- Qwen 중앙값 1.07초, Gemma 0.76초. 모델 교체/초기 로딩 시간 포함. Gemma의 단문 한국어 반응 우세 경향은 있으나 7시를 근거 없이 두 번 지어내는 결함 확인. Qwen은 웃음 메시지에 중국어 반복.
+- 기존 model_compare의 '아까 몇 시?' 사례는 앞선 대화가 없는 단발 질문으로 설정돼, 실제 문맥 기억 능력을 평가할 수 없었음.
+- 추가 `context_compare.py`: 단일 무정보 질문 / 9시 확정 / 9→10시 변경 / 웃음 등 합성 다중 턴 시나리오. `quality_hints`는 일부 패턴만 감지하는 QA 후보 도구.
+- `conversation.py`: 대화 근거 없는 시간/참석자 발명 금지, 가장 최근 확정된 사항, 한국어 우선.
+- 신규 tests/test_context_compare.py 4개. **현재 70개 테스트 예상, Windows 검증 전**.
+- 다음: 사용자 `context-comparison.json` 받아 사실성·자연스러움 판단, GPU 메모리와 지속 실행 부담 고려해 모델 결정. 실제 미세조정/Discord 연동은 미완료.
