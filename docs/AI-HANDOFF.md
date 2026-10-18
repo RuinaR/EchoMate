@@ -298,3 +298,6 @@
 - 채널2: 전체 60,021 / needs_human_review 34,720 / empty 12,769 / too_short 7,162 / duplicate 4,392 / repetition 188 / private hints 786 / oversized 4.
 - 합: **검수 후보 185,608**, 초단문 45,455, 중복 36,275, 빈 값 34,008, 개인식별 의심 2,060, 반복 1,587, 긴 문장 4. 이는 서로 배타적인 우선순위 분류 집계. 검수 후보=학습 승인 아님. 단일 화자 메시지로 가상의 상대방 Q/A를 만들지 말 것.
 - 실제 fine-tuning 미시작. 다음: 데이터 사용 허가/훈련 대상 문장 수동 검수·시점 분할·국소 학습 환경 점검·baseline 설계. 사용자 원문 GitHub/모델 API에 전송 금지.
+
+## 2026-10-18 — Emoji reply alternative
+- User wants emoji-only replies within ongoing conversation (e.g. mentioning bot then saying love you => ❓ reaction). Added reaction_reply.py ResponseChoice, selecting one of reaction/text/silent from validated conversation signals and ReactionPolicy allowlist; no Discord send yet. Tests/test_reaction_reply.py adds 5 cases. Expected 131 total, Windows QA pending. Existing automatic emoji reactions remain separate; actual integration must prevent double responding and validate contextual emoji selector; reaction is not based on arbitrary randomness.
