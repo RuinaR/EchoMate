@@ -6,6 +6,7 @@ from pathlib import Path
 import statistics
 import time
 from .conversation import generate
+from .reply_quality import inspect_reply
 from .style_profile import profile_to_style
 
 
@@ -37,7 +38,7 @@ def main():
                     error=type(exc).__name__
                 elapsed=round(time.perf_counter()-start,3)
                 results.append({"round":repetition+1,"prompt":question,"variant":name,
-                                "reply":answer,"seconds":elapsed,"error":error})
+                                "reply":answer,"seconds":elapsed,"error":error,"quality_flags":inspect_reply(question,answer) if not error else ["generation_error"]})
                 print(f"{name} | {question} | {elapsed:.2f}s | {answer or error}")
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps({"model":args.model,"results":results},
