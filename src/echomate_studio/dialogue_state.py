@@ -18,7 +18,7 @@ class Turn:
 
 
 class DialogueState:
-    def __init__(self, *, limit: int = 40, max_age_seconds: int = 1800):
+    def __init__(self, *, limit: int = 500, max_age_seconds: int = 86400):
         if limit < 1 or max_age_seconds < 1:
             raise ValueError("limit and max age must be positive")
         self.limit = limit
@@ -26,6 +26,7 @@ class DialogueState:
         self._channels: dict[tuple[int, int | None], Deque[Turn]] = {}
         self._ids: dict[tuple[int, int | None], set[str]] = {}
         self._versions: dict[tuple[int, int | None], int] = {}
+        self._max_context_chars = 16000
 
     def append(self, *, channel_id: int, thread_id: int | None, turn: Turn) -> bool:
         if turn.timestamp.tzinfo is None:
@@ -62,6 +63,28 @@ class DialogueState:
 
     def is_current(self, *, channel_id: int, thread_id: int | None, version: int) -> bool:
         return self._versions.get((channel_id, thread_id), 0) == version
+
+    def recent_context(self, *, channel_id: int, thread_id: int | None,
+                       max_chars: int | None = None, now: datetime | None = None) -> tuple[int, list[dict[str, str]]]:
+        """Build a bounded prompt window from the newest turns while keeping older RAM history."""
+        budget = self._max_context_chars if max_chars is None else max_chars
+        if budget < 1:
+            raise ValueError("max_chars must be positive")
+        version, turns = self.snapshot(channel_id=channel_id, thread_id=thread_id, now=now)
+        selected: list[Turn] = []
+        used = 0
+        for turn in reversed(turns):
+            cost = len(turn.content) + len(turn.author_id) + 64
+            if selected and used + cost > budget:
+                break
+            if not selected and cost > budget:
+                selected.append(Turn(turn.message_id, turn.author_id,
+                                     turn.content[-max(1, budget - 64):],
+                                     turn.timestamp, turn.is_bot, turn.reply_to))
+                break
+            selected.append(turn)
+            used += cost
+        return version, self.to_model_context(list(reversed(selected)))
 
     @staticmethod
     def to_model_context(turns: list[Turn]) -> list[dict[str, str]]:
