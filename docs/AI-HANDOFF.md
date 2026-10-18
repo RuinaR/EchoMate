@@ -369,3 +369,7 @@
 - User confirmed real gated model weights downloaded (~8.6GB across two shards) and NF4 load succeeded on RTX 4070 Ti SUPER 16GB.
 - Local report status=ok, GPU VRAM free_before=15111.0 MiB, total=16375.5 MiB, free_after=10845.0 MiB, delta=4266.0 MiB, PyTorch peak allocated=4100.9 MiB.
 - Model loading proves inference-weight quantization fits; gradient/LoRA optimizer activation overhead not yet measured. Next: synthetic, private-data-free LoRA backward and tiny optimizer step, with memory/length guards, no Discord messages. Source training-use rights/privacy review remains unresolved.
+
+## 2026-10-18 — Synthetic Gemma QLoRA step prepared
+- Added tools/smoke_gemma4b_lora.py: explicit --allow-synthetic-step, use cached google/gemma-3-4b-it weights (local_files_only), NF4 PEFT q_proj/v_proj adapters, a tiny synthetic token sequence, a single forward/backward/AdamW optimizer step, aggregate VRAM/loss report only. No private chat data, no checkpoint writes. 3 preflight tests, expected 148 total; Windows unverified.
+- Warning: Gemma3 multimodal wrapper, PEFT task and gradient checkpointing compatibility remain unproven. Execution may fail; do not claim actual QLoRA works before observed successful run. Train-data permissions still unresolved.
