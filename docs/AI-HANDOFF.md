@@ -550,3 +550,6 @@
 - Uploaded report: seq_len=32, min_token_length=3, trainable_params=2,596,864, validation loss before=18.5799 and after=18.6001 (INCREASE; no claim of improvement), last training loss=23.6806, GPU peak allocated=11163.6 MiB, free after=2893.5 MiB. Tiny single heldout synthetic sample cannot support quality conclusions.
 - Inspected synthetic JSONL 2 train samples + 1 validation sample, with only `text` fields; saved safetensors header: 176 F32 tensors, 2,596,864 scalar weights, 10,413,312 bytes. This confirms shape/count consistency but not standalone reloaded inference of this new adapter.
 - No user Discord message fine-tuning has run. Private source rights, other-person context and training/validation leakage verification still required before using approved owner corpus. Never commit raw data or derived private adapters.
+
+## 2026-10-18 — 190-test privacy classifier fix awaiting Windows verification
+- Windows 190 suite had one failed classifier test: raw URL-only text was normalized to empty before identifier scan. Regexes for URL and secret markers also had excess backslash escaping. Corrected both: identify sensitive raw patterns before normalization and use single regex escapes. No model failure and no owner-data training. Re-run Windows 190 tests.
