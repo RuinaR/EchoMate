@@ -8,9 +8,15 @@ from collections import Counter
 from datetime import datetime, timezone
 import hashlib
 import json
+import re
 from pathlib import Path
 from .analyze import iter_json_array, normalize_text
 from .persona_eligibility import CONTACT, DIGITS, REPETITION
+
+# High-confidence direct identifier hints only; contextual privacy needs human review.
+URL_HINT = re.compile(r"https?://\\S+|www\\.\\S+", re.I)
+DISCORD_MENTION = re.compile(r"<@!?[0-9]{5,}>|<@&[0-9]{5,}>|<#(?:[0-9]{5,})>")
+SECRET_HINT = re.compile(r"(?i)(?:api[_-]?key|authorization|password|passwd|token)\\s*[:=]\\s*[^\\s]{8,}")
 
 def timestamp_of(record):
     value=record.get("Timestamp")
@@ -31,7 +37,7 @@ def classify(record):
     text=normalize_text(original)
     if not text:
         return "empty", None
-    if CONTACT.search(original) or DIGITS.search(original):
+    if CONTACT.search(original) or DIGITS.search(original) or URL_HINT.search(original) or DISCORD_MENTION.search(original) or SECRET_HINT.search(original):
         return "identifier_hint", None
     if len(text)>500:
         return "too_long", None
