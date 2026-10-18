@@ -424,3 +424,8 @@
 - [x] User Windows full 23.9GB Gemma4 IT checkpoint NF4 GPU load passed, 677 weights, 7381.7 MiB peak PyTorch allocated, 7621.0 MiB GPU free after.
 - [ ] Synthetic LoRA forward/backward/optimizer on 12B with cache-only weights; inspect peak VRAM.
 - [ ] Privacy-reviewed owner-data fine-tuning and baseline comparison (not started).
+
+## 2026-10-18 — Gemma4 12B synthetic QLoRA GPU success
+- [x] Windows cached-model NF4 LoRA seq32 forward/loss/backward/AdamW succeeds on RTX 4070 Ti SUPER; 2,596,864 trainable parameters, peak PyTorch allocation 11,163.6 MiB, GPU free after 2,418.9 MiB.
+- [ ] Verify multiple synthetic optimizer steps and realistic tokenization/longer contexts without OOM; protect shared GPU usage.
+- [ ] Review local owner-export data, privacy and training rights, chronological/near-duplicate leakage and holdout before actual persona QLoRA.
