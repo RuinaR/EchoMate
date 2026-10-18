@@ -31,6 +31,19 @@ class PersonaDatasetTests(unittest.TestCase):
             self.assertEqual(report["counts"]["cross_split_excluded"],1)
             self.assertNotIn("shared phrase",str(report))
             self.assertTrue(all("text" in json.loads(x) for x in training.splitlines()))
+    def test_existing_dataset_output_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            source=root/"messages.json"
+            source.write_text(json.dumps([{"Timestamp":"2026-01-01T00:00:00Z","Contents":"synthetic user sentence"}]),encoding="utf-8")
+            out=root/"local_data"/"persona-dataset"
+            out.mkdir(parents=True)
+            marker=out/"persona-train.jsonl"
+            marker.write_text("keep existing private content",encoding="utf-8")
+            with self.assertRaises(ValueError):
+                build([source],out,rights_confirmed=True,privacy_reviewed=True)
+            self.assertEqual(marker.read_text(encoding="utf-8"),"keep existing private content")
+
     def test_unsafe_output_refused(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
