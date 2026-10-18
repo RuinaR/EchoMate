@@ -234,3 +234,9 @@
 - [x] 합성 문맥 6건 실제 Ollama 평가·소요시간·정답률 로컬 저장 CLI.
 - [ ] Windows 총 111개 QA 및 `python -m echomate_studio.topic_qa --model gemma3:12b` 실행.
 - [ ] 실측 오판 기반 문맥 판별 고도화, 명시적 답장 외 대화 상황과 Discord Gateway 연동.
+
+## 2026-10-18 QA 기준 갱신
+- [x] Windows unittest **111개 전체 통과**.
+- [x] 로컬 Gemma3:12b 주제 연속성 합성 6건 **6/6 정답**.
+- [ ] 발언 대상 모호성, 주제 변경, 짧은 한국어 반응, 답장 없는 연속 발언 등에 대한 다중 화자 검증 확장.
+- [ ] 실제 Discord Gateway 수신/안전한 참여 상태/발신 연동 및 로그 QA.
