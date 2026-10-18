@@ -432,3 +432,9 @@
 - Updated probe and synthetic smoke loader; created tools/setup_gemma4_env.ps1, tests/test_gemma4_staged.py, docs/GEMMA4-SETUP.md; .gitignore protects separate environment.
 - Confirmed user Windows previous 165 tests OK. Newly added 3 tests and modified probes NOT yet executed on RTX 4070 Ti SUPER. No 12B weight load/LoRA training proof; no owner-message training.
 - Next: run isolated installation, unittest, small-file config preflight; review diagnostic JSON before opting into 23.9GB download, NF4 load and synthetic backward.
+
+## 2026-10-18 — User Windows Gemma4 preflight verified (NO WEIGHTS YET)
+- New independent .venv-gemma4 successfully installed: torch 2.9.1+cu128, transformers 5.20.1, accelerate 1.15.0, bitsandbytes 0.50.2, peft 0.21.2, huggingface_hub 2.2.0. pip check clean; CUDA True.
+- User ran unittest discovery: **168 tests, all OK** (0.441s), including 3 new staged probe regression tests.
+- User-provided JSON: model google/gemma-4-12B-it, status ready_for_optional_load, weight_download_allowed=false; config_model_type=gemma4_unified, config_access=ok; VRAM free_before=15111.0 MiB, total=16375.5 MiB.
+- This verifies environment imports and small official config access only. No Gemma4 weights downloaded, NF4 loading measured, optimizer step or private owner-data tuning. Next: explicitly opt into weight download/NF4 measurement using --allow-download --allow-load, examine aggregate report; do not start actual persona tuning yet.
