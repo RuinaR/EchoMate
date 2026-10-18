@@ -63,3 +63,10 @@
 - 요구사항: 봇의 자율 이모지 반응 기능, 대화 발언과 별도 활성화/빈도/활동 범위 설정. Discord API 연동·문맥 기반 이모지 선택은 아직 미구현.
 - `tests/test_conversation.py` 신규 2개, `tests/test_reactions.py` 신규 6개. **기존 15개 대비 총 23개 테스트 예정, 사용자 PC 미검증.**
 - 다음 사용자 실행: `git pull origin main`, `$env:PYTHONPATH="src"`, `python -m unittest discover -s tests -v`, `python -m echomate_studio.chat_probe --model "qwen3.5:9b-q4_K_M" --message "오늘 메이플 할래?"`.
+
+## 2026-10-18 — 자율 발언 침묵 게이트 추가
+- 사용자 실기기 QA: 23개 단위 테스트 전부 OK, 실제 Ollama `qwen3.5:9b-q4_K_M` 응답 `좋아! 오늘 메이플 갈까? 🍁` 확인.
+- 사용자 요구: 활발함 설정에서도 대화 분위기가 안 좋거나, 끼어들 필요가 없거나, 너무 조용하면 침묵.
+- `src/echomate_studio/participation.py`는 확률을 강제 발언 수단으로 쓰지 않고 상황 평가와 차단 규칙을 먼저 적용. 대응 테스트 `tests/test_participation.py` 7개 신규 작성.
+- **현재 ContextAssessment 값은 실제 Discord 대화로부터 계산되지 않음**. 생성 판단 파이프라인/라이브 Bot은 미구현. 테스트 7개는 사용자 Windows 검증 전이며 총 30개 예상.
+- 다음: 상황 평가기 작성 및 Bot과 연결, 자연스러움/실수로 끼어듦/침묵의 정확도 테스트.
