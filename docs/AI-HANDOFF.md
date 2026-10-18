@@ -516,3 +516,8 @@
 
 ## 2026-10-18 — 183 Windows regression tests green
 - User executed unittest suite following the global chronological split fix: **183 tests OK in 0.463s**. Confirms unit-level behavior, not a full private-data privacy clearance, corpus authorization, or live QLoRA training.
+
+## 2026-10-18 — Optional short-style preservation, Windows pending
+- User last verified 183/183 Windows unit tests OK. Added `preserve_two_char=False` option / `--preserve-two-char` to approved private corpus builder; when explicitly enabled, eligible two-character Korean reactions can enter corpus, while global chronological holdout and exact cross-split suppression remain intact. Default eligibility unchanged.
+- Added `test_two_character_style_is_opt_in_and_holdout_safe`, expected Windows count 184, NOT YET EXECUTED. No user corpus output produced or real messages trained.
+- Critical limitation: current Gemma4 trainer `select_ids` requires >=8 token IDs; preserving two-character records in JSONL does not imply those standalone records are optimized. Actual short-expression training needs a future privacy-safe packing/context strategy and heldout tests. No private source files or adapted weights should be committed.
