@@ -22,3 +22,6 @@
 - LoRA/QLoRA studies support efficient tuning methods, not a guarantee of faithful personal voice cloning or improved conversation performance.
 - API-obtained Discord message restriction and an owner-requested Data Package are not interchangeable legal categories. Source-use rights and third-party privacy still require review.
 - Actual owner-data training has not started.
+
+## Implementation milestone
+- The single-speaker, chronological exact-deduplicated dataset builder is in src/echomate_studio/persona_dataset.py with two explicit approval gates. Near-duplicate and contextual private data detection still need improvement. No owner-message training yet.
