@@ -477,3 +477,10 @@
 - User Windows unittest 176/176 OK (0.397s). Synthetic E2E .ps1 stopped during parsing, before training; PowerShell displayed corrupted Korean source and unterminated quote. This is a script encoding defect, NOT evidence of a Gemma4 training/GPU failure.
 - Changed tools/run_gemma4_synthetic_e2e.ps1 source to ASCII-only and reconstructs fixed synthetic Korean phrases from Base64 UTF-8 bytes. Generated JSONL remains UTF-8. No real owner messages used.
 - Added regression test test_powershell_51_source_is_ascii; expected suite now 177 tests, NOT yet Windows verified. Retry the same E2E command. Old output directory may exist from script parse failure only if an earlier run created it; do not overwrite any existing adapter automatically.
+
+## 2026-10-18 — Gemma4 synthetic end-to-end adapter save SUCCESS
+- User Windows `python -m unittest discover -s tests -v`: 177/177 OK (0.402s).
+- `tools/run_gemma4_synthetic_e2e.ps1` succeeded after ASCII PowerShell encoding fix; 677/677 weights loaded, `trained_local_smoke`, actual optimizer and adapter save completed locally.
+- Uploaded training summary: `google/gemma-4-12B-it`, synthetic single-speaker LM, steps=2, seq_len=32, trainable_params=2596864; heldout synthetic loss before=23.6352, after=23.6266; last train loss=27.0271, PyTorch peak allocated=11163.6 MiB, free after=2454.3 MiB.
+- Independently inspected uploaded adapter_model.safetensors header: 176 float32 tensors, 2,596,864 scalar weights, ~10.4MB; q_proj and v_proj LoRA layer keys; adapter_config.json confirms base model and rank 4. Header structure is consistent, but reloading adapter and inference are NOT YET verified.
+- This is NOT owner-message persona training, and synthetic one-sample validation loss is NOT evidence of conversational quality. Next highest priority: test saved adapter reload with cached Gemma4 NF4 and fixed safe synthetic prompt; then strengthen corpus privacy/near-duplicate audit and approved real owner-data study.
