@@ -123,3 +123,9 @@ python -m echomate_studio.analyze "C:\\data\\channel-a.json" "C:\\data\\channel-
 - 이전 실험 16회에서 기본/스타일 프롬프트 모두 역할 혼동과 문맥 벗어남이 관찰돼 시스템 프롬프트를 단순화.
 - `reply_quality.inspect_reply`는 게임 접속 약속·검증되지 않은 서비스 종료·화제 이탈 등 **검토 후보**를 자동 기록. 의미적 정확도 확정 판정기가 아님.
 - `ab_probe` 출력 JSON에 `quality_flags` 추가. 신규 테스트 4개는 Windows 검증 전.
+
+## Qwen/Gemma 동일 조건 비교 (2026-10-18)
+- 사용자 로컬에 `gemma3:12b` 설치 성공.
+- 새 `echomate_studio.model_compare`: 동일 Style Profile 및 질문 5개를 두 모델에 번갈아 적용, 시간·실제 답변·QA 경고를 `local_data/model-comparison.json`에 기록.
+- 실행: `python -m echomate_studio.model_compare --models "qwen3.5:9b-q4_K_M" "gemma3:12b" --profile "local_data/style-profile.json" --rounds 2`
+- 실행 결과에는 대화 샘플·응답이 포함되므로 GitHub 커밋 금지. 모델별 로딩/VRAM 교체 비용이 포함될 수 있으므로 이 테스트만으로 순수 추론 속도 결론 내리지 말 것.
