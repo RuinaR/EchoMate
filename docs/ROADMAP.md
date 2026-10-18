@@ -228,3 +228,9 @@
 - [ ] Windows 총 109개 테스트 확인.
 - [ ] 실제 Gemma 12B 다양한 한국어 Discord 대화 연속성/주제 전환 사례 검증.
 - [ ] Discord Gateway 이벤트/채널·스레드 별 메시지 수신, 봇 메시지 ID 적재, 실제 전송 연결.
+
+## 2026-10-18 실제 Gemma 맥락 판정 QA
+- [x] Windows 109개 unittest 통과.
+- [x] 합성 문맥 6건 실제 Ollama 평가·소요시간·정답률 로컬 저장 CLI.
+- [ ] Windows 총 111개 QA 및 `python -m echomate_studio.topic_qa --model gemma3:12b` 실행.
+- [ ] 실측 오판 기반 문맥 판별 고도화, 명시적 답장 외 대화 상황과 Discord Gateway 연동.
