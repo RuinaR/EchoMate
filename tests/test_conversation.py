@@ -21,7 +21,7 @@ class ConversationTests(unittest.TestCase):
             {"role": "user", "content": "언제?"}
         ])
         self.assertEqual([m["role"] for m in msgs], ["system", "user", "assistant", "user"])
-        self.assertIn("AI 디스코드 봇", msgs[0]["content"])
+        self.assertIn("EchoMate AI 봇", msgs[0]["content"])
 
     def test_chat_prompt_prioritizes_invitation_without_fabricating_facts(self):
         system = build_messages([{"role": "user", "content": "오늘 메이플 할래?"}])[0]["content"]
