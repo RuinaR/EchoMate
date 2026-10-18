@@ -471,3 +471,8 @@
 - [x] Windows 180/180 tests pass; cached base+saved adapter GPU reload succeeds.
 - [x] Same two synthetic prompts tested with adapter disabled/enabled: base losses [23.795,22.2657], adapter losses [23.7906,22.196], 7585.0 MiB GPU free after.
 - [ ] Data provenance/use rights and third-party privacy, near duplicate/contextual PII review, approved chronological splits, leak-free representative holdout before first real owner-data QLoRA.
+
+## 2026-10-18 — Corpus review safety gates
+- [x] Prevent replacing nonempty existing local private dataset folder.
+- [x] Expand bounded near-duplicate screening from prefix-only to prefix+suffix and add two regression tests.
+- [ ] Windows 182 tests and local corpus review audit when authorized; independently verify source rights, contextual privacy and chronological provenance before invoking Gemma4 private training.
