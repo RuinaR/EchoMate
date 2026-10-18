@@ -298,3 +298,6 @@
 
 ## 2026-10-18 LoRA GPU optimizer dry-run
 - Real Gemma3 4B NF4 load verified. Added opt-in synthetic-only, bounded LoRA backward/optimizer smoke test and 3 preflight tests. Expected 148 tests; device run pending.
+
+## 2026-10-18 — First actual GPU LoRA optimizer step successful
+- User 152 tests OK; synthetic Gemma3 4B NF4 forward/backward/AdamW succeeded. Trainable 1,611,776; seq len32; peak allocated 5660.7 MiB; free 8235 MiB. Loss=2.49 synthetic only. Explicit non-reentrant gradient checkpoint patch made; not rerun yet.
