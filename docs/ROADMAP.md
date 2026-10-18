@@ -367,3 +367,11 @@
 - [x] Recorded peak PyTorch GPU allocation 5660.7 MiB for length32 and 1,611,776 trainable params.
 - [ ] Verify explicit gradient checkpoint setting on Windows and run longer synthetic sequence VRAM stress when needed.
 - [ ] Resolve source permission and privacy review; train/validation chronological split; actual local-only adapter tuning followed by measured baseline vs adapter comparison.
+
+## 2026-10-18 — Approved persona data preparation track
+- [x] Synthetic Gemma3 4B 4-bit LoRA forward/backward optimizer test succeeded on local RTX 4070 Ti SUPER.
+- [x] Local aggregate-only chronology/cross-split duplicate auditing tool and 3 tests created.
+- [x] Documented Discord API-training restriction vs owner official data package rights uncertainty.
+- [ ] Windows 155 unittest checks and aggregate persona split report; examine leakage and sample adequacy.
+- [ ] Source-use clarification, human review of private/sensitive information and explicit dataset approval BEFORE training corpora or LoRA.
+- [ ] Privacy-safe validation with baseline comparisons and memory budget constraints before releasing trained adapter.
