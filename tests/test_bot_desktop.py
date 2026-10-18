@@ -28,6 +28,12 @@ class DesktopControls(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(controller.error,'PermissionError');self.assertEqual(controller.settings.revision,revision)
             await controller.command('settings',values=dict(owner_id=2))
             self.assertEqual(controller.error,'ValueError');self.assertEqual(controller.settings.revision,revision)
+            # Resume an existing process without loading a second model; stop persists off.
+            pending=asyncio.create_task(asyncio.Event().wait());controller.job=pending
+            await controller.command('start')
+            self.assertTrue(controller.settings.get()['enabled']);self.assertIs(controller.job,pending)
+            await controller.command('stop')
+            self.assertTrue(pending.cancelled());self.assertFalse(controller.settings.get()['enabled'])
 
 
 class DesktopWidgets(unittest.TestCase):
@@ -42,13 +48,15 @@ class DesktopWidgets(unittest.TestCase):
             try:
                 app=DesktopApp(root,controller)
                 app.snapshot=dict(cfg=settings.get(),servers=[dict(id=2,label='test',enabled=True,channels=[dict(id=3,label='test-channel',thread=False)])],
-                    connected=False,phase='test',error='',notice='')
+                    connected=False,phase='test',error='',notice='',pending=0,contexts=0,latency=None,progress=[])
                 app.refresh_lists();app.channel_list.select_index(0,False)
                 app.save_scope();app.set_value('activity','normal');root.update_idletasks()
                 self.assertEqual(controller.commands[0][1]['text_mode'],'autonomous')
                 self.assertEqual(controller.commands[0][1]['reaction_mode'],'silent')
                 self.assertTrue(controller.commands[0][1]['inherit'])
                 self.assertEqual(controller.commands[1][1]['values']['activity'],'normal')
+                for page in ('spaces','outputs','character','status','labs'):
+                    app.page=page;app.render();root.update_idletasks()
             finally:root.destroy()
 
     def test_duplicate_instance_lock_is_released_after_close(self):

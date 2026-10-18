@@ -150,6 +150,23 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.runtime.latencies),2)
         with self.assertRaises(ValueError):parse_turn_assessment('0 1 1 1 1 extra')
         with self.assertRaises(ValueError):parse_turn_assessment('1 1 1')
+
+    async def test_verified_discord_reply_skips_interruption_vote_and_typing_is_cancelled(self):
+        self.backend.fast_text_path=True;indicators=[]
+        async def forbidden(*args):raise AssertionError('Explicit reply is not an interruption')
+        self.backend.classify=forbidden;self.backend.propose=forbidden
+        async def typing(event,fresh):
+            try:
+                indicators.append('started');await asyncio.Event().wait()
+            finally:indicators.append('stopped')
+        self.transport.indicate_typing=typing
+        self.backend.wait=asyncio.Event()
+        await self.runtime.ingest(self.event());await asyncio.sleep(.01)
+        self.backend.wait.set();await self.settle()
+        with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-3')
+        await self.runtime.ingest(replace(self.event(id=11,content='이어서 질문할게'),reply_to=9001));await self.settle()
+        self.assertEqual(len(self.transport.sent),2)
+        self.assertEqual(indicators[:2],['started','stopped'])
     async def test_mention_sends_once_and_persists_replay_guard(self):
         event=self.event();await self.runtime.ingest(event);await self.settle()
         self.assertEqual(len(self.transport.sent),1)

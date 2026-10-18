@@ -45,6 +45,14 @@ class DiscordTransport:
     def channel(self,event):
         guild=self.client.get_guild(event.guild)
         return guild.get_channel_or_thread(event.channel) if guild else None
+    async def indicate_typing(self,event,fresh):
+        try:
+            while await fresh():
+                channel=self.channel(event)
+                if not channel:return
+                await channel.typing()
+                await asyncio.sleep(6)
+        except discord.HTTPException:return
     async def permissions(self,event):
         channel=self.channel(event)
         if not channel or not channel.guild.me:return {}

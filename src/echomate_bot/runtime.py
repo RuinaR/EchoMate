@@ -153,12 +153,16 @@ class Runtime:
         try:
             since=time.time()-self.ledger.last(event.channel)
             verified_request=request_content if request_content is not None else event.content
-            direct=mentions_bot(verified_request,self.transport.bot_id)
-            if direct:
+            mention=mentions_bot(verified_request,self.transport.bot_id)
+            _,known_turns=state.snapshot(channel_id=event.channel,thread_id=None)
+            verified_bot_reply=any(t.is_bot and t.message_id==str(event.reply_to) for t in known_turns[:-1])
+            direct=mention or verified_bot_reply
+            if mention:
                 allowed,_=permit_mention_reply(MentionPolicy(allowed_channel_ids=frozenset({event.channel}),cooldown_seconds=2),
                     content=verified_request,bot_user_id=self.transport.bot_id,channel_id=event.channel,thread_id=None,
                     author_is_bot=False,opted_out=False,seconds_since_last_reply=since)
                 if not allowed:return
+            elif verified_bot_reply and since<2:return
             if not direct and mode=="mention":
                 # Verified reply/semantic addressee may continue existing participation.
                 _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
@@ -255,7 +259,12 @@ class Runtime:
             if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
                 self.stage(event,'text',started)
                 character=effective_character(cfg,event.content);character['_selected_action']=action.kind.value
-                answer=await self.backend.text(context,character)
+                indicator=(asyncio.create_task(self.transport.indicate_typing(event,lambda:self.fresh(event,state,version,revision)))
+                           if hasattr(self.transport,'indicate_typing') else None)
+                try:answer=await self.backend.text(context,character)
+                finally:
+                    if indicator:
+                        indicator.cancel();await asyncio.gather(indicator,return_exceptions=True)
                 action=Action(action.kind,answer,action.asset)
             if (event.guild,action.asset) in self.blocked_assets:
                 self.note('blocked_asset_veto');return

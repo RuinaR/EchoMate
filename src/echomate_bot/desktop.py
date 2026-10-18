@@ -41,9 +41,10 @@ class LocalController:
             self.bootstrap=json.loads((ROOT/'bootstrap.json').read_text(encoding='utf-8'))
             self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'])
             if not self.bootstrap['admin_guilds']:raise ValueError('No approved guild')
-            self.phase='정지 — 시작 버튼으로 연결'
+            self.phase='서버와 채널 목록을 불러오고 있어요'
             self._publish()
             await self.refresh_inventory()
+            if not self.job or self.job.done():self.phase='정지 — 시작 버튼으로 연결'
         except Exception as exc:
             self.phase='다른 EchoMate 앱이 실행 중이야' if isinstance(exc,RuntimeError) else '로컬 설정 필요 — setup_discord_bot.ps1 확인'
             self.error=type(exc).__name__
@@ -81,6 +82,7 @@ class LocalController:
                 channel=client.get_channel(cid)
                 progress.append(dict(channel=channel.name if channel else '허용된 채널',stage=STAGES.get(p['stage'],p['stage']),seconds=round(time.time()-p['started'],1)))
         snapshot=dict(phase=self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
+                      running=bool(self.job and not self.job.done()),
                       connected=bool(client and client.is_ready()),pending=client.backend.pending if client else 0,
                       contexts=len(runtime.states) if runtime else 0,safe_stopped=runtime.stopped if runtime else False,
                       latency=runtime.latencies[-1] if runtime and runtime.latencies else None,
@@ -131,9 +133,11 @@ class LocalController:
             self.error=''
             if operation=='refresh':await self.refresh_inventory()
             elif operation=='start':
+                self.settings.set(owner,'enabled',True)
                 if self.job and not self.job.done():return
                 self.job=asyncio.create_task(self._run_bot())
             elif operation=='stop':
+                self.settings.set(owner,'enabled',False)
                 self.phase='종료·GPU 정리 중'
                 if self.job and not self.job.done():
                     self.job.cancel()
@@ -145,8 +149,7 @@ class LocalController:
                 if set(values)-allowed:raise ValueError('Unknown GUI setting')
                 self.settings.change(owner,lambda cfg:cfg.update(values))
                 if self.client:
-                    if not values.get('enabled',self.settings.get()['enabled']):self.client.runtime.invalidate_all()
-                    else:self.client.runtime.cancel_pending()
+                    self.client.runtime.cancel_pending()
             elif operation=='guild':
                 gid=kwargs['guild']
                 if not self.known_guild(gid):raise PermissionError('Guild is not connected')
