@@ -84,3 +84,11 @@
 - `DialogueState` 기본 보관 한도 40→500개 메시지, 1800→86400초 변경. `recent_context`로 RAM 기록과 LLM 프롬프트 기본 16000자 예산 분리.
 - 합성 테스트 2건 추가, 현재 총 37개 예정. **신규 Windows QA 전**.
 - 실제 Ollama 컨텍스트 창/토큰 수는 자동 확장된 것이 아니며 토큰 상한/주제 요약 로직은 미구현. 영구 저장/장기 개인정보 프로파일링 기능 없음.
+
+## 2026-10-18 — ContextAssessor 초안
+- 사용자 Windows에서 기존 37개 단위 테스트 OK 보고.
+- `echomate_studio.context_assessor`: 로컬 Qwen에게 현재 대화를 전달하고 세 가지 Boolean(민감, 기여 가능성, 개입 적절)을 JSON으로 요구; 실패/형식 오류 시 발언 차단.
+- `echomate_studio.autonomy_probe`: 여러 `--message` 합성 대화 입력으로 판단·침묵 게이트 직접 시험하는 CLI.
+- `tests/test_context_assessor.py` 단위 테스트 7개 작성. **Windows 신규 테스트 및 실제 판단 결과 미검증**. 예상 테스트 총 44개.
+- 이 모듈은 현재 과거 데이터로 학습하지 않으며 Discord API와 연결하지 않는다.
+- 다음 단계: 로컬 CLI 테스트·실전 정확도 확인, Discord Bot에 통합하기 전 이벤트/레이스·취소 설계 테스트.
