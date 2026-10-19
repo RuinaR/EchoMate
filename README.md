@@ -1,5 +1,7 @@
 # EchoMate
 
+다중 사용자 요청·고정 원본 답장·공정한 단일 GPU 큐의 최신 구현은 [병렬 대화 문서](docs/PARALLEL-CONVERSATIONS.md), 실제 검증과 릴리즈 NOT VERIFIED의 근거는 [릴리즈 QA](docs/RELEASE-QA.md)를 먼저 읽으세요.
+
 공통 대화·관계·선택 기억·자연어 예약의 최신 구현/검증/사용법은 [통합 문서](docs/COMPANION-MEMORY-REMINDERS.md)를 참고하세요. 자동 기억은 기본 꺼짐이며 실제 Discord 1분 알림 시험을 완료했습니다. 모델 최종 선정과 장시간 품질 승인은 별도입니다.
 
 성격과 기분 화면은 개인 말투/기본 Gemma 4/성인 유머의 세 선택지와 공통 성별 설정을 제공한다. 성인 유머는 현재 기본 Gemma 4+정책 대안이며 새 GGUF를 실사용으로 승인한 것이 아니다. 연령 제한 채널에서만 성인 정책을 사용한다. [검증과 제약](docs/ADULT-MODE-QA.md).

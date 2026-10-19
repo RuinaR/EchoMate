@@ -16,6 +16,7 @@ class CommonRuntime(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         integration.BotIntegration.setUp(self)
         self.store=CompanionStore(self.root/'companion.sqlite3');self.runtime.companion=self.store
+        self.store.resume_subject(2,4);self.store.resume_subject(2,5)
     asyncTearDown=integration.BotIntegration.asyncTearDown
     event=integration.BotIntegration.event
     settle=integration.BotIntegration.settle

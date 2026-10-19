@@ -1,5 +1,26 @@
 # 작업 로그
 
+
+추가 짧은 반복 부하 검사: 실제 단일 ThreadPoolExecutor에 32.157초/115묶음/2300요청을 투입했다. 정상1955·의도취소345·예기치 않은 오류0, 최대 동시 워커1, 종료 후 실행/대기0·asyncio task 증가0이다. SDK/GPU/원격 서버는 사용하지 않은 큐·취소·종료 검사이며 장시간 RAM/GPU 누수나24시간 안정성을 입증하지 않는다. 원본 스크립트·결과는 private short_soak.py/short-soak.json에 보존했다.
+
+## 2026-10-19 — 사용자 조작 없는 모의 검증으로 범위 확정
+
+사용자 최신 지시로 실제 Discord 테스트 채널·스레드 접속/송신과 사용자 수동 QA 요청을 중단하는 범위를 확정했다. 이번 다중 대화 작업의 실서버 송신은 없으며 과거 알림 성공 기록은 유지한다. 영향: test_discord_simulator.py, 인수인계/상태/Discord·앱·검증 문서. 과거 시험 안내보다 최신 범위를 우선하도록 표시했다.
+
+실제 SDK 객체·메시지 파싱·답장 직렬화·운영 수신/런타임을 사용하고 HTTP 경계만 메모리로 대체했다. 외부 HTTP 요청을 AssertionError로 차단한다. 4검사 OK0.372초: 원본 reply·nonce·멘션 억제, 차단 채널/봇 입력, 스레드 권한·기본 스티커/반응, 삭제 원본/권한 실패. Windows 제한 환경의 첫 비동기 실행 대기는 해당 QA 프로세스만 종료하고 sdk-simulator-1/2 로그를 보존했다. 실제 Gateway/전달/서버 rate-limit 성공을 주장하지 않는다. 최종 전체 회귀는 `PYTHONPATH=src .venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`: 366검사 OK25.682초(final-tests-6.log).
+
+## 2026-10-19 — 다중 대화 순차 구현 후 릴리즈 감사
+
+기준 HEAD eaf1d1e, clean main, 기존 private1234파일 inventory를 기록하고 전체328검사 OK18.002초로 시작했다. 영향: 새 sessions/scheduler, runtime/inference/discord_app/DialogueState/desktop·진행 UI/routing, companion_store schema3·동의/UI안내, 테스트/실제 GPU QA 도구/문서.
+
+1단계: 실제 reply/화자별 흐름 분리·보충 병합/독립 질문 FIFO·원본 고정 reply와 source hash, 공정한 GPU admission/aging/deadline/취소·용량/입력 수신 분리. 다른 대화의 취소·모델/재연결 보류 누락·일반 오류 전역 전파·Windows 조기 타이머 발언 누락을 수정했다. 사용자 최신 지시로 전역 자율 차단을 폐기하고 실제 활성/휴지·범위별 cooldown·부하 보정을 적용했다. 같은 작성자1/2/5초의 별개 요청은 보존하고 원문 완전 중복만 억제한다.
+
+2단계: 요구 추적/24문서 내부링크 감사(깨진 상대링크0), SQLite flow 격리·기존 보존 schema3·다른 구성원 자동 동의, Gateway/모델 실패·원본 편집·권한·DB잠금/rollback/backup·종료와 숨긴 Tk100/125/150% QA. 초기 import 오류로 멈춘 이 저장소의 QA 프로세스만 정리했고 실패 로그/중단 GPU 버전을 보존했다. group-1 기본 후속 누락은 실제 공유 주제 근거 경로로 보강하고 다른값 group-2로 재시험했다.
+
+명령 `$env:PYTHONPATH='src'`; `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`: 최종366검사 OK25.682초. GPU 도구 verify_parallel_gpu/verify_direct_bursts/verify_shared_group_gpu/verify_parallel_lifecycle_gpu는 한 번에 하나씩 실행했다. 중첩 기준9/18→변경18/18, 동일작성자18/18, 회상12/12, 공유후속 보강 후12대상/변경값 유지, 생성중 모델전환2원본 보존/실패후GPU복구/GPU중모의알림 약15ms. 단일 산술5쌍은 동일 프롬프트/답변이나 표본이 작고 이후 가드가 더해져 전체속도 개선을 확정하지 않는다.
+
+실제 Discord 다중 계정은 사용자가 ‘이번에는 로컬 GPU·모의 검증만’을 선택해 미실행. 실제 Windows 사용자 조작/장시간 soak/실제망 장애·인적 품질 평가는 미확인. 전체릴리즈 NOT VERIFIED, 모델승격 보류. 컴퓨터 조작 자동화·클라우드·새학습·미디어 확장 없음. private 원본/스냅샷은 local_data/parallel-qa-20261019/. 단계별 실제 결과와 한계는 PARALLEL-CONVERSATIONS/RELEASE-QA 최신 절 참조.
+
 ## 2026-10-19 — 세 요구 순차 통합·GPU/실제 예약 검증
 
 기준 f2539f9에서 비공개 기존1104파일 inventory를 보존하고 common character/context/relations → SQLite 선택 기억·UTC/서버 시간대 만료 → 본인 자연어 예약·독립 scheduler 순서로 구현했다. 영향: companion/store/ui/context/memory_context/routing/temporal 신규, runtime/discord_app/desktop/settings/naming/inference/DialogueState/telemetry 및 테스트·QA 도구·문서. 자동 기억 OFF, 소유자/HMAC/allowlist·이전 모델/미디어 제약 유지. 새 GPU 학습 없음.
@@ -70,7 +91,7 @@ private 원본: local_data/companion-qa-20261019/. 상세 설계·표·한계·�
 - 제거: media.py와 media_add/media 명령 및 파일 송신 경로 삭제. 구 MEDIA/TEXT_MEDIA 제안은 최종 검증에서 거절한다. 기존 private 파일은 보존했다. 관련 폐기 기능 테스트를 제거/거절 회귀로 대체했으며 원래 217개 테스트는 유지한다. 공식 StandardSticker만 전송, 커스텀 반응 금지, 실험 분석 ON도 송신을 확대하지 않는다. HMAC 인증 후 asset_policy=2 마이그레이션으로 과거 vision=true를 계승하지 않는다.
 - 속도: 명시적 멘션의 끼어들기 판단을 생략해 TEXT 1회 생성. 무멘션 의미 판단/안전 실행기는 유지한다. GPU fast-3 잡담 6.125초/1호출, 기술 후속37.891초/2호출. 앞선 단일 출력과 달라 보편 개선/품질 향상으로 선언하지 않는다. 긴 출력 지연은 남아 있다. CPU thread8/4 교차 생성14.359/14.500/14.438/14.468초(모두86토큰)로 이득 없어 변경하지 않았다.
 - 답장: 원래 미응답 멘션 ID와 최신 문맥 이벤트 ID를 분리한다. SDK fetch_message/reply 대상은 원래 ID, 취소·중복 예약은 최신 상태로 검증한다. 텍스트가 항상 reply이므로 지연 시에도 대상이 연결된다. 원래 대상 삭제 시 안전 실패한다.
-- 검증: 전체259개 OK(7.035초), compileall. Canvas 합성 창 시각/선택·저장/소유자·범위/마이그레이션/제거 명령/기본 에셋 제한/원래 reply 대상 회귀. 공식 Bot REST로14팩/361기본 스티커, 초대2서버의57채널(음성/카테고리 포함 raw 수)/36활성 스레드 메타데이터 조회 확인. 실제 본문 수집/송신 없이 수행했다. 최신 다크 앱은 GPU 미로딩/봇 정지 상태로 열었다. 새 UI 사용자 조작과 새 실제 답장·기본 스티커 송신은 미확인이다.
+- 검증: 전체259개 OK(7.035초), compileall. Canvas 합성 창 시각/선택·저장/소유자·범위/마이그레이션/제거 명령/기본 에셋 제한/원래 reply 대상 회귀. 공식 Bot REST로14팩/362기본 스티커, 초대2서버의57채널(음성/카테고리 포함 raw 수)/36활성 스레드 메타데이터 조회 확인. 실제 본문 수집/송신 없이 수행했다. 최신 다크 앱은 GPU 미로딩/봇 정지 상태로 열었다. 새 UI 사용자 조작과 새 실제 답장·기본 스티커 송신은 미확인이다.
 - 산출물/보호: local_data/discord-integration-20261019의 fast-3/threads-1/테스트/메타데이터 QA/합성 UI 확인 파일. 실제 토큰/owner/guild ID와 공개 대상 대조, private 파일 Git 미추적 확인 후 소스·비식별 문서만 로컬 커밋. GitHub push 없음. 상세 모델 품질 승격 없음/추가 학습0단계. 후속은 AI-HANDOFF 첫 절과 DESKTOP-UI/DISCORD-BOT을 읽는다.
 
 ## 2026-10-19 — 사용자 지연 지적 대응: Windows GUI와 문맥 지속
@@ -593,3 +614,6 @@ private 원본: local_data/companion-qa-20261019/. 상세 설계·표·한계·�
 
 
 보존 최종 검사: 기존1104파일 누락0. 가중치/학습자료/원래 서명 설정은 보존했다. 실제 QA 과정에서 기존 runtime.lock, diagnostic.jsonl, sent.sqlite3, telemetry.json 네 운영 파일은 실행 기록이 갱신됐다. 원래 파일을 삭제/되돌리지 않았다. QA 설정 폴더를 써도 EchoClient의 기본 ledger 경로가 운영 폴더를 가리키던 원인을 확인해, visual/ledger/진단을 설정 폴더에 함께 두도록 수정하고 경로 회귀 검사를 추가했다. 이 최종 경로 격리 수정은 모의 SDK/전체 회귀 검증이며 실제 Discord 재시험은 하지 않았다.
+
+
+최종 보존 검사: 기존 private1234파일 누락0, runtime.lock 실행 메타데이터만 갱신됐고 나머지1233파일의 크기/mtime는 보존됐다. 원래 모델 선택 persona, 자동 기억/실험 시각 OFF를 읽기 확인했으며 설정·운영DB·weights를 변경하지 않았다. 환경은 torch2.9.1+cu128/transformers5.20.1/peft0.21.2/discord.py2.7.1/tzdata2026.5다. 상세 inventory/로그는 private에만 보관한다.

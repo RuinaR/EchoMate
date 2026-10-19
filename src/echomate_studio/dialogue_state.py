@@ -75,6 +75,17 @@ class DialogueState:
     def is_current(self, *, channel_id: int, thread_id: int | None, version: int) -> bool:
         return self._versions.get((channel_id, thread_id), 0) == version
 
+    def merge_actual(self,*,channel_id,thread_id,turns):
+        """Merge only source-linked real turns from an explicitly shared flow."""
+        key=(channel_id,thread_id);history=list(self._channels.get(key,()))
+        actual={t.message_id:t for t in history}
+        for turn in turns:actual.setdefault(turn.message_id,turn)
+        if len(actual)==len(history):return
+        merged=sorted(actual.values(),key=lambda t:t.timestamp)
+        self._channels[key]=deque(merged);self._ids[key]=set(actual)
+        self._versions[key]=self._versions.get(key,0)+1
+        if merged:self._prune(key,merged[-1].timestamp)
+
     def change_message(self,*,channel_id,thread_id,message_id,content=None):
         """Invalidate in-flight snapshots; preserve unrelated actual history."""
         from dataclasses import replace

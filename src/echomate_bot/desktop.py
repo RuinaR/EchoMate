@@ -15,7 +15,7 @@ import tkinter as tk
 
 from .settings import ROOT,Settings,MOODS,ACTIVITY
 
-STAGES={'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
+STAGES={'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
         'action':'행동 선택','text':'답변 작성','sending':'Discord 전송'}
 MODES={'침묵':'silent','멘션·대화 이어가기':'mention','문맥에 따라 자율 참여':'autonomous'}
 ACTIVITIES={'조용함':'quiet','보통':'normal','활발함':'active','매우 활발함':'very_active'}
@@ -86,17 +86,18 @@ class LocalController:
         progress=[]
         if runtime:
             for cid,p in list(runtime.progress.items()):
-                channel=client.get_channel(cid)
+                channel=client.get_channel(p.get('channel',cid))
                 progress.append(dict(channel=channel.name if channel else '허용된 채널',stage=STAGES.get(p['stage'],p['stage']),seconds=round(time.time()-p['started'],1)))
         preparing=bool(runtime and getattr(runtime,'changing_model',False))
         snapshot=dict(phase='모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
                       model_preparing=preparing,
+                      scheduler=client.backend.scheduler.snapshot() if client and hasattr(client.backend,'scheduler') else {},
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
                       memory_pending=runtime.memory_queue.qsize() if runtime else 0,
                       private_service=bool(runtime and runtime.service_task and not runtime.service_task.done()),
                       running=bool(self.job and not self.job.done()),
-                      connected=bool(client and client.is_ready()),pending=client.backend.pending if client else 0,
-                      contexts=len(runtime.states) if runtime else 0,safe_stopped=runtime.stopped if runtime else False,
+                      connected=bool(client and client.is_ready()),pending=len(runtime.tasks.keys()|runtime.deferred_events.keys()) if runtime else 0,
+                      contexts=runtime.activity_changed() if runtime else 0,safe_stopped=runtime.stopped if runtime else False,
                       latency=runtime.latencies[-1] if runtime and runtime.latencies else None,
                       gpu_seconds=client.backend.metrics[-1]['seconds'] if client and client.backend.metrics else None)
         if self.updates.full():
@@ -238,9 +239,7 @@ class LocalController:
                 elif action=='cleanup':await asyncio.to_thread(store.cleanup)
                 elif action=='clear_context':
                     if self.client:
-                        for channel in list(self.client.runtime.states):
-                            c=self.client.get_channel(channel)
-                            if c and c.guild.id==gid:self.client.runtime.invalidate(channel)
+                        self.client.runtime.invalidate_guild(gid)
                 elif action!='refresh':raise ValueError('Unknown companion action')
                 await self.refresh_companion(gid,user,kwargs.get('query',''),kwargs.get('kind'))
                 self.notice='로컬 기록을 확인했어요' if action=='refresh' else '변경을 적용했어요'
@@ -252,6 +251,7 @@ class LocalController:
                 atomic_private_json(ROOT/'diagnostic-report.json',dict(schema=1,
                     connected=bool(self.client and self.client.is_ready()),
                     queue_depth=self.client.backend.pending if self.client else 0,
+                    gpu_scheduler=self.client.backend.scheduler.snapshot() if self.client and hasattr(self.client.backend,'scheduler') else {},
                     safe_stopped=runtime.stopped if runtime else False,
                     summary=summarize(runtime.traces if runtime else []),
                     codes=dict(Counter(r['code'] for r in runtime.diagnostics)) if runtime else {}))

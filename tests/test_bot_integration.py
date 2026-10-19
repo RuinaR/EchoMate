@@ -58,6 +58,8 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.backend=FakeBackend();self.transport=FakeTransport()
         self.cache=VisualCache(self.root/'cache.sqlite3');self.library=None
         self.runtime=Runtime(self.settings,self.backend,self.transport,self.cache,self.library,ledger_path=self.root/'ledger.sqlite3')
+        # Legacy policy tests isolate their concern; burst limits have a dedicated suite.
+        self.runtime.direct_spam_window=0;self.runtime.autonomy_idle_since=-1e9
     async def asyncTearDown(self):
         await self.runtime.close();self.temp.cleanup()
     def event(self,id=10,channel=3,content='<@999> 안녕',parent=None):
@@ -182,12 +184,12 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(replace(self.event(id=12),guild=None))
         await self.runtime.ingest(replace(self.event(id=13),opted_out=True))
         self.assertEqual(self.backend.calls,[]);self.assertEqual(self.transport.sent,[])
-    async def test_new_message_cancels_old_generation(self):
+    async def test_independent_direct_question_preserves_old_generation(self):
         self.backend.wait=asyncio.Event()
         await self.runtime.ingest(self.event());await asyncio.sleep(.02)
         await self.runtime.ingest(self.event(id=11,content='<@999> 새 질문'))
         self.backend.wait.set();await self.settle()
-        self.assertEqual([e.id for e,a in self.transport.sent],[11])
+        self.assertEqual({e.id for e,a in self.transport.sent},{10,11})
     async def test_unmentioned_same_author_retains_actual_pending_mention(self):
         self.backend.wait=asyncio.Event()
         await self.runtime.ingest(self.event());await asyncio.sleep(.02)
@@ -202,7 +204,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event());await asyncio.sleep(.02)
         await self.runtime.ingest(replace(self.event(id=11,content='다른 사람 이야기'),author=5))
         self.backend.wait.set();await self.settle()
-        self.assertFalse(self.transport.sent);self.assertEqual(self.runtime.pending_mentions,{})
+        self.assertEqual([e.id for e,a in self.transport.sent],[10]);self.assertEqual(self.runtime.pending_mentions,{})
     async def test_permission_fetch_latency_cannot_reorder_same_channel_burst(self):
         original=self.transport.permissions
         async def delayed(event):
@@ -345,7 +347,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         channel.fetch_message.assert_awaited_once_with(6)
         current.reply.assert_awaited_once()
         current.add_reaction.assert_not_awaited()
-        self.assertEqual(current.reply.call_args.kwargs['nonce'],10)
+        self.assertEqual(current.reply.call_args.kwargs['nonce'],6)
         self.assertTrue(current.reply.call_args.kwargs['suppress_embeds'])
     async def test_animation_work_limit_and_mood_bounds(self):
         from echomate_bot.character import effective_character
@@ -455,8 +457,9 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(select(0,IDs([99,99,1])),[2,3])
         self.assertEqual(select(0,IDs([99,99,1,3])),[4])
         with self.assertRaises(ValueError):select(0,IDs([99,99,7]))
-    async def test_repeated_failures_disable_runtime(self):
+    async def test_repeated_failures_pause_only_affected_conversation(self):
         async def fail(context):raise RuntimeError('synthetic')
         self.backend.classify=fail
         for i in range(3):await self.runtime.ingest(self.event(id=20+i));await self.settle()
-        self.assertTrue(self.runtime.stopped)
+        self.assertFalse(self.runtime.stopped)
+        self.assertEqual(self.runtime.flow_failures[3],3)

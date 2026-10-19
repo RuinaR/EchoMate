@@ -166,7 +166,7 @@ class CompanionViews:
             history=data.get('history',[])[:2]
             text=' / '.join(('대화' if r['kind']=='conversation' else '반응')+f" {r['delta']:+.2f}"+(' · 취소됨' if not r['active'] else '') for r in history)
             self.text(246,y+84,'최근 변화: '+(text or '선택한 사람의 새 교류가 아직 없어요'),9,MUTED,width=w-310)
-        hint='자동 기억은 기본 꺼짐 · 저장 사실과 삭제 방법을 구성원에게 안내해 주세요.' if self.page=='memories' else '알림은 본인에게만 · GPU 생성과 별개로 처리 · 완료 기록은 7일 후 정리해요.' if self.page=='reminders' else '친밀도는 캐릭터 표현용 수치예요. 사람 평가·권한·성인 정책과 별개예요.'
+        hint='자동 기억 기본 꺼짐 · 다른 구성원은 /내기억에서 본인 자동 저장을 허용해야 해요.' if self.page=='memories' else '알림은 본인에게만 · GPU 생성과 별개로 처리 · 완료 기록은 7일 후 정리해요.' if self.page=='reminders' else '표현용 친밀도예요 · 다른 구성원의 자동 갱신은 /내기억에서 본인 동의가 필요해요.'
         if (self.snapshot or {}).get('companion_error'):hint='기억 저장소 오류 · 일반 대화는 계속 사용할 수 있어요. 로컬 진단을 확인해 주세요.'
         self.text(246,h-94,hint,9,MUTED,width=w-300)
 

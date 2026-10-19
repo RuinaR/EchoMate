@@ -1,5 +1,22 @@
 # 새 앱 테스트 방법
 
+> **최신 검증 범위(2026-10-19):** 사용자 지시에 따라 실제 Discord 서버·채널·스레드에 접속하거나 시험 메시지를 보내지 않는다. 사용자에게 계정 조작이나 수동 QA를 요청하지 않고 로컬 GPU·모의 이벤트·SDK 직렬화·격리된 저장소 검사로 진행한다. 아래 과거 실서버 테스트 절차는 실행 지시가 아닌 이전 기록이며, 새 명시적 지시 없이는 재개하지 않는다. 외부 서비스의 실제 동작은 미검증으로 구분한다.
+
+## 현재 검증 방법 — 사용자 조작 없는 로컬 QA
+
+실제 Gateway 로그인·슬래시 동기화·채널 송신 없이 검사한다. 사용자에게 테스트 메시지를 요청하지 않는다.
+
+```powershell
+$env:PYTHONPATH='src'
+.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q
+```
+
+`test_discord_simulator.py`는 실제 discord.py Guild/TextChannel/Thread/Message와 EchoClient.on_message → Runtime → DiscordTransport → SDK send 직렬화를 사용한다. HTTP 경계만 메모리 응답으로 바꾸고 HTTPClient.request를 실패 처리해 우발적 외부 통신을 차단한다. 실제 reply/nonce/멘션 억제, 허용되지 않은 채널·봇 입력 차단, 스레드 권한·기본 스티커·반응, 삭제 원본·Forbidden 전송 실패를 검사한다. 단순히 reply 함수를 mock한 검사와 구분한다.
+
+동일 작성자 1/2/5초·GPU 작업 대기/생성 중 별개 질문·보충/중복·공유 문맥은 기존 로컬 GPU 도구로 검증했다. 모든 송신은 합성 transport이며 실제 Discord API 성공을 뜻하지 않는다. 네트워크 재시도·429 버킷 등 Discord 서버의 동작 자체는 이 시뮬레이터로 인증하지 않는다. 세부 결과/한계는 PARALLEL-CONVERSATIONS와 RELEASE-QA를 따른다.
+
+아래는 이전 단계의 사용자 시험 안내로, 현재 실행할 필요가 없다.
+
 ## 공통 기억·예약 시험 (2026-10-19)
 
 1. 앱 재실행 후 허용 테스트 서버/채널을 확인한다. 별칭을 저장하고 전체 이름/호격·인용/다른 대상에서 구별되는지 본다.

@@ -5,6 +5,7 @@ from dataclasses import dataclass,field,replace
 from datetime import datetime,timezone
 import json
 import random
+import re
 import sqlite3
 import time
 import weakref
@@ -41,6 +42,11 @@ class Event:
     standard_stickers:tuple=()
     response_to:int|None=None
     received_at:float=field(default_factory=time.monotonic,compare=False)
+    flow_key:object=None
+    invited:bool=False
+    conversation_id:str|None=None
+    target_content_hash:str|None=None
+    source_content_hash:str|None=None
 
 
 class Ledger:
@@ -54,6 +60,8 @@ class Ledger:
     def last(self,channel):
         with self.db() as db:row=db.execute("SELECT MAX(at) FROM sent WHERE channel=?",(str(channel),)).fetchone()
         return row[0] or 0
+    def contains(self,event):
+        with self.db() as db:return db.execute('SELECT 1 FROM sent WHERE event=?',(str(event.response_to or event.id),)).fetchone() is not None
     def reserve(self,event,limit,cooldown):
         now=time.time();day=datetime.now(timezone.utc).date().isoformat()
         with self.db() as db:
@@ -61,12 +69,12 @@ class Ledger:
             count=db.execute("SELECT COUNT(*) FROM sent WHERE day=?",(day,)).fetchone()[0]
             last=db.execute("SELECT MAX(at) FROM sent WHERE channel=?",(str(event.channel),)).fetchone()[0] or 0
             if count>=limit or now-last<cooldown:return False
-            try:db.execute("INSERT INTO sent VALUES(?,?,?,?,?)",(str(event.id),str(event.channel),day,now,"reserved"))
+            try:db.execute("INSERT INTO sent VALUES(?,?,?,?,?)",(str(event.response_to or event.id),str(event.channel),day,now,"reserved"))
             except sqlite3.IntegrityError:return False
             db.execute("DELETE FROM sent WHERE at<?",(now-7*86400,))
         return True
     def completed(self,event,status):
-        with self.db() as db:db.execute("UPDATE sent SET status=? WHERE event=?",(status,str(event.id)))
+        with self.db() as db:db.execute("UPDATE sent SET status=? WHERE event=?",(status,str(event.response_to or event.id)))
 
 
 class Runtime:
@@ -75,12 +83,83 @@ class Runtime:
         self.ledger=Ledger(ledger_path);self.rng=rng or random.Random()
         self.states={};self.tasks={};self.seen={};self.blocked_assets=set();self.failures=0
         self.pending_mentions={}
-        self.ingest_locks=weakref.WeakValueDictionary()
+        self.ingest_locks=weakref.WeakValueDictionary();self.send_locks=weakref.WeakValueDictionary();self.turn_locks=weakref.WeakValueDictionary();self.conversation_locks=weakref.WeakValueDictionary()
         self.stopped=False;self.diagnostics=[];self.progress={};self.latencies=[];self.traces=[]
         self.telemetry_lock=asyncio.Lock()
         self.model_lock=asyncio.Lock();self.changing_model=False;self.deferred_events={}
         self.companion=companion;self.service_task=None;self.memory_queue=asyncio.Queue(maxsize=64)
+        from .sessions import Conversations
+        self.conversations=Conversations();self.flow_failures={};self.requests={}
         self.followup_fast_path=followup_fast_path
+        self.direct_cooldown=2
+        self.activity_clock=time.monotonic;self.autonomy_idle_since=self.activity_clock();self._active_count=0
+        self._active_places={};self._place_activity_until={};self.autonomy_idle_places={};self.direct_bursts={}
+        self.direct_spam_window=10
+        self.gateway_available=True
+
+    @staticmethod
+    def key(event):return event.flow_key if event.flow_key is not None else event.channel
+
+    def activity_changed(self):
+        now=self.activity_clock();lease=min(300,self.settings.get()['engagement_seconds'])
+        active=[f for f in self.conversations.flows.values() if f.engaged and not f.ended and (now-f.last_at<=lease or f.key in self.tasks)]
+        places={}
+        for f in active:places.setdefault((f.guild,f.channel),set()).add(f.conversation_id)
+        for place in self._active_places.keys()-places.keys():
+            # Quiet sessions lose their load lease, not their conversational memory.
+            self.autonomy_idle_places[place]=min(now,self._place_activity_until.get(place,now));self.note('autonomy_cooldown_started')
+        self._active_places=places
+        self._place_activity_until={place:max(f.last_at+lease for f in active if (f.guild,f.channel)==place) for place in places}
+        count=len({f.conversation_id for f in active})
+        self._active_count=count
+        return count
+
+    def autonomy_allowed(self,event):
+        self.activity_changed();place=(event.guild,event.channel)
+        if place in self._active_places:return False
+        scheduler=getattr(self.backend,'scheduler',None)
+        if scheduler and scheduler.pending>=max(1,int(scheduler.limit*.75)):return False
+        return self.activity_clock()-self.autonomy_idle_places.get(place,self.autonomy_idle_since)>=self.settings.get()['cooldown']
+
+    def autonomy_probability(self,cfg):
+        active=self.activity_changed();pending=getattr(self.backend,'pending',0)
+        return ACTIVITY[cfg['activity']]/(1+.5*active+.5*pending)
+
+    async def automatic_subject_allowed(self,guild,user):
+        if user==self.settings.owner_id:return True  # owner explicitly requested personal adaptation
+        try:return await asyncio.to_thread(self.companion.automatic_allowed,guild,user)
+        except (OSError,RuntimeError,sqlite3.Error):self.note('subject_consent_unavailable');return False
+
+    def end_conversation(self,flow,author):
+        for key,sibling in self.conversations.flows.items():
+            if sibling.conversation_id!=flow.conversation_id:continue
+            pending=self.requests.get(key)
+            if pending and pending[0].author!=author:continue
+            sibling.ended=True;sibling.engaged=False
+            task=self.tasks.get(key)
+            if task:task.cancel()
+            self.pending_mentions.pop(key,None);self.deferred_events.pop(key,None)
+        self.activity_changed()
+
+    def pause_gateway(self):
+        self.gateway_available=False
+        for key,(event,request) in list(self.requests.items()):
+            if not self.ledger.contains(event):self.deferred_events.setdefault(key,(event,request))
+        for task in list(self.tasks.values()):task.cancel()
+        self.note('gateway_paused_pending_preserved')
+
+    async def resume_gateway(self):
+        await asyncio.gather(*list(self.tasks.values()),return_exceptions=True)
+        self.gateway_available=True
+        if self.changing_model:return
+        deferred=self.deferred_events;self.deferred_events={}
+        for key,(event,request) in deferred.items():
+            state=self.states.get(key)
+            if state and not self.stopped and time.monotonic()<=event.received_at+180 and not self.ledger.contains(event):self._schedule(event,state,request)
+
+    def invalidate_guild(self,guild):
+        for key,flow in list(self.conversations.flows.items()):
+            if flow.guild==guild:self._drop_flow(key)
 
     def start_services(self):
         if self.companion and (not self.service_task or self.service_task.done()):
@@ -95,7 +174,7 @@ class Runtime:
                 try:
                     for _ in range(min(8,self.memory_queue.qsize())):
                         event,revision=self.memory_queue.get_nowait();cfg=self.settings.get()
-                        if revision==self.settings.revision and cfg['memory_auto'] and scope(cfg,event.guild,event.channel,event.parent)!='silent':
+                        if revision==self.settings.revision and cfg['memory_auto'] and scope(cfg,event.guild,event.channel,event.parent)!='silent' and await self.automatic_subject_allowed(event.guild,event.author):
                             tz=cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul')
                             await asyncio.to_thread(self.companion.extract,event,tz,policy=cfg)
                     if time.monotonic()-cleaned>=60:
@@ -138,21 +217,31 @@ class Runtime:
                 except (OSError,RuntimeError,sqlite3.Error):self.note('reminder_store_failed')
 
     async def message_changed(self,guild,channel,message,content=None):
-        task=self.tasks.get(channel)
-        if task:task.cancel()
-        self.pending_mentions.pop(channel,None);self.deferred_events.pop(channel,None)
-        state=self.states.get(channel)
-        if state:state.change_message(channel_id=channel,thread_id=None,message_id=str(message),content=content)
+        known=False
+        for key,state in list(self.states.items()):
+            flow=self.conversations.flows.get(key)
+            if flow and (flow.guild!=guild or flow.channel!=channel):continue
+            if not flow and key!=channel:continue
+            _,turns=state.snapshot(channel_id=channel,thread_id=None)
+            if not any(t.message_id==str(message) for t in turns):continue
+            known=True;task=self.tasks.get(key)
+            if task:task.cancel()
+            self.pending_mentions.pop(key,None);self.deferred_events.pop(key,None)
+            state.change_message(channel_id=channel,thread_id=None,message_id=str(message),content=content)
         if self.companion:
-            try:await asyncio.to_thread(self.companion.delete_source,guild,message,known=state is not None)
+            try:await asyncio.to_thread(self.companion.delete_source,guild,message,known=known)
             except (OSError,RuntimeError,sqlite3.Error):self.note('memory_delete_failed')
 
     async def reaction_event(self,guild,channel,user,message,emoji,*,remove=False,parent=None):
         if not self.companion or not self.settings.get()['relations_auto'] or scope(self.settings.get(),guild,channel,parent)=='silent':return
-        state=self.states.get(channel)
-        if not state:return
-        _,turns=state.snapshot(channel_id=channel,thread_id=None)
-        if not any(t.is_bot and t.message_id==str(message) for t in turns):return
+        if not await self.automatic_subject_allowed(guild,user):return
+        found=False
+        for key,state in self.states.items():
+            flow=self.conversations.flows.get(key)
+            if flow and (flow.guild!=guild or flow.channel!=channel):continue
+            _,turns=state.snapshot(channel_id=channel,thread_id=None)
+            if any(t.is_bot and t.message_id==str(message) for t in turns):found=True;break
+        if not found:return
         try:await asyncio.to_thread(self.companion.relationship,guild,user,f'reaction:{message}:{user}:{emoji}','reaction',remove=remove)
         except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_update_failed')
 
@@ -163,6 +252,8 @@ class Runtime:
         async with self.model_lock:
             self.changing_model=True;self.note('model_preparing')
             try:
+                for key,(event,request) in list(self.requests.items()):
+                    if not self.ledger.contains(event):self.deferred_events.setdefault(key,(event,request))
                 tasks=list(self.tasks.values())
                 for task in tasks:task.cancel()
                 await asyncio.gather(*tasks,return_exceptions=True)
@@ -175,11 +266,12 @@ class Runtime:
                 self.note('model_previous_preserved');raise
             finally:
                 self.changing_model=False
-                deferred=self.deferred_events;self.deferred_events={}
-                for channel,(event,request) in deferred.items():
-                    state=self.states.get(channel)
-                    if not self.stopped and state and scope(self.settings.get(),event.guild,channel,event.parent)!='silent':
-                        self._schedule(event,state,request)
+                if self.gateway_available:
+                    deferred=self.deferred_events;self.deferred_events={}
+                    for channel,(event,request) in deferred.items():
+                        state=self.states.get(channel)
+                        if not self.stopped and state and not self.ledger.contains(event) and scope(self.settings.get(),event.guild,event.channel,event.parent)!='silent':
+                            self._schedule(event,state,request)
 
     def note(self,code):
         record=dict(at=time.time(),code=code)
@@ -193,18 +285,23 @@ class Runtime:
     def stage(self,event,name,started):
         trace=active_trace.get()
         if trace:trace.stage(name)
-        self.progress[event.channel]=dict(stage=name,started=started,updated=time.time())
+        self.progress[self.key(event)]=dict(stage=name,started=started,updated=time.time(),channel=event.channel)
         self.note('stage_'+name)
 
-    def invalidate(self,channel):
-        task=self.tasks.get(channel)
+    def _drop_flow(self,key):
+        task=self.tasks.get(key)
         if task:task.cancel()
-        self.states.pop(channel,None)
-        self.pending_mentions.pop(channel,None)
-        self.deferred_events.pop(channel,None)
+        self.states.pop(key,None);self.conversations.drop(key);self.flow_failures.pop(key,None)
+        self.pending_mentions.pop(key,None);self.deferred_events.pop(key,None)
+        self.activity_changed()
+
+    def invalidate(self,channel):
+        for key in list(self.states):
+            flow=self.conversations.flows.get(key)
+            if key==channel or flow and flow.channel==channel:self._drop_flow(key)
 
     def invalidate_all(self):
-        for channel in list(self.states):self.invalidate(channel)
+        for key in list(self.states):self._drop_flow(key)
 
     def cancel_pending(self):
         """Character changes cancel stale generation but retain actual history."""
@@ -224,10 +321,74 @@ class Runtime:
         self.seen[event.id]=time.time()
         self.seen={k:v for k,v in self.seen.items() if time.time()-v<3600}
         if len(self.seen)>5000:self.seen.pop(next(iter(self.seen)))
-        if event.channel not in self.states and len(self.states)>=32:
-            self.invalidate(next(iter(self.states)))
+        extra=list(cfg['guilds'].get(str(event.guild),{}).get('aliases',()))
+        if hasattr(self.transport,'address_names'):extra.extend(self.transport.address_names(event))
+        explicit=mentions_bot(event.content,self.transport.bot_id) or name_candidate(event.content,guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True))
+        verified_reply=False
+        if event.reply_to:
+            reply_key=self.conversations.message_flow.get((event.guild,event.channel,str(event.reply_to)))
+            prior_state=self.states.get(reply_key)
+            if prior_state:
+                verified_reply=any(t.is_bot and t.message_id==str(event.reply_to) for t in prior_state.snapshot(channel_id=event.channel,thread_id=None)[1])
+        if explicit:
+            import hashlib
+            now=self.activity_clock();burst_key=(event.guild,event.channel,event.author)
+            digest=hashlib.sha256(event.content.encode()).digest()
+            records=[r for r in self.direct_bursts.get(burst_key,[]) if now-r[0]<self.direct_spam_window]
+            if any(r[1]==digest for r in records):self.note('direct_spam_veto');return
+            self.direct_bursts[burst_key]=records[-64:]+[(now,digest)]
+            if len(self.direct_bursts)>1000:self.direct_bursts.pop(next(iter(self.direct_bursts)))
+        from .naming import address_forms
+        intent=re.sub(r'^\s*<@!?'+str(self.transport.bot_id)+r'>[, :]*','',event.content)
+        for form in sorted(address_forms(guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True)),key=len,reverse=True):
+            intent=re.sub(r'^\s*'+re.escape(form)+r'(?:아|야|님)?(?:[, :]+|$)','',intent,flags=re.I)
+        flow,relation=self.conversations.choose(event,direct=explicit,pending=self.tasks.keys()|self.deferred_events.keys(),intent_text=intent)
+        if flow is None:self.note('ambiguous_request_cancel');return
+        if relation=='cancel':
+            pending=self.requests.get(flow.key) or self.deferred_events.get(flow.key)
+            if pending and pending[0].author!=event.author:self.note('other_request_cancel_veto');return
+            task=self.tasks.get(flow.key)
+            if task:task.cancel()
+            self.pending_mentions.pop(flow.key,None);self.deferred_events.pop(flow.key,None)
+            flow.ended=True;flow.engaged=False;self.activity_changed()
+            self.note('explicit_request_cancelled');return
+        from .sessions import END
+        if relation=='end' or END.fullmatch(intent.strip()):
+            self.end_conversation(flow,event.author)
+            if flow.key not in self.states:self.conversations.drop(flow.key)
+            return
+        # A second request in an explicitly shared flow must not overwrite its
+        # current response. Fork its actual prefix, retaining the conversation ID.
+        prefix=None
+        if relation=='reply' and flow.key in self.tasks:
+            from .sessions import SUPPLEMENT,Conversation
+            current=self.requests.get(flow.key)
+            if current and not (current[0].author==event.author and SUPPLEMENT.search(event.content.strip())):
+                prefix=self.states[flow.key].snapshot(channel_id=event.channel,thread_id=None)[1]
+                import secrets
+                flow=Conversation((event.guild,event.channel,secrets.token_hex(8)),event.guild,event.channel,event.parent,
+                                  conversation_id=flow.conversation_id,participants=set(flow.participants),engaged=flow.engaged)
+                self.conversations.flows[flow.key]=flow;relation='shared_request'
+            else:relation='supplement'
+        prior=[f for f in self.conversations.flows.values() if f.key!=flow.key and f.guild==event.guild and f.channel==event.channel and event.author in f.participants and (f.key in self.tasks or f.engaged and not f.ended)]
+        from .routing import prose
+        ordinary=prose(event.content)
+        other_target=bool(MENTION.search(ordinary) or re.search(r'너\s*말고|봇\s*말고|다른\s*사람|(?:친구|걔)(?:한테|에게)|^[가-힣A-Za-z]{1,16}[아야][,\s]',ordinary))
+        event=replace(event,flow_key=flow.key,conversation_id=flow.conversation_id,invited=bool(verified_reply or relation=='independent' and prior and ordinary.strip() and not other_target))
+        import hashlib
+        event=replace(event,target_content_hash=hashlib.sha256(event.content.encode()).hexdigest(),source_content_hash=hashlib.sha256(event.content.encode()).hexdigest())
+        self.conversations.observe(flow,event)
+        flow.last_at=self.activity_clock()
+        if self.key(event) not in self.states and len(self.states)>=32:
+            idle=next((key for key in self.states if key not in self.tasks and
+                (key not in self.conversations.flows or self.conversations.flows[key].ended or
+                 self.activity_clock()-self.conversations.flows[key].last_at>min(300,cfg['engagement_seconds']))),None)
+            if idle is None:self.conversations.drop(flow.key);self.note("conversation_capacity_veto");return
+            self._drop_flow(idle)
         retention=max(3600,cfg['engagement_seconds'])
-        state=self.states.setdefault(event.channel,DialogueState(limit=100,max_age_seconds=retention))
+        state=self.states.setdefault(self.key(event),DialogueState(limit=100,max_age_seconds=retention))
+        if prefix:
+            for turn in prefix:state.append(channel_id=event.channel,thread_id=None,turn=turn)
         state.max_age_seconds=retention
         metadata=json.dumps(dict(visual_inputs=len(event.assets),kinds=sorted({a.split(':')[0] for a,_ in event.assets}),
             analysis_state='not_analyzed',vision_enabled=self.settings.get()['vision'])) if event.assets else None
@@ -249,31 +410,37 @@ class Runtime:
             try:self.memory_queue.put_nowait((event,self.settings.revision))
             except asyncio.QueueFull:self.note('memory_queue_full')
         request_content=None
-        if mentions_bot(event.content,self.transport.bot_id):
-            self.pending_mentions[event.channel]=(event.author,event.timestamp,event.content,event.id)
-        else:
-            pending=self.pending_mentions.get(event.channel)
-            if (pending and pending[0]==event.author and 0<=(event.timestamp-pending[1]).total_seconds()<=30
-                    and not MENTION.search(event.content)):
-                # Reprocess an actual unanswered mention with newer same-author
-                # context. Never invent a mention or infer a third party's intent.
-                request_content=pending[2]
-                event=replace(event,response_to=pending[3])
-            else:self.pending_mentions.pop(event.channel,None)
-        if self.changing_model:
-            self.deferred_events[event.channel]=(event,request_content);return
+        pending=self.pending_mentions.get(self.key(event))
+        if relation=='supplement' and pending and pending[0]==event.author and 0<=(event.timestamp-pending[1]).total_seconds()<=30:
+            # Reprocess an actual unanswered call with newer same-author context.
+            request_content=pending[2]
+            event=replace(event,response_to=pending[3],invited=True,target_content_hash=hashlib.sha256(pending[2].encode()).hexdigest())
+        elif mentions_bot(event.content,self.transport.bot_id) or explicit:
+            self.pending_mentions[self.key(event)]=(event.author,event.timestamp,event.content,event.id)
+        else:self.pending_mentions.pop(self.key(event),None)
+        if explicit or event.invited:flow.engaged=True;self.activity_changed()
+        elif not flow.engaged and relation!='group_candidate' and not self.autonomy_allowed(event):
+            self.note('new_autonomy_blocked');return
+        if self.changing_model or not self.gateway_available:
+            self.deferred_events[self.key(event)]=(event,request_content);return
         self._schedule(event,state,request_content)
 
     def _schedule(self,event,state,request_content=None):
-        old=self.tasks.get(event.channel)
+        old=self.tasks.get(self.key(event))
         if old:old.cancel()
         task=asyncio.create_task(self.process(event,state,request_content),name="echomate-turn")
-        self.tasks[event.channel]=task
-        task.add_done_callback(lambda t,c=event.channel:self.tasks.pop(c,None) if self.tasks.get(c) is t else None)
+        self.tasks[self.key(event)]=task
+        self.requests[self.key(event)]=(event,request_content)
+        flow=self.conversations.flows.get(self.key(event))
+        if flow and (self.key(event) in self.pending_mentions or event.invited):flow.engaged=True;self.activity_changed()
+        def done(t,c=self.key(event)):
+            if self.tasks.get(c) is t:self.tasks.pop(c,None);self.requests.pop(c,None)
+        task.add_done_callback(done)
 
     async def fresh(self,event,state,version,revision,require_adult=False):
-        def current():return (not self.stopped and not self.changing_model and self.states.get(event.channel) is state and
+        def current():return (not self.stopped and not self.changing_model and self.gateway_available and self.states.get(self.key(event)) is state and
                 state.is_current(channel_id=event.channel,thread_id=None,version=version) and
+                time.monotonic()<=event.received_at+180 and
                 self.settings.revision==revision and scope(self.settings.get(),event.guild,event.channel,event.parent)!="silent")
         if not current():return False
         permissions=await self.transport.permissions(event)
@@ -284,10 +451,31 @@ class Runtime:
 
     async def process(self,event,state,request_content=None):
         trace=Trace(event.received_at);token=active_trace.set(trace)
-        try:await self._process(event,state,request_content)
+        from .scheduler import request_context
+        flow=self.conversations.flows.get(self.key(event))
+        request_token=request_context.set(dict(conversation_id=flow.conversation_id if flow else 'offline',
+            guild_id=event.guild,channel_id=event.channel,thread_id=event.channel if event.parent else None,
+            requester_user_id=event.author,target_message_id=event.response_to or event.id,
+            created_at=event.received_at,deadline=event.received_at+180,
+            context_version=state.snapshot(channel_id=event.channel,thread_id=None)[0]))
+        user_lock=self.turn_locks.setdefault((event.guild,event.channel,event.author),asyncio.Lock())
+        conversation_lock=self.conversation_locks.setdefault(flow.conversation_id if flow else self.key(event),asyncio.Lock())
+        try:
+            # Fixed order: author FIFO -> shared-flow FIFO -> GPU admission -> send.
+            # No GPU work is held while acquiring either conversation lock.
+            self.stage(event,'conversation_wait',time.time())
+            async with user_lock:
+                async with conversation_lock:await self._process(event,state,request_content)
+        except asyncio.CancelledError:
+            trace.outcome='cancelled';raise
         finally:
+            flow=self.conversations.flows.get(self.key(event))
+            if flow and not flow.last_bot and self.tasks.get(self.key(event)) is asyncio.current_task():flow.engaged=False
+            if self.tasks.get(self.key(event)) is asyncio.current_task():self.progress.pop(self.key(event),None)
+            self.activity_changed()
             self.traces.append(trace.finish());self.traces=self.traces[-1000:]
             active_trace.reset(token)
+            request_context.reset(request_token)
             # Numeric only. Disk failure must not turn a successful send into a retry.
             from .settings import atomic_private_json
             try:
@@ -299,14 +487,25 @@ class Runtime:
             except OSError:self.note('telemetry_write_failed')
 
     async def _process(self,event,state,request_content=None):
+        if self.flow_failures.get(self.key(event),0)>=3:self.note('conversation_error_paused');return
         started=time.time();self.stage(event,'assessment',started)
         revision=self.settings.revision;cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
         text_mode=scope(cfg,event.guild,event.channel,event.parent,action='text')
         reaction_mode=scope(cfg,event.guild,event.channel,event.parent,action='reaction')
+        flow=self.conversations.flows.get(self.key(event))
+        if flow:
+            for key,other in self.conversations.flows.items():
+                if key!=flow.key and other.conversation_id==flow.conversation_id and key in self.states:
+                    state.merge_actual(channel_id=event.channel,thread_id=None,
+                        turns=self.states[key].snapshot(channel_id=event.channel,thread_id=None)[1])
         if cfg['context_excerpts']:
             from .context import build_context
             version,context=build_context(state,event.channel,event.content,event.reply_to)
         else:version,context=state.recent_context(channel_id=event.channel,thread_id=None,max_chars=6000)
+        if context and context[-1]['role']=='assistant':
+            context.append(dict(role='user',content=f'[이번 응답 대상의 실제 원문 참조 / 새로운 발언이 아님: 메시지 {event.id}, 참여자 {event.author}] '+event.content))
+        from .scheduler import request_context
+        if request_context.get() is not None:request_context.get()['context_version']=version
         try:
             since=time.time()-self.ledger.last(event.channel)
             verified_request=request_content if request_content is not None else event.content
@@ -317,21 +516,27 @@ class Runtime:
             named=name_candidate(event.content,guild_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True))
             _,known_turns=state.snapshot(channel_id=event.channel,thread_id=None)
             verified_bot_reply=any(t.is_bot and t.message_id==str(event.reply_to) for t in known_turns[:-1])
-            direct=mention or verified_bot_reply
+            direct=mention or verified_bot_reply or event.invited
             if not direct and not named and self.followup_fast_path:
-                from .routing import grounded_followup
-                if grounded_followup(known_turns,event):
+                from .routing import grounded_followup,grounded_group_followup
+                flow=self.conversations.flows.get(self.key(event))
+                if grounded_followup(known_turns,event) or flow and not flow.ended and grounded_group_followup(known_turns,event,flow.participants):
                     direct=True;self.note('grounded_followup_no_interruption_vote')
             if mention:
-                allowed,_=permit_mention_reply(MentionPolicy(allowed_channel_ids=frozenset({event.channel}),cooldown_seconds=2),
+                allowed,_=permit_mention_reply(MentionPolicy(allowed_channel_ids=frozenset({event.channel}),cooldown_seconds=0),
                     content=verified_request,bot_user_id=self.transport.bot_id,channel_id=event.channel,thread_id=None,
                     author_is_bot=False,opted_out=False,seconds_since_last_reply=since)
                 if not allowed:return
-            elif verified_bot_reply and since<2:return
+
             if not direct and not named and mode=="mention":
                 # Verified reply/semantic addressee may continue existing participation.
                 _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
                 if not any(t.is_bot for t in turns):return
+            from .scheduler import request_context
+            metadata=request_context.get()
+            if metadata is not None:
+                metadata.update(request_type='mention' if mention else 'name' if named else 'continuation' if direct or any(t.is_bot for t in known_turns) else 'autonomy',
+                                priority=0 if mention or named else 1 if direct or any(t.is_bot for t in known_turns) else 2)
             evidence=None
             if direct and text_mode!='silent' and getattr(self.backend,'fast_text_path',False):
                 # A verified explicit request does not need an interruption vote.
@@ -348,7 +553,7 @@ class Runtime:
                 if evidence is None:evidence=await self.backend.continuity(context)
                 if evidence.addressed_to_bot and assessment.interruption_is_appropriate:
                     direct=True
-                    if since<2:return
+
             continuing=False
             _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
             if not direct and any(t.is_bot for t in turns[:-1]):
@@ -366,14 +571,18 @@ class Runtime:
             # for comfort/information. Output privacy/safety gates remain separate.
             if assessment.is_sensitive_moment and not (direct or continuing):return
             if not direct and not continuing:
+                flow=self.conversations.flows.get(self.key(event))
+                if flow and flow.engaged and evidence and not evidence.addressed_to_bot and not evidence.topic_continues:
+                    flow.ended=True;flow.engaged=False;self.activity_changed()
+                if not self.autonomy_allowed(event):self.note('new_autonomy_blocked');return
                 if mode=="mention":return
                 decision=decide(ParticipationPolicy(enabled=True,allowed_channel_ids=frozenset({event.channel}),
-                    opportunity_probability=ACTIVITY[cfg["activity"]],cooldown_seconds=cfg["cooldown"]),assessment,
+                    opportunity_probability=self.autonomy_probability(cfg),cooldown_seconds=cfg["cooldown"]),assessment,
                     channel_id=event.channel,thread_id=None,is_bot_message=False,opted_out=False,
                     seconds_since_last_speech=since,seconds_since_last_human_message=max(0,(datetime.now(timezone.utc)-event.timestamp).total_seconds()),rng=self.rng)
                 speech_eligible=decision.speak
             else:speech_eligible=direct or assessment.has_useful_contribution
-            reply_cooldown=2 if direct or continuing else cfg['cooldown']
+            reply_cooldown=self.direct_cooldown if direct or continuing else cfg['cooldown']
             if text_mode=='silent' or (text_mode=='mention' and not direct and not continuing):speech_eligible=False
             # A useful text contribution and an appropriate reaction are distinct.
             # The existing reaction gate supplies opportunity only; AI/catalog
@@ -383,11 +592,13 @@ class Runtime:
             if reaction_only:
                 if not (direct or assessment.interruption_is_appropriate):return
                 chance=choose_reaction(ReactionPolicy(enabled=cfg['reactions'] and reaction_permitted,allowed_channel_ids=frozenset({event.channel}),
-                    probability=1.0 if direct or continuing else ACTIVITY[cfg['activity']],cooldown_seconds=reply_cooldown,emojis=('👍',)),
+                    probability=1.0 if direct or continuing else self.autonomy_probability(cfg),cooldown_seconds=reply_cooldown,emojis=('👍',)),
                     channel_id=event.channel,thread_id=None,is_bot_message=False,is_own_message=False,opted_out=False,
                     seconds_since_reaction=since,rng=self.rng)
                 if chance is None:return
-            if since<reply_cooldown or not await self.fresh(event,state,version,revision):return
+            if (since<reply_cooldown and not(direct or continuing)) or not await self.fresh(event,state,version,revision):return
+            flow=self.conversations.flows.get(self.key(event))
+            if flow and (speech_eligible or reaction_only):flow.engaged=True;self.activity_changed()
             command_answer=None
             if self.companion and speech_eligible and (direct or continuing):
                 from .companion import handle_request,request_kind
@@ -399,7 +610,8 @@ class Runtime:
                     except (OSError,RuntimeError,ValueError,sqlite3.Error):command_answer='처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
                 else:
                     try:
-                        remembered=await asyncio.to_thread(self.companion.memories,event.guild,event.author,event.channel,event.content)
+                        remembered=await asyncio.to_thread(self.companion.memories,event.guild,event.author,event.channel,event.content,
+                            conversation_id=event.conversation_id,allow_user_archive=bool(re.search(r'내\s*(?:약속|일정|목표|취향|기억)',event.content)))
                         if remembered:
                             from .memory_context import memory_context
                             context.insert(max(0,len(context)-1),dict(role='user',content=memory_context(remembered,cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul'))))
@@ -448,7 +660,7 @@ class Runtime:
             if proposed.kind.value not in allowed:
                 self.note('disabled_candidate_veto');return
             if proposed.kind==Kind.SILENCE:
-                self.pending_mentions.pop(event.channel,None);return
+                self.pending_mentions.pop(self.key(event),None);return
             if reaction_only and proposed.kind!=Kind.REACTION:
                 self.note('reaction_mode_veto');return
             action=proposed
@@ -463,7 +675,7 @@ class Runtime:
                 character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
                 character['_guild_name']=guild_name(cfg,event.guild)
                 if self.companion:
-                    try:character['_familiarity']=await asyncio.to_thread(self.companion.familiarity,event.guild,event.author)
+                    try:character['_familiarity']=await asyncio.to_thread(self.companion.familiarity,event.guild,event.author) if await self.automatic_subject_allowed(event.guild,event.author) else 50
                     except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_lookup_failed')
                 indicator=(asyncio.create_task(self.transport.indicate_typing(event,lambda:self.fresh(event,state,version,revision)))
                            if hasattr(self.transport,'indicate_typing') else None)
@@ -490,48 +702,60 @@ class Runtime:
                 self.note('action_policy_veto');return
             if not await self.fresh(event,state,version,revision):
                 self.note('stale_output_veto');return
-            # Conservative at-most-once reservation: ambiguous HTTP failures are never replayed.
-            if not self.ledger.reserve(event,cfg["daily_limit"],reply_cooldown):
-                self.note('duplicate_or_rate_veto');return
-            try:
-                self.stage(event,'sending',started)
-                sent=await self.transport.execute(event,action,self.library,
-                    lambda:self.fresh(event,state,version,revision,require_adult=adult_for_turn))
-                self.ledger.completed(event,"sent")
-                self.pending_mentions.pop(event.channel,None)
-                bot_content=action.text
-                output_metadata={}
-                if action.asset:
-                    description=latest_catalog.get('stickers' if action.kind==Kind.STICKER else 'reactions',{}).get(action.asset,'')
-                    if isinstance(description,dict):
-                        description={k:([str(v)[:100] for v in value[:3]] if isinstance(value,list) else str(value)[:180]) for k,value in description.items()}
-                    output_metadata=dict(kind=action.kind.value,asset=action.asset,visual_observation_candidate=description)
-                if visual:
-                    output_metadata['visual_input_summaries']=[dict(asset=v['asset'],observation={k:([str(s)[:60] for s in value[:2]] if isinstance(value,list) else str(value)[:100]) for k,value in v['result'].items()}) for v in visual]
-                if sent or action.kind==Kind.REACTION:
-                    state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(sent) if sent else 'reaction:'+str(event.id),str(self.transport.bot_id),bot_content,
-                        datetime.now(timezone.utc),is_bot=True,reply_to=str(event.response_to or event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
-                active_trace.get().outcome="sent"
-                self.failures=0
-                if self.companion and cfg['relations_auto']:
-                    try:await asyncio.to_thread(self.companion.relationship,event.guild,event.author,'reply:'+str(event.id),'reaction' if action.kind==Kind.REACTION else 'conversation')
-                    except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_update_failed')
-                self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
-            except Exception:
-                self.ledger.completed(event,"failed_or_uncertain")
-                if action.asset:self.blocked_assets.add((event.guild,action.asset))
-                raise
+            lock=self.send_locks.setdefault(event.channel,asyncio.Lock())
+            async with lock:
+                while direct or continuing:
+                    delay=reply_cooldown-(time.time()-self.ledger.last(event.channel))
+                    if delay<=0:break
+                    if not await self.fresh(event,state,version,revision):return
+                    await asyncio.sleep(min(1,max(.005,delay)))
+                if not await self.fresh(event,state,version,revision):return
+                # Conservative at-most-once reservation: ambiguous HTTP failures are never replayed.
+                if not self.ledger.reserve(event,cfg["daily_limit"],reply_cooldown):
+                    self.note('duplicate_or_rate_veto');return
+                try:
+                    self.stage(event,'sending',started)
+                    sent=await self.transport.execute(event,action,self.library,
+                        lambda:self.fresh(event,state,version,revision,require_adult=adult_for_turn))
+                    self.ledger.completed(event,"sent")
+                    self.pending_mentions.pop(self.key(event),None)
+                    bot_content=action.text
+                    output_metadata={}
+                    if action.asset:
+                        description=latest_catalog.get('stickers' if action.kind==Kind.STICKER else 'reactions',{}).get(action.asset,'')
+                        if isinstance(description,dict):
+                            description={k:([str(v)[:100] for v in value[:3]] if isinstance(value,list) else str(value)[:180]) for k,value in description.items()}
+                        output_metadata=dict(kind=action.kind.value,asset=action.asset,visual_observation_candidate=description)
+                    if visual:
+                        output_metadata['visual_input_summaries']=[dict(asset=v['asset'],observation={k:([str(s)[:60] for s in value[:2]] if isinstance(value,list) else str(value)[:100]) for k,value in v['result'].items()}) for v in visual]
+                    if sent:
+                        flow=self.conversations.flows.get(self.key(event))
+                        if flow:self.conversations.bot(flow,sent);flow.last_at=self.activity_clock()
+                    if sent or action.kind==Kind.REACTION:
+                        state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(sent) if sent else 'reaction:'+str(event.id),str(self.transport.bot_id),bot_content,
+                            datetime.now(timezone.utc),is_bot=True,reply_to=str(event.response_to or event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
+                    active_trace.get().outcome="sent"
+                    self.failures=0;self.flow_failures.pop(self.key(event),None)
+                    if self.companion and cfg['relations_auto'] and await self.automatic_subject_allowed(event.guild,event.author):
+                        try:await asyncio.to_thread(self.companion.relationship,event.guild,event.author,'reply:'+str(event.id),'reaction' if action.kind==Kind.REACTION else 'conversation')
+                        except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_update_failed')
+                    self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
+                except Exception:
+                    self.ledger.completed(event,"failed_or_uncertain")
+                    if action.asset:self.blocked_assets.add((event.guild,action.asset))
+                    raise
         except asyncio.CancelledError:
             active_trace.get().outcome="cancelled"
             self.note("stale_cancelled");raise
         except Exception as exc:
             active_trace.get().outcome="failed"
             self.failures+=1;self.note("turn_failed_"+type(exc).__name__)
-            if self.failures>=3 or getattr(self.backend,"failed",False):
+            self.flow_failures[self.key(event)]=self.flow_failures.get(self.key(event),0)+1
+            if getattr(self.backend,"failed",False):
                 self.stopped=True;self.note("safe_disabled")
         finally:
-            current=self.progress.get(event.channel)
-            if current and current['started']==started:self.progress.pop(event.channel,None)
+            current=self.progress.get(self.key(event))
+            if current and current['started']==started:self.progress.pop(self.key(event),None)
 
     async def close(self):
         self.stopped=True
@@ -540,7 +764,7 @@ class Runtime:
         tasks=list(self.tasks.values())
         for task in tasks:task.cancel()
         await asyncio.gather(*tasks,return_exceptions=True)
-        self.states.clear()
+        self.states.clear();self.conversations.flows.clear();self.conversations.message_flow.clear()
         while not self.memory_queue.empty():self.memory_queue.get_nowait()
         self.deferred_events.clear()
         async with self.model_lock:await self.backend.close()

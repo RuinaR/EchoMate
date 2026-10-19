@@ -344,14 +344,17 @@ class DesktopApp(CompanionViews):
     def draw_status(self,w,h,s):
         if not s:return
         width=(w-282)/3
-        for index,(label,value) in enumerate([('처리 중이거나 기다리는 요청',str(s['pending'])),('기억 중인 채널',str(s['contexts'])),('최근 답변에 걸린 시간',str(s['latency'])+'초' if s['latency'] is not None else '아직 없음')]):
+        for index,(label,value) in enumerate([('처리 중이거나 기다리는 요청',str(s['pending'])),('진행 중인 대화',str(s['contexts'])),('최근 답변에 걸린 시간',str(s['latency'])+'초' if s['latency'] is not None else '아직 없음')]):
             x=226+index*(width+15);rounded(self.canvas,x,143,width,113,PANEL)
             self.text(x+20,160,label,10,MUTED);self.text(x+20,192,value,25,bold=True)
         rounded(self.canvas,226,277,w-252,h-344,PANEL);self.text(248,297,'진행 중인 작업',13,bold=True)
         if not s['progress']:self.text(248,348,'새 메시지를 기다리고 있어요' if s['connected'] else '봇을 켜면 여기에서 처리 과정을 볼 수 있어요',12,MUTED)
         self.button(w-430,291,180,32,'개인정보 없는 진단 저장',lambda:self.controller.submit('diagnostics'))
-        for i,p in enumerate(s['progress'][:max(1,(h-420)//48)]):
+        for i,p in enumerate(s['progress'][:max(1,(h-520)//48)]):
             y=344+i*48;self.text(248,y,p['channel'],11);self.text(510,y,p['stage'],11,ACCENT);self.text(w-120,y,str(p['seconds'])+'초',11,MUTED)
+        q=s.get('scheduler',{})
+        if s['pending']>1 or s['contexts']>1:
+            counts=q.get('counts',{});self.text(248,h-157,f"GPU 실행 {q.get('running',0)} · 대기 {q.get('waiting',0)} · 최장 대기 {q.get('oldest_seconds',0)}초 · 취소 {counts.get('cancelled',0)} · 실패 {counts.get('failed',0)}",9,MUTED)
         self.text(248,h-130,f"기억 정리 대기 {s.get('memory_pending',0)}건 · 알림 확인 {'동작 중' if s.get('private_service') else '봇 연결 후 시작'}",9,MUTED)
         self.text(248,h-107,'대화 내용은 이 화면에 표시하지 않아요. 긴 답변은 작성에 시간이 더 걸릴 수 있어요.',9,MUTED)
     def draw_outputs(self,w,h,cfg):

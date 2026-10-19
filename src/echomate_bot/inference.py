@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from contextvars import copy_context
 from .telemetry import active_trace
+from .scheduler import GPUScheduler,Request,request_context
 import json
 import os
 from pathlib import Path
@@ -53,8 +54,12 @@ class LocalBackend:
     def __init__(self, adapter=ADAPTER, max_pending=12):
         self.adapter=private_path(adapter)
         self.executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="echomate-gpu")
-        self.pending=0;self.max_pending=max_pending;self.model=None;self.processor=None
+        self._physical_pending=0;self.max_pending=max_pending;self.model=None;self.processor=None
+        self.scheduler=GPUScheduler(limit=max_pending)
         self.failed=False;self.metrics=[]
+
+    @property
+    def pending(self):return max(self.scheduler.pending,self._physical_pending)
 
     async def ready(self):
         # Run before opening the Gateway: imports/model construction may hold GIL.
@@ -107,11 +112,17 @@ class LocalBackend:
         return check_resources()
 
     async def _job(self, messages, images=None, budget=384, weight="persona",choices=None):
+        metadata=request_context.get() or {}
+        request=Request(**metadata)
+        queued=time.monotonic()
+        return await self.scheduler.submit(lambda:self._run_job(messages,images,budget,weight,choices,queued_at=queued),request,
+                                          wait_for_capacity=bool(metadata))
+
+    async def _run_job(self, messages, images=None, budget=384, weight="persona",choices=None,queued_at=None):
         if self.failed:raise RuntimeError("Inference disabled after device failure; restart required")
-        if self.pending>=self.max_pending:raise RuntimeError("Inference queue full")
-        self.pending+=1;stop=threading.Event()
+        self._physical_pending+=1;stop=threading.Event()
         loop=asyncio.get_running_loop()
-        queued=time.monotonic();context=copy_context()
+        queued=time.monotonic() if queued_at is None else queued_at;context=copy_context()
         def work():
             entered=time.monotonic();before=self.metrics[-1] if self.metrics else None;outcome='failed'
             try:
@@ -128,9 +139,9 @@ class LocalBackend:
                 if trace:trace.calls.append(dict(metric))
         try:
             future=loop.run_in_executor(self.executor,context.run,work)
-        except Exception:self.pending-=1;raise
+        except Exception:self._physical_pending-=1;raise
         def finished(result):
-            self.pending-=1
+            self._physical_pending-=1
             if not result.cancelled():result.exception()
         future.add_done_callback(finished)
         try:
@@ -138,8 +149,10 @@ class LocalBackend:
         except asyncio.CancelledError:
             stop.set()
             # Worker retains GPU ownership until stopped. Shield prevents overlap/reload.
-            try:await asyncio.shield(future)
-            except (Exception,asyncio.CancelledError):pass
+            while not future.done():
+                try:await asyncio.shield(future)
+                except asyncio.CancelledError:continue
+                except Exception:break
             raise
 
     def _generate(self,messages,images,budget,weight,stop,choices=None):
@@ -260,6 +273,7 @@ class LocalBackend:
         return await self._job([dict(role="system",content=prompt),*context[-8:]],weight="base",budget=140,choices=candidates)
 
     async def close(self):
+        await self.scheduler.close()
         await asyncio.to_thread(self.executor.shutdown,wait=True,cancel_futures=True)
         self.model=None;self.processor=None
         import gc

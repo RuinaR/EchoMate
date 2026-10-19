@@ -119,15 +119,21 @@ class DiscordTransport:
         channel=self.channel(event)
         if not channel or not await fresh():raise ValueError("Stale output")
         current=await channel.fetch_message(event.response_to or event.id)
+        if event.target_content_hash:
+            import hashlib
+            if hashlib.sha256(current.content.encode()).hexdigest()!=event.target_content_hash:raise ValueError('Original message changed')
+            if event.response_to and event.response_to!=event.id and event.source_content_hash:
+                latest=await channel.fetch_message(event.id)
+                if hashlib.sha256(latest.content.encode()).hexdigest()!=event.source_content_hash:raise ValueError('Supplement changed')
         if not await fresh():raise ValueError("Stale output")
         sent=None
         if action.kind in {Kind.TEXT,Kind.TEXT_REACTION}:
-            kwargs=dict(content=action.text,allowed_mentions=discord.AllowedMentions.none(),mention_author=False,nonce=event.id,suppress_embeds=True)
+            kwargs=dict(content=action.text,allowed_mentions=discord.AllowedMentions.none(),mention_author=False,nonce=event.response_to or event.id,suppress_embeds=True)
             sent=await current.reply(**kwargs)
         elif action.kind==Kind.STICKER:
             sticker=self.client.standard_stickers.get(int(action.asset))
             if not isinstance(sticker,discord.StandardSticker):raise ValueError('Only standard stickers')
-            sent=await channel.send(stickers=[sticker],allowed_mentions=discord.AllowedMentions.none(),nonce=event.id)
+            sent=await current.reply(stickers=[sticker],allowed_mentions=discord.AllowedMentions.none(),mention_author=False,nonce=event.response_to or event.id)
         if action.kind in {Kind.REACTION,Kind.TEXT_REACTION}:
             if not await fresh():raise ValueError("Stale reaction")
             await current.add_reaction(action.asset)
@@ -171,6 +177,7 @@ class EchoClient(discord.Client):
         self.companion=CompanionStore(settings.path.parent/'companion.sqlite3')
         self.runtime=Runtime(settings,backend,DiscordTransport(self),self.cache,self.library,
                              ledger_path=settings.path.parent/'sent.sqlite3',companion=self.companion)
+        self.runtime.gateway_available=False
         self.owner_tasks=set()
         self.shutdown_lock=asyncio.Lock()
         self.install_commands()
@@ -277,7 +284,7 @@ class EchoClient(discord.Client):
             await i.response.send_message("종료할게.",ephemeral=True)
             asyncio.create_task(self.close())
         for guild in self.admin_guilds:self.tree.add_command(group,guild=discord.Object(guild))
-        @app_commands.choices(action=[app_commands.Choice(name=name,value=value) for name,value in [('기억 목록','목록'),('내 기억 전체 삭제','기억삭제'),('기억·관계·알림 모두 삭제','전체삭제'),('저장 다시 허용','저장다시허용')]])
+        @app_commands.choices(action=[app_commands.Choice(name=name,value=value) for name,value in [('기억 목록','목록'),('내 기억 전체 삭제','기억삭제'),('기억·관계·알림 모두 삭제','전체삭제'),('본인 자동 기억·관계 저장 허용','저장다시허용')]])
         async def own_memory(i:discord.Interaction,action:str):
             if not i.guild_id or str(i.guild_id) not in self.settings.get()['guilds']:
                 await i.response.send_message('이 서버에는 관리할 기억이 없어.',ephemeral=True);return
@@ -290,7 +297,7 @@ class EchoClient(discord.Client):
                 result='이 서버의 네 기억을 지우고 기억 자동 저장을 막았어.'
             elif action=='저장다시허용':
                 await asyncio.to_thread(self.companion.resume_subject,i.guild_id,i.user.id)
-                result='네 정보의 저장 거부를 해제했어. 자동 저장은 소유자 설정이 켜져 있어야 해.'
+                result='이 서버에서 네 발언의 선택적 자동 기억과 숫자 관계 기록을 허용했어. 소유자 설정도 켜져 있어야 하며, 전체 삭제로 철회할 수 있어. 가중치 학습에는 쓰지 않아.'
             else:
                 rows=await asyncio.to_thread(self.companion.memories,i.guild_id,i.user.id,i.channel_id)
                 result='현재 이 채널에서 사용할 수 있는 기억이 없어.' if not rows else '\n'.join(r['summary'] for r in rows[:5])
@@ -324,14 +331,15 @@ class EchoClient(discord.Client):
                 raise
 
     async def on_ready(self):
+        await self.runtime.resume_gateway()
         self.runtime.start_services()
         self.runtime.note("gateway_ready")
         for gid,g in self.settings.get()['guilds'].items():
             if 'name' in g:
                 try:await self.apply_guild_name(int(gid))
                 except discord.HTTPException:pass
-    async def on_disconnect(self):self.runtime.invalidate_all();self.runtime.note("gateway_disconnected")
-    async def on_resumed(self):self.runtime.note("gateway_resumed")
+    async def on_disconnect(self):self.runtime.pause_gateway();self.runtime.note("gateway_disconnected")
+    async def on_resumed(self):await self.runtime.resume_gateway();self.runtime.note("gateway_resumed")
     async def on_error(self,event,*args,**kwargs):self.runtime.note("gateway_event_failed")
 
     async def on_message(self,message):
@@ -363,18 +371,18 @@ class EchoClient(discord.Client):
         if not member.bot:await self.runtime.reaction_event(guild.id,payload.channel_id,member.id,payload.message_id,str(payload.emoji),remove=remove,parent=parent)
     async def on_raw_reaction_add(self,payload):await self._reaction_event(payload,False)
     async def on_raw_reaction_remove(self,payload):await self._reaction_event(payload,True)
-    async def on_guild_channel_update(self,before,after):self.runtime.invalidate_all()
-    async def on_guild_channel_delete(self,channel):self.runtime.invalidate_all()
-    async def on_guild_role_update(self,before,after):self.runtime.invalidate_all()
-    async def on_guild_role_delete(self,role):self.runtime.invalidate_all()
+    async def on_guild_channel_update(self,before,after):self.runtime.invalidate(after.id)
+    async def on_guild_channel_delete(self,channel):self.runtime.invalidate(channel.id)
+    async def on_guild_role_update(self,before,after):self.runtime.invalidate_guild(after.guild.id)
+    async def on_guild_role_delete(self,role):self.runtime.invalidate_guild(role.guild.id)
     async def on_thread_update(self,before,after):self.runtime.invalidate(after.id)
     async def on_thread_delete(self,thread):self.runtime.invalidate(thread.id)
     async def on_raw_thread_delete(self,payload):self.runtime.invalidate(payload.thread_id)
-    async def on_guild_remove(self,guild):self.runtime.invalidate_all();self.cache.clear(guild.id)
+    async def on_guild_remove(self,guild):self.runtime.invalidate_guild(guild.id);self.cache.clear(guild.id)
     async def on_guild_emojis_update(self,guild,before,after):
-        self.cache.retain(guild.id,set(),"emoji:");self.runtime.invalidate_all()
+        self.cache.retain(guild.id,set(),"emoji:");self.runtime.invalidate_guild(guild.id)
     async def on_guild_stickers_update(self,guild,before,after):
-        self.cache.retain(guild.id,set(),"sticker:");self.runtime.invalidate_all()
+        self.cache.retain(guild.id,set(),"sticker:");self.runtime.invalidate_guild(guild.id)
 
     async def close(self):
         async with self.shutdown_lock:

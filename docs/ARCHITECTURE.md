@@ -1,5 +1,15 @@
 # 아키텍처
 
+## 다중 대화와 GPU admission (2026-10-19)
+
+Runtime은 physical channel과 논리 flow 키를 구별한다. Conversations는 guild/channel/thread·conversation ID·participants·source/reply·topic·last bot·상호작용/종료 상태를 RAM에서 보관한다. 최초 channel 키 호환을 유지하되 추가 흐름은 독립 DialogueState/task/version을 가진다. 실제 reply에 따른 공유 흐름만 실제 발언을 ID로 병합한다.
+
+고정 잠금 순서: 작성자 FIFO→공유 대화 FIFO→GPUScheduler→기존 단일 executor→채널 송신 잠금. 다른 사람/독립 요청이 채널 전체 생성을 취소하지 않는다. priority0/1/2/3와5초 aging, GPU 용량12/user4/channel8, bounded admission32, 논리 흐름32,180초 deadline을 사용한다. 강제 GPU 선점·모델 중복 로딩은 없다. 포화 시 직접 요청은 deadline 내 capacity를 기다리며 무제한 보존을 보장하지 않는다.
+
+활성 수는 실제 참여/최근 상호작용/미완료/종료/휴지로 집계한다. 자율 진입만 같은 범위 활성·범위별 idle cooldown·다른 활성 수와 큐 부하를 적용하며 다른 범위 전역 차단은 하지 않는다. 직접/지속 경로와 원문 중복·용량 제한을 구별한다. 네트워크 일시 끊김은 RAM 보류, 이미 ledger 선점한 불명확 송신은 재생하지 않는다. 앱 완전 재시작은 텍스트 작업을 재생하지 않는다.
+
+DB schema3의 memory_flows와 subject_consents는 기존 레코드를 보존하며 트랜잭션으로 추가한다. 작업 기억은 흐름에 한정, 본인 명시 조회/취향 등은 사용자 사실 범위로 구별한다. 소유자 전체 설정으로 타인 자동 저장 동의를 대체하지 않는다. 상세/가드/실제 검증은 PARALLEL-CONVERSATIONS 참조.
+
 ## 공통 companion 계층 (2026-10-19)
 
 Runtime→routing/context→선택적 memory_context→기존 단일 LocalBackend 순서다. private_request는 코드 해석/SQLite commit 후 GPU 없이 확인한다. background companion worker는 source revision/scope를 확인하며 만료/관계/메모리 저장을 수행한다. scheduler는 별도 task로 GPU 큐와 쿨다운을 기다리지 않는다. 선점 트랜잭션에서 최신 예약을 읽고 HTTP 직전 설정·권한·대상을 확인한다. 불명확한 전송은 앱 재시도하지 않는다.

@@ -29,8 +29,9 @@ class CompanionStore:
             self.path.parent.mkdir(parents=True,exist_ok=True)
             with self.db() as db:
                 version=db.execute('PRAGMA user_version').fetchone()[0]
-                if version>1:raise ValueError('Newer companion schema')
+                if version>3:raise ValueError('Newer companion schema')
                 db.executescript('''
+BEGIN IMMEDIATE;
 CREATE TABLE IF NOT EXISTS relationships(guild TEXT,user TEXT,affinity REAL DEFAULT 50,interactions INTEGER DEFAULT 0,last_at REAL DEFAULT 0,day TEXT,delta REAL DEFAULT 0,PRIMARY KEY(guild,user));
 CREATE TABLE IF NOT EXISTS relationship_events(guild TEXT,event TEXT,user TEXT,kind TEXT,delta REAL,day TEXT,active INTEGER DEFAULT 1,at REAL,PRIMARY KEY(guild,event));
 CREATE INDEX IF NOT EXISTS relationship_history ON relationship_events(guild,user,at);
@@ -42,7 +43,10 @@ CREATE TABLE IF NOT EXISTS memories(memory_id TEXT PRIMARY KEY,guild TEXT,user T
 CREATE INDEX IF NOT EXISTS memories_lookup ON memories(guild,user,channel,status,expires_at);
 CREATE TABLE IF NOT EXISTS reminders(reminder_id TEXT PRIMARY KEY,guild TEXT,channel TEXT,thread TEXT,parent TEXT,requester TEXT,target TEXT,created_at REAL,due_at REAL,timezone TEXT,text TEXT,status TEXT,delivery_attempts INTEGER DEFAULT 0,last_attempt_at REAL,delivered_at REAL,deduplication_key TEXT UNIQUE,source TEXT,error_code TEXT);
 CREATE INDEX IF NOT EXISTS reminders_due ON reminders(status,due_at);
-PRAGMA user_version=1;
+CREATE TABLE IF NOT EXISTS memory_flows(memory_id TEXT PRIMARY KEY REFERENCES memories(memory_id) ON DELETE CASCADE,conversation_id TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS subject_consents(guild TEXT,user TEXT,at REAL,PRIMARY KEY(guild,user));
+PRAGMA user_version=3;
+COMMIT;
 ''')
             self.cleanup()
         except (sqlite3.Error,OSError,ValueError) as exc:self.error=type(exc).__name__
@@ -53,7 +57,7 @@ PRAGMA user_version=1;
         with self.lock:
             db=sqlite3.connect(self.path,timeout=.25);db.row_factory=sqlite3.Row
             try:
-                db.execute('PRAGMA journal_mode=WAL');db.execute('PRAGMA secure_delete=ON')
+                db.execute('PRAGMA journal_mode=WAL');db.execute('PRAGMA secure_delete=ON');db.execute('PRAGMA foreign_keys=ON')
                 with db:yield db
             except sqlite3.DatabaseError as exc:
                 self.last_error=type(exc).__name__
@@ -63,6 +67,9 @@ PRAGMA user_version=1;
 
     def opted_out(self,db,guild,user):
         return db.execute('SELECT 1 FROM optouts WHERE guild=? AND user=?',(str(guild),str(user))).fetchone() is not None
+
+    def automatic_allowed(self,guild,user):
+        with self.db() as db:return not self.opted_out(db,guild,user) and db.execute('SELECT 1 FROM subject_consents WHERE guild=? AND user=?',(str(guild),str(user))).fetchone() is not None
 
     def relationship(self,guild,user,event,kind='conversation',*,remove=False):
         now=self.clock();day=time.strftime('%Y-%m-%d',time.gmtime(now));g=str(guild);u=str(user);key=str(event)
@@ -90,7 +97,7 @@ PRAGMA user_version=1;
         with self.db() as db:
             db.execute('INSERT INTO relationships(guild,user,affinity) VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET affinity=excluded.affinity',(str(guild),str(user),value))
 
-    def add_memory(self,guild,user,channel,summary,kind='explicit',*,source=None,observed=None,tz='Asia/Seoul',expires=None,status='active',policy=None):
+    def add_memory(self,guild,user,channel,summary,kind='explicit',*,source=None,observed=None,tz='Asia/Seoul',expires=None,status='active',policy=None,conversation_id=None):
         positive_id(guild);positive_id(user);positive_id(channel)
         if kind not in ('plan','state','goal','preference','explicit') or status not in ('active','disabled','uncertain'):raise ValueError('Invalid memory kind/status')
         if not safe_subject_text(summary):raise ValueError('Sensitive, third-party or unsupported memory')
@@ -117,6 +124,7 @@ PRAGMA user_version=1;
             if db.execute('SELECT COUNT(*) FROM memories WHERE guild=? AND user=?',(g,u)).fetchone()[0]>=100 or db.execute('SELECT COUNT(*) FROM memories').fetchone()[0]>=5000:raise ValueError('Memory limit')
             key=secrets.token_hex(8)
             db.execute('INSERT INTO memories VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(key,g,u,kind,summary,source,str(channel),now,now,observed,observed,start,end,expires,tz,when.precision,1 if start else 0,1 if status=='active' else .5,status,'source_channel','kind_default'))
+            if conversation_id:db.execute('INSERT INTO memory_flows VALUES(?,?)',(key,conversation_id))
             return key
 
     def extract(self,event,tz,*,text=None,policy=None):
@@ -126,7 +134,7 @@ PRAGMA user_version=1;
         kind=('preference' if re.search(r'좋아해|선호해|불러\s*줘',text) else 'state' if re.search(r'오늘|이번\s*주|지금',text) and re.search(r'피곤|휴가|게임\s*중|기분',text) else 'goal' if re.search(r'개발\s*중|육성\s*중|연습\s*중|목표',text) else 'plan' if re.search(r'약속|모임|만나|게임하',text) else 'explicit' if re.search(r'기억해\s*줘',text) else None)
         if not kind:return None
         if kind in ('plan','goal') and re.search(r'취소|완료|끝났|변경|옮겼',text):
-            rows=[r for r in self.memories(event.guild,event.author,kind=kind) if r['channel']==str(event.channel) and r['status']=='active']
+            rows=[r for r in self.memories(event.guild,event.author,kind=kind,conversation_id=getattr(event,'conversation_id',None)) if r['channel']==str(event.channel) and r['status']=='active']
             if len(rows)!=1:return None
             row=rows[0]
             if re.search(r'취소|완료|끝났',text):self.delete_memory(event.guild,row['memory_id']);return row['memory_id']
@@ -137,13 +145,15 @@ PRAGMA user_version=1;
                 grace=(policy or {}).get('memory_date_grace',86400) if when.precision=='date' else (policy or {}).get('memory_plan_grace',3600)
                 db.execute('UPDATE memories SET summary=?,source=?,observed_at=?,last_confirmed_at=?,updated_at=?,event_start_at=?,event_end_at=?,expires_at=?,timezone=?,temporal_precision=? WHERE memory_id=?',(text[:300],str(event.id),event.timestamp.timestamp(),event.timestamp.timestamp(),self.clock(),when.start.timestamp(),when.end.timestamp(),when.end.timestamp()+grace,tz,when.precision,row['memory_id']))
             return row['memory_id']
-        return self.add_memory(event.guild,event.author,event.channel,text[:300],kind,source=event.id,observed=event.timestamp.timestamp(),tz=tz,policy=policy)
+        return self.add_memory(event.guild,event.author,event.channel,text[:300],kind,source=event.id,observed=event.timestamp.timestamp(),tz=tz,policy=policy,conversation_id=getattr(event,'conversation_id',None))
 
-    def memories(self,guild,user=None,channel=None,query='',kind=None):
+    def memories(self,guild,user=None,channel=None,query='',kind=None,*,conversation_id=None,allow_user_archive=False):
         now=self.clock();sql='SELECT * FROM memories WHERE guild=? AND (expires_at IS NULL OR expires_at>?)';args=[str(guild),now]
         if user is not None:sql+=' AND user=?';args.append(str(user))
         if channel is not None:sql+=" AND channel=? AND status='active' AND (kind!='plan' OR event_end_at>?) AND (kind!='goal' OR last_confirmed_at>?)";args.extend((str(channel),now,now-90*86400))
         if kind:sql+=' AND kind=?';args.append(kind)
+        if conversation_id and not allow_user_archive:
+            sql+=" AND (kind IN ('preference','explicit') OR memory_id IN (SELECT memory_id FROM memory_flows WHERE conversation_id=?))";args.append(conversation_id)
         with self.db() as db:rows=[dict(x) for x in db.execute(sql+' ORDER BY updated_at DESC LIMIT 100',args)]
         if query:
             q=terms(query);plan_query=bool(re.search(r'언제|약속|몇\s*시|일정|모임',query))
@@ -177,13 +187,14 @@ PRAGMA user_version=1;
     def forget(self,guild,user=None):
         g=str(guild)
         with self.db() as db:
-            subjects=[str(user)] if user is not None else [r[0] for r in db.execute('SELECT user FROM memories WHERE guild=? UNION SELECT user FROM relationships WHERE guild=? UNION SELECT requester FROM reminders WHERE guild=?',(g,g,g))]
+            subjects=[str(user)] if user is not None else [r[0] for r in db.execute('SELECT user FROM memories WHERE guild=? UNION SELECT user FROM relationships WHERE guild=? UNION SELECT requester FROM reminders WHERE guild=? UNION SELECT user FROM subject_consents WHERE guild=?',(g,g,g,g))]
             for u in subjects:
                 db.execute('INSERT OR IGNORE INTO optouts VALUES(?,?)',(g,u))
                 db.execute('INSERT INTO memory_cutoffs VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(g,u,self.clock()))
                 for table in ('memories','relationships','relationship_events'):db.execute(f'DELETE FROM {table} WHERE guild=? AND user=?',(g,u))
                 db.execute('INSERT OR IGNORE INTO tombstones SELECT guild,source FROM reminders WHERE guild=? AND requester=?',(g,u))
                 db.execute('DELETE FROM reminders WHERE guild=? AND requester=?',(g,u))
+                db.execute('DELETE FROM subject_consents WHERE guild=? AND user=?',(g,u))
         # No data backups are restored automatically. WAL checkpoint is best effort.
         with self.db() as db:db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
 
@@ -205,6 +216,7 @@ PRAGMA user_version=1;
         with self.db() as db:
             db.execute('DELETE FROM optouts WHERE guild=? AND user=?',(str(guild),str(user)))
             db.execute('DELETE FROM memory_optouts WHERE guild=? AND user=?',(str(guild),str(user)))
+            db.execute('INSERT INTO subject_consents VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(str(guild),str(user),self.clock()))
 
     def relationship_history(self,guild,user):
         with self.db() as db:return [dict(r) for r in db.execute('SELECT kind,delta,active,at FROM relationship_events WHERE guild=? AND user=? ORDER BY at DESC LIMIT 10',(str(guild),str(user)))]

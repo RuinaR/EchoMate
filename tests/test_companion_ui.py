@@ -12,7 +12,7 @@ from echomate_bot.settings import DEFAULTS
 
 class RecordLayout(unittest.TestCase):
     def test_new_pages_minimum_window_and_dpi_boundaries(self):
-        for scaling in (1.33,2.0):
+        for scaling in (4/3,5/3,2.0):
             root=tk.Tk();root.withdraw();root.tk.call('tk','scaling',scaling)
             controller=SimpleNamespace(updates=queue.Queue(),submit=Mock())
             app=DesktopApp(root,controller)

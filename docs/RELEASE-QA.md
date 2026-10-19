@@ -1,5 +1,69 @@
 # 릴리즈 QA — 2026-10-19
 
+> **최신 검증 범위(2026-10-19):** 사용자 지시에 따라 실제 Discord 서버·채널·스레드에 접속하거나 시험 메시지를 보내지 않는다. 사용자에게 계정 조작이나 수동 QA를 요청하지 않고 로컬 GPU·모의 이벤트·SDK 직렬화·격리된 저장소 검사로 진행한다. 아래 과거 실서버 테스트 절차는 실행 지시가 아닌 이전 기록이며, 새 명시적 지시 없이는 재개하지 않는다. 외부 서비스의 실제 동작은 미검증으로 구분한다.
+
+
+추가 짧은 반복 부하 검사: 실제 단일 ThreadPoolExecutor에 32.157초/115묶음/2300요청을 투입했다. 정상1955·의도취소345·예기치 않은 오류0, 최대 동시 워커1, 종료 후 실행/대기0·asyncio task 증가0이다. SDK/GPU/원격 서버는 사용하지 않은 큐·취소·종료 검사이며 장시간 RAM/GPU 누수나24시간 안정성을 입증하지 않는다. 원본 스크립트·결과는 private short_soak.py/short-soak.json에 보존했다.
+
+## 최신 릴리즈 후보 감사 — 다중 대화 (2026-10-19)
+
+**최종 판정: NOT VERIFIED (전체 실사용 릴리즈).** 로컬 코드·모의 통합·실제 GPU 검사는 통과했지만, 사용자가 이번에는 로컬 GPU·모의 검증만 선택해 최신 다중 대화 코드의 실제 Discord 다중 계정 QA를 하지 않았다. 실제 Windows 사용자 조작/장시간 soak도 남는다. 이전 단계의 실제1분 알림 성공은 당시 구현의 증거다. 전체 PASS로 합치지 않는다.
+
+기준 HEAD eaf1d1e(main clean), 모델 google/gemma-4-12B-it NF4와 기존 r8 q/k/v/o60. 성인 유머는 같은 기본 모델+정책 대안이다. 신규 GGUF/학습/미디어 확장 없음. Windows/Python3.10/RTX4070TiSUPER16GB·RAM32GB, 기존 .venv-gemma4를 사용했다. 단계별 commit/dirty hash·source snapshot·timestamp·원본 로그는 private manifest에 남겼다. 최종 구현 커밋은 AI-HANDOFF 최신 절과 git log를 따른다.
+
+### 요구사항 추적 매트릭스
+
+| 요구 | 구현·근거 | 코드/모의 검증 | 이번 실제 GPU/외부 검증 | 상태 |
+|---|---|---|---|---|
+| 기본/개인/성인 정책·성별·기분·성격 | inference/character/adult_policy/settings | 기존 adult/character/owner 회귀 | 세 모드 실제 생성, 새 weights 미선정 | 구현·실제GPU |
+| 모델 전환/준비 실패 복귀 | Runtime.switch_model | model_change/reconnect/소유자 검사 | gpu-lifecycle 생성중2대상 보존·주입 실패 후 실제 재응답 | 구현·실제GPU |
+| 멘션/이름·별칭·접미사·인용 차단 | naming/Runtime/routing | 기존 이름 QA+다른 대상/인용 회귀 | gpu-2 이름/멘션 혼합; 이전 독립 이름36사례는 이전 버전 | 구현·GPU+모의 |
+| 동일작성자1/2/5초 직접 호출 | sessions/FIFO/고정 source | test_parallel_runtime | gpu-bursts-2 세 모드18/18 | 구현·실제GPU |
+| 보충/독립/완전 중복 구분 | intent prefix/SUPPLEMENT/hash | 명시 이름 보충·코드 대소문자·별개 보존 | 각 모드 보충1/중복1/독립4 통과 | 구현·GPU+모의 |
+| 다른 사용자·같은 채널 별개 흐름 | Conversations·독립 DialogueState | context/target/cancel 검증 | gpu-2 변경18/18·기준9/18 | 구현·실제GPU |
+| 실제 reply로 다자 합류 | 공유 conversation ID·실제 발언 merge | 세 사람/queued shared/타인취소 차단 | group-1 기본누락 후 group-2 세 모드4대상·최신사실 | 구현·작은GPU회귀 |
+| 다른 채널·스레드 동시 | guild/channel/thread 범위 키 | 두 스레드/별개 상태·source 고정 | 이번 CUDA+실서버 여러 스레드는 미시험 | 구현·모의 |
+| 신규 자율/지속 분리·침묵/종료/휴지 | activity lease/근거 후속/의미 판단 | 지역별 cooldown/부하/다른 채널 비전역/종료·노후·pending | 작은 GPU 그룹 후속, 인적 자연스러움 미평가 | 구현·모의/부분품질 |
+| 활성 대화 집계 | 실제 참여·상호작용·종료·pending·idle | 저장세션≠활성/idle 복귀/대기중 active | 실제 사용자 체감 미관찰 | 구현·모의 |
+| 중앙 단일 GPU·공정성 | scheduler+기존 executor1 | 단일 실제CPU워커/priority·aging·capacity/취소 소유권 | 실제CUDA중첩·대기 측정 | 구현·GPU+모의 |
+| source reply/편집·삭제·nonce | execute/ledger/hash | SDKmock fetch/reply/수정·삭제/보충/멘션 없음 | CUDA synthetic target 정확; Discord 실제 API 미시험 | 구현·모의 |
+| Unicode/기본 스티커 | 기존 액션 validator·source reply | STANDARD 제한/권한/nonce 회귀 | 이번 실서버 송신 없음 | 구현·모의 |
+| 최근/발췌 문맥·장기 회상 | DialogueState/context/merge | source·speaker/관련·오래된 발언·편집 | 합성5/10/20/50턴 지정 사실12/12 | 구현·제한GPU |
+| 작업 기억 flow/사용자/서버 격리 | memory_flows/schema3 | task flow/명시 본인 archive·타인 차단 | 이번 새 schema의 품질 A/B는 미실행 | 구현·모의 |
+| 기억 만료·갱신·삭제/철회 | 기존 TTL/cutoff/tombstone | 실제SQLite DST/기간·삭제 부활 방지 | 실제 사용자 삭제 확인 미실행 | 구현·모의 |
+| 관계·reaction 영속/중복 | companion_store transaction | event idempotency/철회/서버 분리 | 이번 실서버 reaction 없음 | 구현·모의 |
+| 구성원 자동 저장 동의 | subject_consents + /내기억 | 부재·허용·철회·guild clear/legacy 보존 | 새 slash 실제 sync/당사자 조작 미시험 | 구현·모의 |
+| 자연어 예약·UTC·대상/중복/복구 | companion/temporal/독립서비스 | source commit/시간/타인/불명확 전송/200예약 | GPU-lifecycle 모의 발송1·약15ms, 이전 실서버1분은 과거버전 | 구현·GPU+모의 |
+| Gateway 끊김·모델 변경 겹침 | RAM보류/resume/fresh/ledger | 미송신 보존/불명확 선점 미재생 | 실제망 끊김 미시험 | 구현·모의 |
+| 종료/worker/취소·task 누수 | close/ownership/FIFO locks | queued close/반복cancel/worker소유권 | 평가프로세스 순차 종료, 장시간 실제앱 미시험 | 구현·부분실제 |
+| DB version/lock/rollback/복구 | schema3 atomic/WAL/FK/strict version | 실제SQLite1→3/lock/손상보존/rollback/QAbackup | 운영DB migration 실제실행 안함 | 구현·모의 |
+| 소유자/서명/allowlist/안전 | 기존검증+전송직전 가드 | 침입자/서명/permission/age/token/무한루프 회귀 | 실제권한변경/운영서버 미시험 | 구현·모의 |
+| OOM/온도/VRAM 보호 | 기존health+device failure stop | 오류 주입/기기실패/자원 임계 회귀 | 실제GPU health 적용, 실제OOM·과열 유도 안함 | 구현·부분실제 |
+| Windows 시작/종료/설정/페이지 | 기존VBS/Controller+진행UI | 설정/명령·상태·숨긴Tk·DPI100/125/150% | 실제화면/마우스/키보드 자동조작 미사용 | 구현·모의 |
+| 진단/queue/진행·export | 숫자 trace/scheduler snapshot | 원문/ID 미포함·디스크 실패 비재전송 | private GPU 지표 수집 | 구현·실제계측 |
+| 새GGUF/등록미디어/멀티모달 확장 | 사용자 제외·품질보류 | 복구하지 않음/기본OFF 유지 | 새 모델승격 안함 | 의도적 제외 |
+| 자동 과거수집·생성요약·24시간 soak | 별도 장기 검증 필요 | 출처 발췌 유지, 가짜 과거 없음 | 사람 블라인드·장시간 미실행 | 부분/미구현 |
+
+### 실행·비교 증거
+
+- 기준 전체328검사 OK18.002초. 최종 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`: **366검사 OK25.682초**. 단위/실제SQLite/SDKmock·runtime통합/숨긴Tk를 포함하며 단위 개수는 제품 품질 점수가 아니다. PYTHONPATH=src.
+- GPU 모드는 한 개 NF4 모델에서 base disable_adapter/개인 LoRA/기본+성인정책을 순차 사용했다. 표의 작은 단일응답 A/B는 프롬프트·응답 해시 일치 모드당5/5, 워밍업1쌍 제외·순서교대다. 상세 p50/p95·VRAM·큐·분모는 [PARALLEL-CONVERSATIONS](PARALLEL-CONVERSATIONS.md)에 있다. 초기측정 후 추가된 가드를 포함한 모든 경로의 속도 향상을 주장하지 않는다.
+- 실제 중첩 gpu-2: 세 모드 각각3회 중첩, 변경 원본18/18응답·대상오류0·중복0. 기준9/18이며 취소·쿨타임 누락 원인을 구분했다. 변경은 더 많은 실제 답변을 생성하므로 walltime 우위를 비교하지 않는다.
+- 같은 작성자의 실제1·2·5초·GPU대기·보충·중복18/18. 보충 교체1회/모드는 의도한 취소다. 장문 blocker 때문에 p95가25~31초인 사례를 숨기지 않는다. TTFT/queue/TPS/VRAM/RAM 원본은 private에만 있다. 판단과 텍스트 호출을 섞은 TTFT를 전체 사용자 지연으로 쓰지 않는다.
+- 50턴은 합성 실제발언 fixture의 회상이며50번 실제 상호 생성이 아니다. 그룹 보강 후 다른 사실 fixture3모드 통과도 작은 회귀다. 자연스러운 한국어/사람 선호/환각률·일반화가 모두 통과했다는 뜻은 아니다.
+- GPU중 실제base→persona 제어/미송신2대상 보존, 준비 실패 주입 후 이전선택의 실제응답, GPU중 독립SQLite알림 모의전송1회0.015초를 확인했다. 실제Discord API latency가 아니다.
+- 실제 UI 사용자 조작과 새 Discord 송수신은 **범위 밖/미실행(사용자 지시: 로컬 모의 검증만)**. 원래 사용자가 금지한 컴퓨터 자동 조작은 하지 않았다. 새로운외부GPU·유료API·학습·미디어 확장0.
+
+### 결함·보안·남은 게이트
+
+수정한 주요 결함은 채널전체작업 취소, 독립질문 덮어쓰기, 조기타이머 wakeup시발언거절, model/Gateway 보류유실, 일반오류전역정지, 원본편집미검출, 공유요청에 앞선실제답변미반영, 타인요청취소, 비동의구성원자동갱신, 코드대소문자중복오인이었다. 오류·source snapshot·group-1 누락·import 오류 중단 로그도 보존한다. 초기 중단한 이 저장소 QA 프로세스만 종료했고 사용자 앱을 조작하지 않았다.
+
+검증 범위 내 재현된 미해결 P0/P1 차단 결함은 없다. **운영 릴리즈 증거 부족 게이트는 남는다.** 재연결·rate-limit·실제 권한/채널삭제·실제CPU/GPU자원부족·24시간운영의 외부 효과를 주입검사만으로 확인했다고 쓰지 않는다. 자동 backup UI는 추가하지 않았고 SQLite API의 QA fixture backup/restore만 검사했다. 과거 자료의 권리·동의 적합성은 자동검사로 확정하지 않는다.
+
+자원 한도는 논리흐름32/GPU12+admission대기32/180초 deadline이다. 긴 생성은 선점하지 않아 뒤 요청이 늦어질 수 있다. 모호한 보충/대상·종료는 규칙·의미판정에 한계가 있고 모든 한국어와 동명이인 정확성을 보장하지 않는다. 완전앱재시작시미완료텍스트는재생하지 않으며 불명확HTTP결과의 exactly-once도보장하지 않는다.
+
+후속 검증도 로컬 모의 환경에서 진행한다. 사용자에게 실서버 조작을 요청하지 않는다. 장시간 대표 부하 관찰과 모의 장애·격리·복구 검사를 이어가며, 실제 Discord 외부 효과는 범위 밖 미검증으로 유지한다.
+
 ## 2026-10-19 — companion 통합 QA
 
 - 코드 완료: 공통 별칭/RAM 발췌/관계/선택적 장기 기억/만료/본인 자연어 예약·소유자 관리. 자동 기억 OFF, weights 보존.
@@ -63,3 +127,11 @@ warmup 제외 peak allocated7731.4MiB/reserved7878MiB, RAM working set 약1869~1
 ## 중단·남은 조치
 
 Windows 화면 자동 조작은 도구가 물리 Escape 중단을 두 차례 보고해 멈췄다. 사용자 최신 요청에 따라 앞으로 컴퓨터 화면/마우스/키보드 자동 조작은 사용하지 않는다. 전역 제품 권한 설정을 변경했다고 주장하지 않는다. 파일 편집/명령 기반 테스트와 사용자의 수동 앱/Discord QA를 사용한다. 실제 UI 전체 흐름·이름/호칭·기본 스티커·비소유자/재연결/장시간 시험이 끝나기 전 릴리즈 완료로 표시하지 않는다.
+
+
+최종 보존 검사: 기존 private1234파일 누락0, runtime.lock 실행 메타데이터만 갱신됐고 나머지1233파일의 크기/mtime는 보존됐다. 원래 모델 선택 persona, 자동 기억/실험 시각 OFF를 읽기 확인했으며 설정·운영DB·weights를 변경하지 않았다. 환경은 torch2.9.1+cu128/transformers5.20.1/peft0.21.2/discord.py2.7.1/tzdata2026.5다. 상세 inventory/로그는 private에만 보관한다.
+
+
+### 추가 — 네트워크 없는 SDK 통합 검사
+
+실제 discord.py2.7.1 객체와 운영 on_message/Runtime/Transport를 사용하고 HTTP 경계만 메모리로 대체한 test_discord_simulator.py 4검사를 추가했다. 원본 reply/nonce/멘션 억제, 채널·봇 차단, 스레드 권한·Unicode/기본 스티커, NotFound/Forbidden을 검사한다. HTTPClient.request는 실패하도록 차단했으며 로그인·토큰·슬래시 sync·실제 송신은 없다. 제한 환경의 Windows 비동기 루프 대기 시도는 중단·기록했고 정상 실행은 sdk-simulator-2.log의 4검사 OK0.372초다. 외부 Discord rate-limit/서버 전달은 모의 검증과 구분한다.
