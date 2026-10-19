@@ -18,7 +18,7 @@ EchoMate 소스는 [MIT](LICENSE) 라이선스입니다. 모델·번들 의존�
 4. **성격과 기분**에서 캐릭터를 편집·저장합니다. 모델과 캐릭터는 별개입니다. 로컬 미리보기는 Discord에 전송하거나 기억·친밀도를 갱신하지 않습니다.
 5. **대화할 곳**에서 직접 새로고침하고 허용 서버·채널·스레드와 응답 방식을 저장한 뒤 **봇 켜기**를 누릅니다. 허용하지 않은 곳에서는 동작하지 않습니다.
 
-이번 개발 검증에서는 실제 Discord 로그인·조회·명령 동기화·메시지 송신을 수행하지 않았습니다. [설치와 데이터 위치](docs/USER-INSTALLATION.md) · [모델 관리](docs/MODEL-REGISTRY.md) · [캐릭터](docs/CHARACTER-PROFILES.md).
+이번 차수에서 실계정 로그인·Gateway·명령 동기화·서버 메시지 송신은 수행하지 않았습니다. 초기 UI 검사에서 합성 가짜 토큰 인증 요청2건이 나간 경계 오류는 폐기·보강하고 [정정 기록](docs/PRECISION-SOCIAL-QA.md)에 남겼습니다. [설치와 데이터 위치](docs/USER-INSTALLATION.md) · [모델 관리](docs/MODEL-REGISTRY.md) · [캐릭터](docs/CHARACTER-PROFILES.md).
 
 ## 모델과 데이터
 

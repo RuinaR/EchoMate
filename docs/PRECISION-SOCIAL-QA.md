@@ -66,3 +66,7 @@
 ## 릴리즈 판정
 
 실행 안정성과 UI의 주요 저장/취소 경로를 개선했지만 반복적인 응답 누락과 잘못된 관계 연결이 남아 **BLOCKED**다. 실제 사용자 UI·native 파일 선택창·다른 Windows·장시간 실사용은 NOT VERIFIED. 자동 확인과 사용자가 직접 할 확인은 [수동 확인 목록](USER-MANUAL-QA.md)으로 분리한다.
+
+## 소스 마감
+
+구현548d0c6. 최종 전체575검사 OK75.691초. 실제 GPU의 inference/runtime/social/sessions/scheduler/response_plans 바이트 해시가 현재 소스와 일치한다. UI source는 별도의 최종575/Tk/Controller 검사와 Portable로 확인한다. 최종 문서 HEAD는 Git 기록을 따른다.

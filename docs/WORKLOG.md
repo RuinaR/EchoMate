@@ -1,5 +1,16 @@
 # 작업 로그
 
+## 2026-10-20 정밀 판단·UI 동작 후속 — 최신 / BLOCKED
+
+시작 `a7ae298`, 구현 `548d0c6`. 전체 **575검사 OK75.691초**, 숨긴 Tk 렌더420조합 및 엄격한 SDK HTTP mock 디스패치209건을 확인했다. 초기 검사 경계 누락은 성공 결과에서 폐기했다. [정밀 사회적 QA](PRECISION-SOCIAL-QA.md)와 [실제 UI 동작표](UI-ACTION-QA.md)를 현재 기준으로 삼으며, 아래 이전 차수의 수치는 당시 기록이다.
+
+새32 최초24→25/32, 별도 새16 직접 관계9→13/16이다. 수정 후32 재검27/32는 독립 성능이 아니다. 누락·관계 오류가 남아 정식 릴리즈 **BLOCKED**다. [오프라인 사용자 확인](USER-MANUAL-QA.md)은 준비했지만 아직 사람이 수행하지 않았다. 실제 계정/Gateway/송신·다른 Windows·24시간·사람 말투 평가는 NOT VERIFIED다.
+
+변경: response_plans/inference/runtime/social의 유한 계획·출처 후보·진단, desktop/desktop_ui/companion_ui의 Future 적용 결과·선택 문맥 보호·오류 재배치, user_check와 EchoMate-Check.vbs, 합성 UI/계약 회귀·SDK HTTP mock 도구. 실제 SQLite 잠금·요약 삭제/비부활·DPAPI 최초 설정·파일 I/O·취소·시작 연타를 검증했다.
+
+실행: 전체 unittest574 OK61.334초, renderer420 PASS, dispatcher209 PASS(하위 HTTP0). 실제 GPU 관계/생성 A/B·공정 큐·모델 실패 복구·600.141초 혼합 운용 PASS는 각각 정밀 QA의 한정된 범위다. 허용되지 않은 가짜 토큰 인증2건과 일시적인 자체 창 표시라는 검사 실수를 기록·폐기하고 HTTP/Tk 차단을 보강했다. 운영4파일 hash는 보존 검사를 별도로 수행한다.
+
+
 ## 2026-10-20 최종 후속 QA — GPU 허용 후 / BLOCKED
 
 시작 HEAD `3829408`, 최종 앱 소스 `868f156`. 최종 문서 커밋은 Git 기록을 확인한다. 아래 초기 감사·GPU 보류 기록은 당시 경과이며 현재 결과는 이 절과 [상세 QA](SOCIAL-UI-QA.md)를 우선한다.
@@ -796,3 +807,15 @@ naming/routing/sessions/runtime/dialogue_intent/inference/character/telemetry, D
 - tests의 Controller·세션·실제 숨긴 Tk 회귀 및 `tools/verify_ui_functional_audit.py`, `tools/inventory_ui_controls.py`. 새 조작은 자신의 Tk/Tcl binding에 한정한다.
 - 명령: `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests` →547개 OK63.119초. `tools/verify_ui_functional_audit.py --output local_data/social-ui-qa-20261020/ui-final-audit-v2.json` →420 PASS. `tools/inventory_ui_controls.py --output docs/UI-CONTROL-INVENTORY.md` →79정적 호출, 실행 coverage는 아님.
 - 실제 GPU 코어 `6f81b9e`와 최종 소스의5모듈 바이트 해시 일치. 4프로필12응답 생성은 완료했으나 사람의 자연스러움 평가는 미완료다.
+
+## 2026-10-20 프로필 파일 마감 보완
+
+character_profiles.py·desktop.py·desktop_ui.py에서 ID 입력 없이 현재 캐릭터 내보내기/새 프로필 가져오기를 연결하고 비프로필 파일 덮어쓰기를 차단했다. tests/test_ui_workflows.py와 test_model_character_distribution.py로 실제 저장/취소/기존 자료 보존을 확인했다. PYTHONPATH=src;tests;tools의 전체 unittest575 OK75.691초, 엄격한 SDK mock 디스패치209 PASS, 숨긴 Tk 렌더420 PASS. 초기 표적33검사는 도구 import 경로 누락1건으로 실패했으며 전체 검사에서 올바른 tools 경로로 재검했다. 실제 사용자 UI와 Discord는 미검증이다.
+
+## 2026-10-20 Portable 최종 사용자 흐름 — 소스548d0c6
+
+최종 번들 Python·자체 숨긴 Tk·새 빈 검증 저장소에서 GUI 최초 설정(DPAPI/서명), 가상 서버/채널, 실제 분할 모델 선택/probe, 현재 캐릭터 파일 내보내기/새 항목 가져오기, 실제 GPU 미리보기와 로딩 중 닫기, 새 프로세스 복원을 확인했다. 첫 흐름87.140초·첫 UI0.406초, 재시작0.437초·첫 UI0.390초였다. 실제 Discord는 강제 차단했고 외부 HTTP0·관계/기억/예약 쓰기0·종료 worker0이었다.
+
+로딩 중 취소는26.063초 후 정리됐고 GPU allocated1KiB/reserved2MiB였다. 안전한 로딩 구간을 즉시 물리 중단하지 않는다. Tk 검사 펌프 최대 간격1.937초가 있어 완전 무정지 UI라고 인증하지 않는다. 같은 호스트의 격리 저장소 검증이며 다른 Windows/깨끗한 VM/native 사용자 조작은 NOT VERIFIED다.
+
+공개 Portable은24,767파일·4.590GiB이며 모델·개인 DB·토큰은 제외한다. 최종 source/docs 바이트 및 전체 파일 manifest는 별도 package audit로 대조한다. 소스와 Portable의 일반/오프라인 VBS 4진입점 /check는 앱/봇을 시작하지 않고 통과했다. 공개 다운로드 릴리즈는 만들지 않고 후보를 로컬에만 둔다.

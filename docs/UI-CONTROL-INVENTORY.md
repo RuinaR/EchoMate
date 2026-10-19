@@ -45,14 +45,14 @@
 |[draw_models:428](../src/echomate_bot/desktop_ui.py#L428)|form|선택한 모델 정보|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
 |[edit_profile:456](../src/echomate_bot/desktop_ui.py#L456)|form|캐릭터 편집 · 복제해서 저장|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
 |[advanced_profile:522](../src/echomate_bot/desktop_ui.py#L522)|form|표현 고급 설정|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[profile_files:531](../src/echomate_bot/desktop_ui.py#L531)|form|프로필 파일|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[approve_commands:566](../src/echomate_bot/desktop_ui.py#L566)|form|다음 연결의 명령 정리 승인|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[draw_status:577](../src/echomate_bot/desktop_ui.py#L577)|button|개인정보 없는 진단 저장|중첩 함수/Controller · 소스 참조|클릭→Controller 확인 · 일부 경계 mock · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[draw_outputs:627](../src/echomate_bot/desktop_ui.py#L627)|button|Discord 명령 정리 승인|approve_commands|화면/팝업·취소 확인 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[draw_outputs:626](../src/echomate_bot/desktop_ui.py#L626)|toggle|동적 항목 · 소스 참조|set_value|클릭→Controller 확인 · 일부 경계 mock · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[draw_labs:635](../src/echomate_bot/desktop_ui.py#L635)|toggle|이미지 내용 분석을 시험해 보기|set_value|클릭→Controller 확인 · 일부 경계 mock · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[draw_labs:636](../src/echomate_bot/desktop_ui.py#L636)|button|이 서버 캐시 비우기|중첩 함수/Controller · 소스 참조|클릭→Controller 확인 · 일부 경계 mock · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[draw_labs:637](../src/echomate_bot/desktop_ui.py#L637)|button|선택 범위 다시 분석 · 최대5개|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[profile_files:533](../src/echomate_bot/desktop_ui.py#L533)|form|프로필 파일|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[approve_commands:569](../src/echomate_bot/desktop_ui.py#L569)|form|다음 연결의 명령 정리 승인|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[draw_status:580](../src/echomate_bot/desktop_ui.py#L580)|button|개인정보 없는 진단 저장|중첩 함수/Controller · 소스 참조|클릭→Controller 확인 · 일부 경계 mock · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[draw_outputs:630](../src/echomate_bot/desktop_ui.py#L630)|button|Discord 명령 정리 승인|approve_commands|화면/팝업·취소 확인 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[draw_outputs:629](../src/echomate_bot/desktop_ui.py#L629)|toggle|동적 항목 · 소스 참조|set_value|클릭→Controller 확인 · 일부 경계 mock · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[draw_labs:638](../src/echomate_bot/desktop_ui.py#L638)|toggle|이미지 내용 분석을 시험해 보기|set_value|클릭→Controller 확인 · 일부 경계 mock · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[draw_labs:639](../src/echomate_bot/desktop_ui.py#L639)|button|이 서버 캐시 비우기|중첩 함수/Controller · 소스 참조|클릭→Controller 확인 · 일부 경계 mock · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[draw_labs:640](../src/echomate_bot/desktop_ui.py#L640)|button|선택 범위 다시 분석 · 최대5개|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
 |[member_alias_editor:42](../src/echomate_bot/companion_ui.py#L42)|form|이 사람의 호칭 관리|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
 |[server_options:167](../src/echomate_bot/companion_ui.py#L167)|form|이 서버의 호칭과 시간대|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
 |[edit_record:186](../src/echomate_bot/companion_ui.py#L186)|form|친밀도 조절|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
@@ -86,4 +86,4 @@
 |[show_legacy_summaries:331](../src/echomate_bot/companion_ui.py#L331)|form|선택한 사람의 발언 요약 · 로컬 조회|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
 |[remove_record:348](../src/echomate_bot/companion_ui.py#L348)|form|선택한 기록 삭제|confirm_remove|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
 |[remove_record:343](../src/echomate_bot/companion_ui.py#L343)|form|대화 요약 삭제|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
-|[setup_credentials:50](../src/echomate_bot/user_check.py#L50)|form|오프라인 검증용 가짜 정보|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|
+|[setup_credentials:56](../src/echomate_bot/user_check.py#L56)|form|오프라인 검증용 가짜 정보|중첩 함수/Controller · 소스 참조|개별 실행 증거 미부여 · [성공/실패/저장 범위](UI-ACTION-QA.md)|

@@ -41,7 +41,7 @@
 
 ## 레이아웃과 실행 범위
 
-최종 숨긴 Tk 렌더420조합 PASS, p50/p95 3.909/63.162ms·최대113.997ms, callback 오류0. 이전420과 워밍업/부하가 달라 인과적 속도 향상으로 주장하지 않는다. 최종 디스패치는209건 PASS·Controller 오류0·하위 외부 HTTP0이며 일부 모델/시작/파일 선택 경계는 mock이다. 각 결과에는 소스 해시를 남긴다.
+최종 숨긴 Tk 렌더420조합 PASS, p50/p95 3.712/61.267ms·최대132.656ms, callback 오류0. 이전420과 워밍업/부하가 달라 인과적 속도 향상으로 주장하지 않는다. 최종 디스패치는209건 PASS·Controller 오류0·하위 외부 HTTP0이며 일부 모델/시작/파일 선택 경계는 mock이다. 각 결과에는 소스 해시를 남긴다.
 
 native 창 장식·파일 선택창·실제 클릭/키보드·시각적 접근성은 [사용자용 확인](USER-MANUAL-QA.md)으로 남긴다. 자동 레이아웃/디스패치/저장 후조건을 하나의 전수 실사용 PASS로 합치지 않는다.
 
@@ -54,3 +54,17 @@ native 창 장식·파일 선택창·실제 클릭/키보드·시각적 접근�
 ## 재현
 
 개발 환경의 `PYTHONPATH=src;tests;tools`에서 전체 unittest, `tools/verify_ui_functional_audit.py --output <새 local_data JSON>`, `tools/verify_ui_actions.py --output <새 local_data JSON>`을 실행한다. 정적 목록은 `tools/inventory_ui_controls.py --output docs/UI-CONTROL-INVENTORY.md --evidence <해시가 같은 디스패치 JSON>`으로 만들 수 있다. 일반 사용자에게 이 명령을 요구하지 않는다.
+
+최종 구현548d0c6 기준 전체575검사 OK75.691초. 검사용 가짜 정보·원문은 local_data에만 보관하며 실제 사용자 수동 결과는 아직 없다.
+
+## 현재 캐릭터 파일 작업 정정
+
+프로필 ID 직접 입력을 없앴다. 내보내기는 현재 적용한 캐릭터를 JSON으로 저장하고, 가져오기는 새 ID로 보관한 뒤 프로필 목록에서 적용한다. 기존 프로필/운영 설정/DB/모델/일반 JSON 덮어쓰기를 거절한다. 파일 선택 취소·실패 안내·실제 저장 내용과 기존 파일 바이트 보존을 회귀 검사했다. native 파일 선택창의 실제 조작성은 사용자 확인으로 남긴다.
+
+## 2026-10-20 Portable 최종 사용자 흐름 — 소스548d0c6
+
+최종 번들 Python·자체 숨긴 Tk·새 빈 검증 저장소에서 GUI 최초 설정(DPAPI/서명), 가상 서버/채널, 실제 분할 모델 선택/probe, 현재 캐릭터 파일 내보내기/새 항목 가져오기, 실제 GPU 미리보기와 로딩 중 닫기, 새 프로세스 복원을 확인했다. 첫 흐름87.140초·첫 UI0.406초, 재시작0.437초·첫 UI0.390초였다. 실제 Discord는 강제 차단했고 외부 HTTP0·관계/기억/예약 쓰기0·종료 worker0이었다.
+
+로딩 중 취소는26.063초 후 정리됐고 GPU allocated1KiB/reserved2MiB였다. 안전한 로딩 구간을 즉시 물리 중단하지 않는다. Tk 검사 펌프 최대 간격1.937초가 있어 완전 무정지 UI라고 인증하지 않는다. 같은 호스트의 격리 저장소 검증이며 다른 Windows/깨끗한 VM/native 사용자 조작은 NOT VERIFIED다.
+
+공개 Portable은24,767파일·4.590GiB이며 모델·개인 DB·토큰은 제외한다. 최종 source/docs 바이트 및 전체 파일 manifest는 별도 package audit로 대조한다. 소스와 Portable의 일반/오프라인 VBS 4진입점 /check는 앱/봇을 시작하지 않고 통과했다. 공개 다운로드 릴리즈는 만들지 않고 후보를 로컬에만 둔다.

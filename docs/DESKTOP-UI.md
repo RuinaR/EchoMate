@@ -1,5 +1,12 @@
 # EchoMate 로컬 관리 앱
 
+## 2026-10-20 실제 동작 후속 — 최신
+
+일반 입력·이름·프로필 목록은 비동기 결과 확인 후 닫는다. 실패한 입력과 선택을 유지하고 오래된 대상 변경을 차단한다. 긴 오류는 실제 글꼴 기준으로 재배치한다. [컨트롤별 범위](UI-ACTION-QA.md)와 [사용자 수동 확인](USER-MANUAL-QA.md)을 참고한다.
+
+`EchoMate-Check.vbs`는 운영 자료와 별도 저장소로 실행하는 수동 오프라인 확인용이다. 가짜 정보·가상 서버만 사용하며 실제 연결/조회/전송을 차단한다. 자동 시험에서는 root를 withdraw하고 native mainloop를 자체 드라이버로 대체한다. 사용자가 실제로 창을 확인한 것은 아니다.
+
+
 ## 2026-10-20 최종 후속 QA — GPU 허용 후 / BLOCKED
 
 시작 HEAD `3829408`, 최종 앱 소스 `868f156`. 최종 문서 커밋은 Git 기록을 확인한다. 아래 초기 감사·GPU 보류 기록은 당시 경과이며 현재 결과는 이 절과 [상세 QA](SOCIAL-UI-QA.md)를 우선한다.
@@ -121,3 +128,7 @@ DPI 행 겹침·미완성 하단행 클릭·초기 geometry 줄바꿈을 수정�
 [Obsidian Appearance/Settings](https://obsidian.md/help/settings)의 어두운 사이드바/설정 영역 분리와 [LM Studio 모델 로딩 안내](https://lmstudio.ai/docs/app/basics)의 준비 상태 구분을 참고했다. 외부 앱을 설치하거나 자산·코드를 복제하지 않았다. 색상/간격/캔버스 컨트롤은 이 프로젝트에서 구현했다.
 
 스티커 구분은 [Discord 공식 Sticker Resource](https://docs.discord.com/developers/resources/sticker)의 STANDARD/GUILD 타입과 [discord.py API](https://discordpy.readthedocs.io/en/stable/api.html)의 StandardSticker/공식 팩 조회를 따른다. 실제 스티커 송신 성공은 SDK 타입 검증과 별도로 Discord QA가 필요하다.
+
+## 현재 캐릭터 파일 작업 정정
+
+프로필 ID 직접 입력을 없앴다. 내보내기는 현재 적용한 캐릭터를 JSON으로 저장하고, 가져오기는 새 ID로 보관한 뒤 프로필 목록에서 적용한다. 기존 프로필/운영 설정/DB/모델/일반 JSON 덮어쓰기를 거절한다. 파일 선택 취소·실패 안내·실제 저장 내용과 기존 파일 바이트 보존을 회귀 검사했다. native 파일 선택창의 실제 조작성은 사용자 확인으로 남긴다.
