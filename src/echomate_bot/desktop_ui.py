@@ -13,7 +13,7 @@ MOODS=['평온','기쁨','신남','우울','화남','피곤함','부끄러움']
 ACTIVITY={'조용함':'quiet','보통':'normal','활발함':'active','매우 활발함':'very_active'}
 MODES={'대답하지 않기':'silent','멘션·이어지는 대화만':'mention','자연스럽게 대화에 참여':'autonomous'}
 REACTION_MODES={'반응하지 않기':'silent','대화 중에만 반응':'mention','어울릴 때 가볍게 반응':'autonomous'}
-STAGES={'summary':'대화 요약 확인·압축', 'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석','action':'행동 선택','text':'답변 작성','sending':'전송','research':'인터넷 근거 확인','output_check':'출력 검사','conversation_wait':'앞선 대화 기다림','member_resolution':'호칭·대상 근거 확인'}
+STAGES={'social':'실제 청자·대화 흐름 판정','summary':'대화 요약 확인·압축', 'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석','action':'행동 선택','text':'답변 작성','sending':'전송','research':'인터넷 근거 확인','output_check':'출력 검사','conversation_wait':'앞선 대화 기다림','member_resolution':'호칭·대상 근거 확인'}
 
 
 def rounded(canvas,x,y,w,h,fill,r=12,outline=''):
@@ -371,23 +371,43 @@ class DesktopApp(CompanionViews):
         jobs=s.get('jobs',[])
         states={'running':'처리 중','sent':'전송 완료','completed':'완료','silence':'침묵·보관 생략','failed':'실패','cancelled':'취소'}
         self.job_list.empty_hint='아직 처리한 요청이 없어요'
-        self.job_list.set_items([dict(id=j['id'],label=states.get(j['status'],j['status'])+' · '+STAGES.get(j['stage'],j['stage']),hint=str(j['seconds'])+'초 · 대화 '+j.get('flow','')[:8]) for j in jobs])
+        flows=s.get('conversations',[])
+        flow_labels={'active':'대화 중','idle':'잠시 쉬는 중','ended':'종료'}
+        self.job_list.set_items([dict(id=f['id'],label=flow_labels.get(f['status'],'대화')+' · '+f['conversation'][:8],hint=f"확인 참여자 {f['participants']}명 · 현재 상대 {len(f['peers'])}명") for f in flows]+[dict(id=j['id'],label=states.get(j['status'],j['status'])+' · '+STAGES.get(j['stage'],j['stage']),hint=str(j['seconds'])+'초 · 대화 '+j.get('flow','')[:8]) for j in jobs])
         self.job_list.place(x=240,y=300,width=270,height=max(100,h-445));self.job_list.selected={self.job_id} if self.job_id else set()
         selected=next((j for j in jobs if j['id']==self.job_id),None)
         if selected:
             self.text(535,302,'선택한 작업 · 원본 '+('연결됨' if selected['source_attached'] else '없음'),11,bold=True)
             gpu=selected.get('gpu',{})
             self.text(535,335,f"GPU {gpu.get('status','완료 또는 아직 요청 전')} · 우선 {gpu.get('priority','-')} · 대기 {gpu.get('wait_seconds',0)}초 · 처리 {gpu.get('processing_seconds',0)}초",9,MUTED,width=w-575)
-            phases=('member_resolution','conversation_wait','assessment','memory_lookup','summary','research','action','text','output_check','sending')
+            social=selected.get('social',{})
+            targets={'bot':'봇','human':'다른 사람','bot_group':'봇 포함 그룹','broadcast':'채널 전체','uncertain':'불확실'}
+            links={'new':'독립 요청','continue':'기존 대화 지속','join':'확인된 합류','resume':'봇 대화 재개','commentary':'제3자 논평','shift':'상대 전환','end':'종료','uncertain':'미확정'}
+            if social:
+                self.text(535,365,'청자: '+targets.get(social.get('target'),'미확정')+' · '+links.get(social.get('relation'),'미확정')+' · '+('명시적 호출' if social.get('explicit_call') else '문맥 판정'),9,MUTED,width=w-575)
+                peers=social.get('current_peers',[]);peer_text=', '.join(peers[:3])+(' 외 '+str(len(peers)-3)+'명' if len(peers)>3 else '')
+                self.text(535,390,'현재 상대 ID: '+(peer_text or '없음')+' · 확인 참여자 '+str(social.get('confirmed_participants',0))+'명',8,MUTED,width=w-575)
+            phases=('member_resolution','conversation_wait','social','assessment','memory_lookup','summary','research','action','text','output_check','sending')
             for n,phase in enumerate(phases):
                 seconds=selected.get('stages',{}).get(phase)
-                value=f'{seconds:.3f}초' if seconds is not None else '진행 중' if selected['status']=='running' and selected['stage']==phase else '아직 실행 전 / 생략'
-                self.text(535,372+n*19,STAGES.get(phase,phase)+' · '+value,9,MUTED,width=w-575)
+                value=f'{seconds:.3f}초' if seconds is not None else '진행 중' if selected['status']=='running' and selected['stage']==phase else '대기·생략'
+                col=n//6;row=n%6;column_width=max(110,(w-575)/2)
+                short={'member_resolution':'호칭·답장','conversation_wait':'요청 순서','social':'청자·관계','assessment':'참여 확인','memory_lookup':'기억 조회','summary':'요약','research':'근거 검색','action':'행동 선택','text':'답변 생성','output_check':'출력 검사','sending':'전송'}
+                self.text(535+col*column_width,424+row*21,short[phase]+' · '+value,8,MUTED,width=column_width-10)
             if selected.get('tokens') is not None:self.text(535,565,f"첫 토큰 {round(selected['ttft'],2) if selected.get('ttft') is not None else '-'}초 · 생성 {selected['tokens']}토큰 · {selected.get('tokens_per_second','-')}토큰/초",8,MUTED,width=w-575)
             from .desktop import NO_RESPONSE
             reason=next((NO_RESPONSE[c] for c in reversed(selected.get('codes',[])) if c in NO_RESPONSE),'전송 완료' if selected['status']=='sent' else '실행 중 / 상세 진단 파일 참고')
             self.text(535,h-150,'판단: '+reason,8,MUTED,width=w-575)
-        else:self.text(535,310,'작업을 선택하면 실제 단계별 결과를 볼 수 있어요.',11,MUTED,width=w-580)
+        else:
+            flow=next((f for f in flows if f['id']==self.job_id),None)
+            if flow:
+                self.text(535,310,'대화 '+flow['conversation'][:8]+' · '+flow_labels.get(flow['status'],'미확정'),12,bold=True)
+                self.text(535,350,'확인 참여자 '+str(flow['participants'])+'명 · 현재 직접 상대 '+str(len(flow['peers']))+'명',10,MUTED,width=w-580)
+                peers=flow['peers'];peer_text=', '.join(peers[:3])+(' 외 '+str(len(peers)-3)+'명' if len(peers)>3 else '')
+                self.text(535,390,'현재 상대 ID: '+(peer_text or '없음'),10,MUTED,width=w-580)
+                self.text(535,440,'채널 ID: '+str(flow['channel'])+' · 마지막 답변 대상 ID: '+str(flow.get('last_recipient') or '없음'),9,MUTED,width=w-580)
+                self.text(535,490,'과거 참여자라고 모든 발언에 답하지 않아요. 발언마다 실제 청자를 다시 확인해요.',10,MUTED,width=w-580)
+            else:self.text(535,310,'대화나 작업을 선택하면 실제 상태와 판정 결과를 볼 수 있어요.',11,MUTED,width=w-580)
         self.text(242,h-107,'최근 판단: '+s['recent_reason'] if s.get('recent_reason') else '원문 메시지와 AI 비공개 추론은 표시하지 않아요.',9,MUTED,width=w-300)
     def draw_outputs(self,w,h,cfg):
         if not cfg:return

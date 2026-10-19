@@ -110,8 +110,12 @@ class MemberDirectory:
         bot_forms={f.casefold() for n in bot_names for f in address_forms(n)}
         bot_collision=bool(direct_forms & bot_forms);collision=collision or bot_collision
         addressee=None
-        if len(actual)==1:addressee=actual[0]
-        elif event.reply_author and not actual:addressee=event.reply_author
+        # A mention in a report/subject is not automatically its addressee.
+        # A leading ID call or a matching vocative supplies address evidence;
+        # otherwise the actual reply remains independent from mentioned people.
+        mention_call=bool(len(actual)==1 and (re.match(r'^<@!?'+str(actual[0])+r'>(?=$|[\s,:!?])',clean) or any(c.user==actual[0] and c.direct for c in candidates)))
+        if mention_call:addressee=actual[0]
+        elif event.reply_author:addressee=event.reply_author
         elif len(targets)==1 and not collision:addressee=next(iter(targets))
         return MemberRoles(event.author,addressee,actual,event.reply_to,event.reply_author,tuple(candidates[:32]),collision or len(actual)>1 or len(targets)>1,bot_collision)
 

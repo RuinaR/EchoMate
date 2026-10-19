@@ -120,6 +120,28 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(body['allowed_mentions']['replied_user'])
         self.assertTrue(body['flags'] & 4)
 
+    async def test_social_engine_followup_and_reaction_reach_sdk_with_exact_sources(self):
+        from echomate_bot.social import SocialDecision
+        runtime=self.client.runtime;runtime.direct_cooldown=0
+        self.client.backend.fast_text_path=True
+        self.client.backend.assess_social=AsyncMock(return_value=SocialDecision('bot','continue','0','question',True))
+        first=discord.utils.time_snowflake(datetime.now(timezone.utc))
+        await self.client.on_message(self.message(mid=first,content='<@999>같이 얘기해 보자'))
+        await asyncio.gather(*list(runtime.tasks.values()));await asyncio.sleep(.02)
+        second=discord.utils.time_snowflake(datetime.now(timezone.utc))
+        data=payload(second,content='그건 왜 그런 건데');data['mentions']=[]
+        self.http.messages[3,second]=data
+        message=self.client._connection.create_message(channel=self.guild.get_channel(3),data=data)
+        await self.client.on_message(message);await asyncio.gather(*list(runtime.tasks.values()))
+        self.assertEqual([int(body['message_reference']['message_id']) for channel,body in self.http.sends],[first,second])
+        self.client.backend.assess_social.assert_awaited_once()
+        self.settings.set(1,'reactions',True);await asyncio.sleep(.02)
+        third=discord.utils.time_snowflake(datetime.now(timezone.utc))
+        await self.client.on_message(self.message(mid=third,content='<@999> 이 메시지에 👍 달아줘'))
+        await asyncio.gather(*list(runtime.tasks.values()))
+        self.assertEqual(self.http.reactions,[(3,third,'👍')]);self.assertEqual(len(self.http.sends),2)
+        for channel,body in self.http.sends:self.assertEqual(body['allowed_mentions']['parse'],[])
+
     async def test_direct_unicode_request_calls_real_sdk_reaction_not_text(self):
         self.settings.set(1,'reactions',True)
         mid=discord.utils.time_snowflake(datetime.now(timezone.utc))

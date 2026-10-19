@@ -80,6 +80,20 @@ class ReleaseTk(unittest.TestCase):
                 app.snapshot=dict(cfg=cfg,phase='정지',error='',connected=False,running=False,servers=[dict(id=2,label='합성 서버',enabled=True,channels=[])],pending=0,contexts=1,latency=2,progress=[],jobs=[job],budget=dict(used=100,limit=100),scheduler={})
                 app.guild_id=2;app.page='status';app.job_id='100';app.render();root.update_idletasks()
                 self.assertEqual(app.job_list.selected,{'100'})
+                flow=dict(id='flow:test',conversation='test',participants=2,peers=['4'],last_recipient=4,channel=3,status='active')
+                app.snapshot['conversations']=[flow]
+                app.snapshot['jobs'][0]['social']=dict(target='human',relation='shift',explicit_call=False,current_peers=[],confirmed_participants=2)
+                app.render();root.update_idletasks()
+                text=' '.join(app.canvas.itemcget(x,'text') for x in app.canvas.find_all() if app.canvas.type(x)=='text')
+                self.assertIn('다른 사람',text);self.assertIn('상대 전환',text)
+                for item in app.canvas.find_all():
+                    if app.canvas.type(item)=='text' and int(app.canvas.coords(item)[1]) in (424,445,466,487,508,529):
+                        box=app.canvas.bbox(item);self.assertLessEqual(box[3]-box[1],21)
+                app.select_job({'flow:test'});root.update_idletasks()
+                self.assertEqual(app.job_list.selected,{'flow:test'})
+                text=' '.join(app.canvas.itemcget(x,'text') for x in app.canvas.find_all() if app.canvas.type(x)=='text')
+                self.assertIn('현재 직접 상대 1명',text)
+                app.select_job({'100'})
                 app.snapshot['jobs']=[dict(job,id='101'),job];app.render();self.assertEqual(app.job_list.selected,{'100'})
                 app.page='outputs';app.render();root.update_idletasks()
                 text=' '.join(app.canvas.itemcget(x,'text') for x in app.canvas.find_all() if app.canvas.type(x)=='text')

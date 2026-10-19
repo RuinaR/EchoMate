@@ -43,7 +43,8 @@ class MemberRecognition(unittest.TestCase):
         self.assertFalse(one_edit('가온','노을'));self.assertTrue(one_edit('abcd','abdc'))
     def test_speaker_audience_subject_and_actual_reply_are_separate(self):
         r=self.resolve('노을이는 어때',member_mentions=(5,),reply_to=80,reply_author=6)
-        self.assertEqual((r.speaker,r.addressee,r.mentioned_people,r.reply_target,r.reply_author),(4,5,(5,),80,6))
+        self.assertEqual((r.speaker,r.addressee,r.mentioned_people,r.reply_target,r.reply_author),(4,6,(5,),80,6))
+        self.assertIsNone(self.resolve('그런데 <@5>가 설명한 뜻은 뭐야',member_mentions=(5,)).addressee)
         self.assertEqual(self.resolve('그 말 다시 설명해',reply_to=80,reply_author=6).addressee,6)
         self.assertFalse(r.facts()['identity_actions_allowed'])
     def test_guild_channel_isolation_nickname_refresh_and_expiry(self):

@@ -48,6 +48,9 @@ def name_address(text,name,aliases=(),partial=True,other_names=()):
     if not match:return 'none'
     if any(match['name'].casefold() in {n.casefold() for n in address_forms(other)} for other in other_names):return 'ambiguous'
     before=clean[:match.start()].strip();after=clean[match.end():].lstrip(' ,!.?~…:')
+    # Korean indirect speech reports a past call; the registered spelling alone
+    # does not turn that quoted speech act into a fresh invitation.
+    if re.search(r'(?:냐고|라고|다고|자고)\s*(?:물|말|전|했|하더|부르)',after):return 'ambiguous'
     if re.search(r'<@!?\d+>|너\s*말고|봇\s*말고|(?:저|그|다른)\s*사람(?:한테|에게)',after):return 'ambiguous'
     if not before:
         if not after or match['call'] in ('아','야'):return 'direct'

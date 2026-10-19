@@ -7,7 +7,7 @@ import math
 import time
 
 active_trace = ContextVar('echomate_trace', default=None)
-STAGES = frozenset({'summary','assessment','continuity','visual','action','text','sending','memory_lookup','private_request','conversation_wait','research','output_check'})
+STAGES = frozenset({'social','summary','assessment','continuity','visual','action','text','sending','memory_lookup','private_request','conversation_wait','research','output_check'})
 
 
 def process_ram_mib():

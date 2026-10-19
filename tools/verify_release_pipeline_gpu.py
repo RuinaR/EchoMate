@@ -50,7 +50,7 @@ async def run(root):
                 runtime.autonomy_idle_since-=1000
                 try:
                     before=len(backend.metrics);start=time.monotonic()
-                    await runtime.ingest(Event(100+index,2,3,4,text,datetime.now(timezone.utc)))
+                    await runtime.ingest(Event(100+index,2,3,4,text,datetime.now(timezone.utc),member_mentions=(5,) if kind=='autonomous_other' else (999,) if text.startswith('<@999>') else ()))
                     await settle(runtime,backend);metrics=backend.metrics[before:]
                     passed=(not transport.sent if expected=='SILENCE' else len(transport.sent)==1 and transport.sent[0]['kind']==expected) and (calls is None or len(metrics)==calls)
                     if kind=='calculation':passed=passed and '26' in transport.sent[0]['text']

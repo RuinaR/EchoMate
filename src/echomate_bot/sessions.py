@@ -24,14 +24,20 @@ class Conversation:
     topic:str=''
     last_bot:str|None=None
     candidate_key:object=None
+    direct_peers:set=field(default_factory=set)
+    last_recipient:int|None=None
+    link_evidence:str='unconfirmed'
+    addressee:str='uncertain'
+    status:str='candidate'
+    candidate_keys:tuple=()
 
 class Conversations:
     def __init__(self):self.flows={};self.message_flow={}
 
-    def choose(self,event,*,direct,pending,intent_text=None):
+    def choose(self,event,*,direct,pending,intent_text=None,semantic=False,bot_reply=False):
+        if semantic:return self.choose_social(event,direct=direct,pending=pending,intent_text=intent_text,bot_reply=bot_reply)
         place=(event.guild,event.channel)
         own=[f for f in self.flows.values() if (f.guild,f.channel)==place and event.author in f.participants and not f.ended]
-        own.sort(key=lambda f:f.last_at,reverse=True)
         text=(event.content if intent_text is None else intent_text).strip()
         reply=self.message_flow.get((event.guild,event.channel,str(event.reply_to))) if event.reply_to else None
         flow=self.flows.get(reply)
@@ -46,7 +52,7 @@ class Conversations:
         candidate=None
         if not own and not direct:
             shared=[f for f in self.flows.values() if (f.guild,f.channel)==place and not f.ended and f.engaged and f.last_bot and f.key not in pending]
-            unique={f.conversation_id:f for f in sorted(shared,key=lambda f:f.last_at)}
+            unique={f.conversation_id:f for f in shared}
             if len(unique)==1:candidate=next(iter(unique.values()))  # evidence candidate, not automatic membership
         if own:
             latest=own[0]
@@ -58,6 +64,24 @@ class Conversations:
         key=event.channel if not any(f.channel==event.channel for f in self.flows.values()) else (event.guild,event.channel,secrets.token_hex(8))
         flow=Conversation(key,event.guild,event.channel,event.parent,candidate_key=candidate.key if candidate else None);self.flows[key]=flow
         return flow,'independent' if own else 'group_candidate' if candidate else 'new'
+
+    def choose_social(self,event,*,direct,pending,intent_text=None,bot_reply=False):
+        text=(event.content if intent_text is None else intent_text).strip()
+        own=[f for f in self.flows.values() if (f.guild,f.channel)==(event.guild,event.channel) and event.author in f.direct_peers and not f.ended]
+        reply=self.flows.get(self.message_flow.get((event.guild,event.channel,str(event.reply_to)))) if event.reply_to else None
+        if reply and bot_reply:return reply,'reply'
+        busy=[f for f in own if f.key in pending]
+        if CANCEL.fullmatch(text):return (busy[0],'cancel') if len(busy)==1 else (None,'ambiguous_cancel')
+        if END.fullmatch(text) and len(own)==1:return own[0],'end'
+        if len(busy)==1 and SUPPLEMENT.search(text) and not INDEPENDENT.search(text):return busy[0],'supplement'
+        # A confirmed current peer plus an explicit fresh invitation is evidence;
+        # membership alone or the existence of only one session is not.
+        if direct and len(own)==1 and not busy and not INDEPENDENT.search(text):return own[0],'continue'
+        key=event.channel if not any(f.channel==event.channel for f in self.flows.values()) else (event.guild,event.channel,secrets.token_hex(8))
+        flow=Conversation(key,event.guild,event.channel,event.parent,candidate_keys=tuple(f.key for f in own))
+        if len(own)==1:flow.candidate_key=own[0].key
+        self.flows[key]=flow
+        return flow,'social_candidate'
 
     def observe(self,flow,event):
         flow.participants.add(event.author);flow.messages.add(str(event.id));flow.last_at=time.monotonic()

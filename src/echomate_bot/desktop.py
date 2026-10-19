@@ -17,9 +17,14 @@ import tkinter as tk
 
 from .settings import ROOT,Settings,MOODS,ACTIVITY
 
-STAGES={'summary':'대화 요약 확인·압축', 'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
+STAGES={'social':'실제 청자·대화 흐름 판정','member_resolution':'호칭·답장 근거 확인','summary':'대화 요약 확인·압축', 'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
         'action':'행동 선택','text':'답변 작성','sending':'Discord 전송','research':'인터넷 원문·근거 확인','output_check':'출력 정책 검사'}
 NO_RESPONSE = {
+    'social_human_exchange_pending':'다른 사람과 주고받는 순서라 끼어들지 않았어요', 'social_candidate_capacity':'여러 대화의 연결이 불명확해 기다려요',
+    'social_other_addressee':'다른 사람에게 한 말이라 참여하지 않았어요', 'social_broadcast':'채널 전체를 향한 말이라 먼저 답하지 않았어요',
+    'social_uncertain':'누구에게 한 말인지 확실하지 않아 기다려요', 'social_join_not_invited':'봇에게 합류를 요청한 근거가 부족해요',
+    'social_group_not_invited':'봇이 포함된 그룹 초대가 확인되지 않았어요', 'social_no_response_expected':'봇의 답을 기대하는 발언이 아니에요',
+    'social_addressee_shift':'대화 상대가 다른 사람으로 바뀌었어요', 'social_invalid_anchor':'연결할 대화의 근거를 확인하지 못했어요',
     'resource_stop_temperature':'GPU 온도 보호로 멈췄어요', 'resource_stop_vram':'GPU 메모리 여유가 부족해 멈췄어요', 'resource_stop_ram':'PC 메모리 여유가 부족해 멈췄어요', 'resource_stop_gpu_query':'GPU 상태를 확인할 수 없어 멈췄어요',
     'name_not_recognized':'등록된 호출 형태가 없어요', 'name_ambiguous':'이름은 보이지만 부른 대상이 불분명해요',
     'followup_not_linked':'이어지는 대화 근거가 부족해요', 'continuation_rejected':'대상이나 종료 판단에 따라 답하지 않았어요',
@@ -123,6 +128,7 @@ class LocalController:
                       companion_loading=getattr(self,'companion_loading',False),
                       statistics=statistics,
                       runtime_totals=dict(runtime.totals) if runtime else {},
+                      conversations=runtime.social_monitor() if runtime and hasattr(runtime,'social_monitor') else [],
                       jobs=runtime.monitor() if runtime and hasattr(runtime,'monitor') else getattr(self,'last_jobs',[]),
                       memory_pending=runtime.memory_queue.qsize() if runtime else 0,
                       private_service=bool(runtime and runtime.service_task and not runtime.service_task.done()),

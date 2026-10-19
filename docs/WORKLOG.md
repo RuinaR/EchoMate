@@ -1,5 +1,13 @@
 # 작업 로그
 
+## 2026-10-19 사회적 청자·대화 상대 — 현재 기준
+
+기준3cc53eb/main과 원격 일치/초기 clean을 확인했다. sessions/runtime의 최신 세션 선택·새 화자 단일 후보·bare-call 합류·verify_target group 재승격을 추적했다. social.py와 공통 assess_social, 후보 임시 상태/확정 상대/사람 간 순서·완료 sibling 정리, 실제 멘션의 청자/화제 분리, 보고된 호출 보류, 구조화 진단·UI를 구현했다. 변경 모듈은 runtime/sessions/inference/members/naming/telemetry/desktop/desktop_ui, 관련 테스트와 verify_social_gpu/SDK mock 프로토콜이다. 기존 기능과 운영4파일을 보존한다. 검사 명령/개발 실패/미사용 결과/실제 GPU/미검증/최종 커밋은 SOCIAL-ROUTING-QA에 누적한다.
+
+[설계와 경계](SOCIAL-ROUTING.md) · [검증·실패·재현](SOCIAL-ROUTING-QA.md). 아래 이전 차수 기록보다 이 절을 우선한다.
+
+최종: 전체475 OK54.507초. 실제 SDK HTTP mock의 공백 없는 멘션→후속→reaction과 pending 인간 보충 발언의 기존 봇 요청 취소/병합 방지를 추가했다. 실제 GPU 공정 큐 세 모드3/3, 결합 회귀128/132. 마지막 소형 현재 상대 분류는46문항 오개입6으로 거부했고 원본 경로로 복원했다. 복원 통제46문항40/46(오개입3/누락3)으로 잔여 결함을 확인해 릴리즈 PASS를 차단했다. 새 통제10문항의 실패4건을 숨기지 않으며 무공백 타인 호칭·이름+2인칭·맞장구·간접 평가를 다음 과제로 남긴다. 실패 로그·운영 자료 모두 보존, 실서버 연결 없음.
+
 ## 2026-10-19 — 후속 릴리즈 안정화·무상한·공개 검색·다중 턴 요약
 
 구현 커밋 ab22ec3, 기준0ddb4df. 공개50파일/민감정보 검토0건, 최종452 OK46.601초. 후속 인수인계 문서 커밋은 git log로 확인한다.

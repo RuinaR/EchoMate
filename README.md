@@ -1,5 +1,7 @@
 # EchoMate
 
+최신 대화 상대·언급/청자 분리 변경은 [사회적 청자 엔진](docs/SOCIAL-ROUTING.md)과 [실제 QA·한계](docs/SOCIAL-ROUTING-QA.md)를 먼저 읽으세요. 실제 Discord에는 접속하지 않았고 전체 실사용 판정은 보류입니다.
+
 최신 변경은 [후속 릴리즈 QA](docs/FOLLOWUP-RELEASE-QA.md)를 먼저 읽으세요. 일일 발언 한도를 제거하고, 동의 기반 다중 턴 요약과 무료 공개 원문 검색을 추가했습니다. 뉴스 검색 가용성·장시간 실사용은 미검증입니다.
 
 최신 릴리즈 후보는 [전수 감사](docs/RELEASE-CANDIDATE.md)와 [개인정보 동의](docs/PRIVACY-COMMANDS.md)를 먼저 읽으세요. Discord에는 본인용 `/동의` 하나만 정의하고 나머지는 Windows 앱으로 관리합니다. 스티커 송신은 제거했습니다. 실제 서버 명령 정리는 아직 실행하지 않았습니다.
