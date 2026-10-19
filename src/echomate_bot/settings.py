@@ -12,10 +12,12 @@ ROOT = Path(__file__).resolve().parents[2] / "local_data" / "bot"
 MODES = {"silent", "mention", "autonomous", "reaction"}
 MOODS = {"평온", "기쁨", "신남", "우울", "화남", "피곤함", "부끄러움"}
 ACTIVITY = {"quiet": .05, "normal": .2, "active": .45, "very_active": .7}
+GENDERS={'female','male','neutral'}
+MODELS={'base','persona','adult'}
 DEFAULTS = dict(enabled=False, text=True, reactions=False, stickers=False, media=False,
                 vision=False, mood="평온", warmth=75, cuteness=40, playfulness=20,
                 auto_mood=False, activity="normal", cooldown=60, engagement_seconds=600,
-                media_probability=0., daily_limit=100, model="persona", guilds={},asset_policy=2)
+                media_probability=0., daily_limit=100, model="persona", guilds={},asset_policy=2,gender='neutral')
 
 
 def private_path(value):
@@ -56,7 +58,7 @@ def validate(cfg):
     for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood"):
         if type(cfg[key]) is not bool:
             raise ValueError("Boolean required")
-    if cfg["mood"] not in MOODS or cfg["activity"] not in ACTIVITY or cfg["model"] not in {"base", "persona"}:
+    if cfg["mood"] not in MOODS or cfg["activity"] not in ACTIVITY or cfg["model"] not in MODELS or cfg['gender'] not in GENDERS:
         raise ValueError("Unknown mood, activity or trusted model")
     for key, lo, hi in (("warmth", 0, 100), ("cuteness", 0, 100), ("playfulness", 0, 100),
                         ("cooldown", 2, 3600), ("engagement_seconds", 10, 86400), ("daily_limit", 1, 1000)):
@@ -128,6 +130,8 @@ class Settings:
             if 'asset_policy' not in verified:
                 # Authenticate first; previous QA vision opt-in must not enable the new experiment.
                 verified=dict(verified,asset_policy=2,vision=False,media=False,media_probability=0.)
+            # Migrate only after verifying the original signature; never auto-enable adult mode.
+            if 'gender' not in verified:verified=dict(verified,gender='neutral')
             self._cfg = validate(verified)
 
     def authorize(self, user_id):

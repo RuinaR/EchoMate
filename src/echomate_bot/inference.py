@@ -15,7 +15,7 @@ from itertools import product
 
 from .settings import ROOT, private_path
 from .character import instruction, needs_rewrite
-from .processes import background_options
+from .processes import check_resources
 
 MODEL = "google/gemma-4-12B-it"
 ADAPTER = ROOT.parent / "experiments/style-v2/pilot-r8-qkvo/step-00060"
@@ -60,6 +60,15 @@ class LocalBackend:
         # Run before opening the Gateway: imports/model construction may hold GIL.
         await asyncio.shield(asyncio.get_running_loop().run_in_executor(self.executor,self.load))
 
+    async def prepare_mode(self,mode):
+        from .settings import MODELS
+        if mode not in MODELS:raise ValueError('Unknown model')
+        if self.failed:raise RuntimeError('Inference disabled; restart required')
+        # The adult slot deliberately uses the verified base-policy fallback until
+        # a GGUF passes independent quality review. No second 12B allocation.
+        await self.ready()
+        await asyncio.get_running_loop().run_in_executor(self.executor,self.health)
+
     def load(self):
         if self.model is not None:return
         os.environ.update(HF_HUB_OFFLINE="1",TRANSFORMERS_OFFLINE="1",HF_HUB_DISABLE_TELEMETRY="1",WANDB_DISABLED="true")
@@ -93,23 +102,9 @@ class LocalBackend:
 
     @staticmethod
     def health():
-        import subprocess
         import torch
         if not torch.cuda.is_available():raise RuntimeError("CUDA unavailable")
-        try:
-            line=subprocess.check_output(["nvidia-smi","--query-gpu=temperature.gpu,memory.free","--format=csv,noheader,nounits"],
-                text=True,stderr=subprocess.PIPE,timeout=5,**background_options()).splitlines()[0]
-            temp,free=map(int,line.split(","))
-        except (subprocess.SubprocessError,OSError,ValueError,IndexError):
-            raise RuntimeError('GPU health query unavailable') from None
-        if temp>=85 or free<512:raise RuntimeError("GPU resource safety stop")
-        if os.name=="nt":
-            import ctypes
-            class Memory(ctypes.Structure):
-                _fields_=[("length",ctypes.c_ulong),("load",ctypes.c_ulong)]+[(k,ctypes.c_ulonglong) for k in ("total","available","page_total","page_available","virtual_total","virtual_available","extended")]
-            status=Memory();status.length=ctypes.sizeof(status)
-            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)) or status.available<2*1024**3:
-                raise RuntimeError("RAM resource safety stop")
+        return check_resources()
 
     async def _job(self, messages, images=None, budget=384, weight="persona",choices=None):
         if self.failed:raise RuntimeError("Inference disabled after device failure; restart required")

@@ -102,4 +102,7 @@ class ActiveChannelList(unittest.TestCase):
                 self.assertEqual(len(app.channel_list.items),4)
                 app.show_all=False;app.snapshot['running']=False;app.refresh_lists()
                 self.assertEqual(len(app.channel_list.items),4)
-            finally:root.destroy()
+            finally:
+                app.destroy();app=None;root=None
+                import gc
+                gc.collect()

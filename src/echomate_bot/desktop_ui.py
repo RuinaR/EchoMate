@@ -38,6 +38,11 @@ class SelectionList(tk.Canvas):
         visible=max(1,self.winfo_height()//52)
         self.offset=min(self.offset,max(0,len(items)-visible))
         self.index=min(self.index,max(0,len(items)-1));self.redraw()
+    def destroy(self):
+        # Break bound-method cycles while Tcl still belongs to the UI thread.
+        self.callback=None
+        super().destroy()
+        self.label_font=None
     def click(self,event):
         self.focus_set()
         self.dragging=event.x>self.winfo_width()-12
@@ -105,12 +110,13 @@ class DesktopApp:
         self.canvas.bind('<Tab>',self.focus_next);self.canvas.bind('<Return>',self.activate_focus);self.focus_index=-1
         self.canvas.bind('<Shift-Tab>',self.focus_previous);self.canvas.bind('<space>',self.activate_focus)
         root.bind('<Control-s>',lambda e:self.save_scope() if self.page=='spaces' else None)
-        root.protocol('WM_DELETE_WINDOW',self.close);root.after(100,self.poll)
+        self.disposed=False
+        root.protocol('WM_DELETE_WINDOW',self.close);self.poll_id=root.after(100,self.poll)
     def text(self,x,y,value,size=11,color=FG,bold=False,width=None):
         return self.canvas.create_text(x,y,text=value,anchor='nw',fill=color,font=('맑은 고딕',size,'bold' if bold else 'normal'),width=width or 0)
-    def button(self,x,y,w,h,label,callback,selected=False,primary=False,enabled=True):
+    def button(self,x,y,w,h,label,callback,selected=False,primary=False,enabled=True,font_size=10):
         rounded(self.canvas,x,y,w,h,ACCENT if primary and enabled else '#2d2b4d' if selected else CARD,8)
-        self.canvas.create_text(x+w/2,y+h/2,text=label,fill=MUTED if not enabled else BG if primary else ACCENT if selected else FG,font=('맑은 고딕',10,'bold'))
+        self.canvas.create_text(x+w/2,y+h/2,text=label,fill=MUTED if not enabled else BG if primary else ACCENT if selected else FG,font=('맑은 고딕',font_size,'bold'))
         if enabled:self.hits.append((x,y,w,h,callback))
     def toggle(self,x,y,label,on,callback):
         rounded(self.canvas,x,y,38,22,MINT if on else LINE,11)
@@ -295,8 +301,10 @@ class DesktopApp:
         else:self.text(x,sy+414,'선택한 스레드에만 적용돼요' if self.channel_ids else '채널을 선택하면 설정할 수 있어요',9,MUTED)
         self.button(x,sy+445,216,36,f'선택한 {len(self.channel_ids)}곳에 저장' if self.channel_ids else '채널을 먼저 선택하세요',self.save_scope,primary=True,enabled=bool(self.channel_ids))
         self.button(x,sy+488,216,32,'이 서버에서 모두 쉬기' if server and server['enabled'] else '이 서버에서 활동 허용',self.change_guild,enabled=bool(server))
-    def choices(self,x,y,choices,current,callback,width=105):
-        for index,(label,value) in enumerate(choices):self.button(x+index*(width+8),y,width,35,label,lambda v=value:callback(v),value==current)
+    def choices(self,x,y,choices,current,callback,width=105,enabled=True):
+        size=10
+        while size>7 and max(tkfont.Font(family='맑은 고딕',size=size,weight='bold').measure(label) for label,_ in choices)>width-16:size-=1
+        for index,(label,value) in enumerate(choices):self.button(x+index*(width+8),y,width,35,label,lambda v=value:callback(v),value==current,enabled=enabled,font_size=size)
     def number(self,x,y,label,key,value,step,lo,hi):
         display=str(value)+'%' if key in {'warmth','cuteness','playfulness'} else str(value//60)+'분' if key=='engagement_seconds' and value>=60 else str(value)+'초'
         self.text(x,y,label,11);self.text(x+260,y,display,12,ACCENT,True)
@@ -306,15 +314,18 @@ class DesktopApp:
         if not cfg:return
         rounded(self.canvas,226,143,w-252,h-210,PANEL)
         self.text(250,164,'대화 분위기',13,bold=True)
-        self.choices(250,202,[(m,m) for m in MOODS],cfg['mood'],lambda v:self.set_value('mood',v),82)
-        self.text(250,263,'새 대화에 먼저 참여하는 정도',13,bold=True)
-        self.choices(250,301,list(ACTIVITY.items()),cfg['activity'],lambda v:self.set_value('activity',v),125)
+        self.choices(250,194,[(m,m) for m in MOODS],cfg['mood'],lambda v:self.set_value('mood',v),82)
+        self.text(250,245,'캐릭터 성별',11,bold=True)
+        self.choices(390,236,[('여성','female'),('남성','male'),('중성/성별 없음','neutral')],cfg['gender'],lambda v:self.set_value('gender',v),156)
+        self.text(250,291,'새 대화에 먼저 참여하는 정도',12,bold=True)
+        self.choices(250,321,list(ACTIVITY.items()),cfg['activity'],lambda v:self.set_value('activity',v),125)
         for index,(label,key,step,lo,hi) in enumerate([('다정함','warmth',5,0,100),('귀여움','cuteness',5,0,100),('장난기','playfulness',5,0,100),
-             ('먼저 말할 때 최소 간격','cooldown',10,2,3600),('대화를 이어갈 대기 시간','engagement_seconds',60,10,86400)]):
-            self.number(250,355+index*40,label,key,cfg[key],step,lo,hi)
-        self.text(250,576,'모델',10,MUTED)
-        self.choices(310,566,[('개인 말투 · 잠정','persona'),('기본 Gemma 4','base')],cfg['model'],lambda v:self.set_value('model',v),156)
-        self.text(250,h-100,'기분은 바로 반영돼요. 이미 나누던 대화는 활동 빈도와 관계없이 문맥에 맞게 이어가요.',9,MUTED,width=w-290)
+             ('먼저 말할 때 최소 간격','cooldown',10,2,3600),('문맥 보관 시간','engagement_seconds',60,3600,86400)]):
+            self.number(250,382+index*34,label,key,max(lo,cfg[key]),step,lo,hi)
+        self.text(250,559,'답변 모델',10,MUTED)
+        self.choices(250,583,[('개인 말투 · 잠정','persona'),('기본 Gemma 4','base'),('성인 유머 · 자유로운 표현','adult')],cfg['model'],lambda v:self.set_value('model',v),220,
+                     enabled=not bool(self.snapshot and self.snapshot.get('model_preparing')))
+        self.text(250,635,'성인 유머: 기존 Gemma 4 + 전용 정책 · 연령 제한 채널에서만 사용',9,ACCENT if cfg['model']=='adult' else MUTED,width=w-290)
     def draw_status(self,w,h,s):
         if not s:return
         width=(w-282)/3
@@ -345,15 +356,22 @@ class DesktopApp:
         self.text(250,444,'평소에는 꺼 두는 것을 권장해요',13,bold=True)
         self.text(250,485,'일반 대화와 기본 이모지·스티커는 이 기능을 켜지 않아도 사용할 수 있어요.\n실험 결과는 틀릴 수 있으며, Lottie 형식의 이미지 분석은 아직 지원하지 않아요.',11,MUTED,width=w-310)
     def poll(self):
+        if self.disposed:return
         try:
             while True:self.snapshot=self.controller.updates.get_nowait()
         except queue.Empty:pass
-        self.refresh_lists();self.render();self.root.after(400,self.poll)
+        self.refresh_lists();self.render();self.poll_id=self.root.after(400,self.poll)
+    def destroy(self):
+        if self.disposed:return
+        self.disposed=True
+        self.root.after_cancel(self.poll_id)
+        self.hits.clear();self.drafts.clear();self.snapshot=None
+        self.root.destroy()
     def close(self):
         if self.closing:return
         self.closing=True
         self.controller.submit('shutdown')
         def wait():
-            if self.controller.closed.is_set():self.root.destroy()
+            if self.controller.closed.is_set():self.destroy()
             else:self.root.after(200,wait)
         self.root.after(200,wait)

@@ -47,6 +47,16 @@ class DiscordTransport:
     def channel(self,event):
         guild=self.client.get_guild(event.guild)
         return guild.get_channel_or_thread(event.channel) if guild else None
+    async def verify_adult(self,event):
+        channel=self.channel(event)
+        if not channel:return False
+        target=channel.parent if isinstance(channel,discord.Thread) else channel
+        if not target:return False
+        # Refresh the actual channel age gate immediately before adult output,
+        # rather than trusting a possibly delayed Gateway channel-update event.
+        latest=await self.client.fetch_channel(target.id)
+        return bool(getattr(latest,'guild',None) and latest.guild.id==event.guild and
+                    isinstance(latest,(discord.TextChannel,discord.ForumChannel)) and latest.is_nsfw())
     async def indicate_typing(self,event,fresh):
         try:
             while await fresh():
@@ -65,7 +75,9 @@ class DiscordTransport:
         member=await channel.guild.fetch_member(self.bot_id)
         p=channel.permissions_for(member)
         return dict(view=p.view_channel,send=(p.send_messages_in_threads if isinstance(channel,discord.Thread) else p.send_messages),
-                    react=p.add_reactions and p.read_message_history,attach=p.attach_files)
+                    react=p.add_reactions and p.read_message_history,attach=p.attach_files,
+                    age_restricted=bool((channel.parent if isinstance(channel,discord.Thread) else channel) and
+                        (channel.parent if isinstance(channel,discord.Thread) else channel).is_nsfw()))
     async def catalog(self,event,cache):
         with measure("catalog"):return await self._catalog(event,cache)
     async def _catalog(self,event,cache):
@@ -170,7 +182,7 @@ class EchoClient(discord.Client):
         async def panel(i:discord.Interaction):
             await i.response.send_message(self.status_text(),view=OwnerPanel(self),ephemeral=True)
         @group.command(name="set",description="기분·성격·모델·기능 설정")
-        @app_commands.choices(key=[app_commands.Choice(name=k,value=k) for k in ("enabled","text","reactions","stickers","vision","mood","warmth","cuteness","playfulness","auto_mood","activity","cooldown","engagement_seconds","daily_limit","model")])
+        @app_commands.choices(key=[app_commands.Choice(name=k,value=k) for k in ("enabled","text","reactions","stickers","vision","mood","gender","warmth","cuteness","playfulness","auto_mood","activity","cooldown","engagement_seconds","daily_limit","model")])
         async def setting(i:discord.Interaction,key:str,value:str):
             defaults=self.settings.get()
             if key not in defaults or key=="guilds":raise ValueError("Unknown setting")
@@ -181,6 +193,11 @@ class EchoClient(discord.Client):
             elif type(previous) is int:parsed=int(value)
             elif type(previous) is float:parsed=float(value)
             else:parsed=value
+            if key=='model':
+                await i.response.defer(ephemeral=True)
+                await self.runtime.switch_model(i.user.id,parsed)
+                await i.followup.send('모델 준비와 선택 변경을 마쳤어.',ephemeral=True)
+                return
             self.settings.set(i.user.id,key,parsed)
             if key=='enabled' and not parsed:self.runtime.invalidate_all()
             else:self.runtime.cancel_pending()
@@ -190,7 +207,7 @@ class EchoClient(discord.Client):
             if i.user.id!=self.settings.owner_id:return []
             key=getattr(i.namespace,'key','')
             options=(sorted(MOODS) if key=='mood' else ['quiet','normal','active','very_active'] if key=='activity' else
-                     ['base','persona'] if key=='model' else ['true','false'] if type(self.settings.get().get(key)) is bool else [])
+                     ['base','persona','adult'] if key=='model' else ['female','male','neutral'] if key=='gender' else ['true','false'] if type(self.settings.get().get(key)) is bool else [])
             return [app_commands.Choice(name=v,value=v) for v in options if current in v]
         @group.command(name="scope",description="현재 서버의 채널·스레드 모드 설정")
         @app_commands.choices(mode=[app_commands.Choice(name=k,value=k) for k in ('silent','mention','autonomous','reaction')])

@@ -1,5 +1,7 @@
 # EchoMate
 
+성격과 기분 화면은 개인 말투/기본 Gemma 4/성인 유머의 세 선택지와 공통 성별 설정을 제공한다. 성인 유머는 현재 기본 Gemma 4+정책 대안이며 새 GGUF를 실사용으로 승인한 것이 아니다. 연령 제한 채널에서만 성인 정책을 사용한다. [검증과 제약](docs/ADULT-MODE-QA.md).
+
 로컬 AI를 사용하는 Discord 자율 대화 봇과 **독립된 오프라인 페르소나 제작 도구(Studio)**.
 
 > **최신 상태:** `EchoMate.vbs`로 콘솔 없이 다크 관리 앱 실행 (`EchoMate.cmd`는 호환용). 서버·채널·스레드 선택, 캐릭터/활동, 처리 상태, Unicode/Discord 기본 스티커와 기본 OFF인 실험 시각 분석을 지원합니다. 등록 미디어 기능은 제거했습니다. [앱 안내](docs/DESKTOP-UI.md) · [Bot 실행법](docs/DISCORD-BOT.md) · [실제 검증 상태](docs/CURRENT-STATUS.md) · [모델 품질 미확정 근거](docs/ML-EXPERIMENTS.md). 아래 날짜별 기록은 당시 상태입니다.

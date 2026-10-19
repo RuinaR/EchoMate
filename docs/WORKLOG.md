@@ -1,5 +1,18 @@
 # 작업 로그
 
+## 2026-10-19 — 세 모델 선택·공통 성별·지속 대화 QA
+
+자동 판정 추가 검토: 정상166응답 전부 만점이었으나, 같은 판정기의 사전 고정 대조6개 중 기대 기준 일치는3개(부정 대조 검출2/5)였다. 따라서 자동 점수는 모델 선정/품질 동등성 근거에서 제외한다. GGUF 승격은 보류하고 사람 블라인드 평가를 남긴다. 세부 결과는 ADULT-MODE-QA를 따른다.
+
+- 의도: 기존 개인 LoRA/기본 모델을 보존하고 성인 유머 선택지와 공통 성별을 기존 Canvas 화면에 추가한다. GGUF 품질이 충분하지 않으면 기본 Gemma 4+정책을 유지하며 새 학습/멀티모달 확장은 하지 않는다.
+- 변경: settings/character/adult_policy, desktop/desktop_ui, discord_app/runtime/inference/processes. 성별 서명 마이그레이션, 소유자 검사, 모델 준비 상태/취소/실패 시 이전 선택 유지, 전환 중 최신 이벤트 보류, 전송 직전 NSFW REST 재검사, 의미 기반 지속 대화를 구현했다. 시간은 문맥 보관에만 사용한다.
+- 평가 도구: adult_qa_cases/evaluate_adult_models/gguf_probe/verify_adult_conversation/judge_adult_holdout. 새 합성60문항을 개발36/블라인드24로 분리하고 프롬프트 고정 후 독립 평가한다. 로컬 judge는 자동 판정이며 사람 승인이 아니다. 응답/키/원시 수치는 local_data 내부에만 저장한다.
+- 후보: 공식 고정 revision과 파일 SHA 확인 후 Q4_K_M 두 파일 및 llama.cpp b11721 CUDA12.4 엔진만 다운로드했다. 카드 라이선스 표기가 다른 점을 기록했다. GGUF에 개인 PEFT를 결합하지 않고 GPU 모델은 순차 실행했다.
+- 발견/수정: 초기 큰 컨텍스트의 VRAM 안전 중단, HTTP 스트림 연결 재사용 오류, mmap의 호스트 RAM 안전 중단, 평가 스냅샷/들여쓰기/표준 모듈 이름 충돌을 구분해 기록했다. load-mode none/no-host/작은 배치/EOF 소비 후 GGUF 개발144회 정상 종료했다. Transformers 종료 후 같은 프로세스의 잔여 CUDA 메모리도 확인해 엔진별 자식 프로세스/lease를 순차 실행하고 불완전 평가를 성공으로 종료하지 않게 했다. Tk 지연 GC의 다른 스레드 정리 크래시는 UI destroy와 테스트의 명시적 자원 해제로 수정했다. 실패/부분 결과와 기존 private701파일을 보존한다.
+- 검증: PYTHONPATH=src, `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q` → 기준280개 OK, 변경 후290개 OK(12.762초), 엔진 프로세스 격리/실패 시 다음 모델 차단 회귀 포함 최종292개 OK(13.418초). gender/HMAC/소유자/연령 게이트/취소/모델 준비 실패/경쟁 상태/대화 지속/숨긴 Tk DPI 경계 회귀를 포함한다. 화면·마우스·키보드 자동 조작은 하지 않았다.
+- GPU 상세 결과·한계·선정 근거는 [ADULT-MODE-QA](ADULT-MODE-QA.md)의 최신 절을 따른다. 동일768 토큰 평가와 초기192/384 토큰 개발 결과를 합쳐 순위를 매기지 않는다. GGUF 속도는 NF4와 엔진·양자화도 달라 가중치 효과만으로 해석하지 않는다.
+- 미확인: 사용자가 성인 연령 제한 테스트 채널이 없다고 답해 이번 범위는 GPU·모의 이벤트까지 진행한다. 실제 사용자 Windows 화면 상호작용, 새 코드의 실제 Discord 송수신, 사람 블라인드 평가, 장시간 soak, GGUF 생산 hot-swap. 단위/합성/GPU 시험만으로 실사용 품질을 승인하지 않는다.
+
 ## 2026-10-19 — 시작·응답 중 콘솔 깜빡임 수정
 
 - 시작 Git clean/9cce121. 응답 중 주기적인 nvidia-smi 상태 조회가 pythonw에서 자식 콘솔을 생성할 수 있음을 확인했다. stdout 수집만으로 창이 숨겨지지 않던 경로다.

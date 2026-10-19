@@ -85,7 +85,9 @@ class LocalController:
             for cid,p in list(runtime.progress.items()):
                 channel=client.get_channel(cid)
                 progress.append(dict(channel=channel.name if channel else '허용된 채널',stage=STAGES.get(p['stage'],p['stage']),seconds=round(time.time()-p['started'],1)))
-        snapshot=dict(phase=self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
+        preparing=bool(runtime and getattr(runtime,'changing_model',False))
+        snapshot=dict(phase='모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
+                      model_preparing=preparing,
                       running=bool(self.job and not self.job.done()),
                       connected=bool(client and client.is_ready()),pending=client.backend.pending if client else 0,
                       contexts=len(runtime.states) if runtime else 0,safe_stopped=runtime.stopped if runtime else False,
@@ -131,7 +133,7 @@ class LocalController:
             await reader.close();self.refreshing=False
 
     async def command(self,operation,**kwargs):
-        if operation in {'start','stop','shutdown','name'}:
+        if operation in {'start','stop','shutdown','name'} or (operation=='settings' and 'model' in kwargs.get('values',{})):
             if not hasattr(self,'lifecycle_lock'):self.lifecycle_lock=asyncio.Lock()
             async with self.lifecycle_lock:return await self._command(operation,**kwargs)
         return await self._command(operation,**kwargs)
@@ -162,9 +164,14 @@ class LocalController:
                 self.phase='정지'
             elif operation=='settings':
                 values=kwargs['values']
-                allowed={'enabled','text','reactions','vision','stickers','mood','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model'}
+                allowed={'enabled','text','reactions','vision','stickers','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model'}
                 if set(values)-allowed:raise ValueError('Unknown GUI setting')
-                self.settings.change(owner,lambda cfg:cfg.update(values))
+                from .settings import validate
+                validate(dict(self.settings.get(),**values))
+                if 'model' in values and self.client:
+                    await self.client.runtime.switch_model(owner,values['model'])
+                    values={k:v for k,v in values.items() if k!='model'}
+                if values:self.settings.change(owner,lambda cfg:cfg.update(values))
                 if self.client:
                     self.client.runtime.cancel_pending()
             elif operation=='name':

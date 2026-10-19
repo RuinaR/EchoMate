@@ -1,5 +1,13 @@
 # Windows Discord Bot 실행과 검증
 
+## 성인 유머와 공통 성별 (2026-10-19)
+
+앱 모델 선택의 세 번째 항목은 현재 기본 Gemma 4+성인 유머 정책이며 기본 OFF다. 두 GGUF는 품질 검증 전 평가 전용이다. GUI 또는 소유자 전용 `/echo set key:model value:adult`로 선택하고 gender는 female/male/neutral 중 하나다. 모델 준비는 ephemeral 지연 응답을 사용하고 준비 성공 전에는 선택을 저장하지 않는다. 일반 사용자는 변경할 수 없다.
+
+성인 유머는 비노골적인 성인 간 합의된 장난으로 제한하며 개인 모욕/성희롱/미성년자/비동의는 제한한다. Discord 공식 age-restricted 설정과 스레드의 부모 상속을 확인한다([공식 Threads](https://github.com/discord/discord-api-docs/blob/main/developers/topics/threads.mdx)). 전송 직전 REST로 현재 설정을 재확인하며 실패/변경 시 취소한다. 일반 채널에서는 같은 기본 모델의 일반 정책을 사용한다. 채널 플래그가 모든 이용자의 실제 나이/동의를 보증하지는 않는다. 원문/설정/토큰/모델은 외부 추론으로 전송하지 않는다.
+
+지속 대화는 신규 확률과 별개이며 고정 시간만으로 끝내지 않는다. 대상/답장 관계/화자/최근 확정 이력과 유용성·적절성을 확인한다. 전환/새 메시지/삭제/권한 변경 중 오래된 출력을 차단한다. 실제 서버의 성인 채널·다중 화자 QA는 아직 별도 수동 검증이 필요하다.
+
 ## 최신 — 이름으로 부르기 (2026-10-19)
 
 앱에서 서버별 이름을 저장하면 해당 서버에서만 적용한다. 공식 Bot의 자기 Member.edit(nick=...)를 사용하며 다른 사람 이름은 변경하지 않는다. [discord.py Member.edit](https://discordpy.readthedocs.io/en/stable/api.html#discord.Member.edit) 및 [Discord Guild API](https://docs.discord.com/developers/resources/guild#modify-current-member)를 따른다. 자기 닉네임 변경 권한을 확인한다. 권한 실패 코드는 비공개 진단에 남고 이름 설정 자체는 보존된다.

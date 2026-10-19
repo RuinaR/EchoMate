@@ -1,5 +1,15 @@
 # 아키텍처
 
+## 성인 유머·성별·공통 지속 대화 경계 (2026-10-19)
+
+adult_policy.py는 일반 모델/정책 대안의 turn_profile과 제한된 경계 검사를 제공한다. model=adult는 현재 동일 Transformers 기반 모델의 정책 모드이며 실제 job weight는 base다. GGUFProbe는 평가 전용 별도 프로세스/loopback 인증 HTTP/직렬 lock/취소·종료를 사용하고 개인 PEFT를 로드하지 않는다. 앱에 검증 안 된 GGUF를 자동 연결하지 않는다. 준비·승격 기준과 자원 실험은 ADULT-MODE-QA 참조.
+
+설정 DEFAULTS에 gender=neutral을 추가한다. 기존 HMAC 검증을 먼저 수행한 후 누락 필드만 보충한다. 성별과 기분/성격/활동/모델은 독립이다. Runtime.switch_model은 소유자 검사→changing_model→기존 작업 취소/worker 완료→prepare_mode→선택 저장 순서이며 실패 시 이전 설정을 유지한다. 이 단계의 세 선택지는 같은 기본 가중치라 두 번째12B를 적재하지 않는다. 준비 중의 새 이벤트는 bounded 상태에 실제 화자/메시지로 보류하며 재개 전 최신 상태/범위를 재검사한다.
+
+지속 참여의 신규 확률 재적용을 금지하고, 실제 대상/주제 증거와 유용성/개입 적절성을 사용한다. 새 질문이 봇에게 향하면 주제 변경만으로 신규 확률을 뽑지 않는다. 경과 시간만으로 대화를 종료하지 않으며 engagement_seconds는 최소1시간/최대24시간의 메모리 보관 보조 값이다. 실제 이력은100턴/최대32채널 등 기존 제한을 유지한다. fresh는 권한/NSFW REST await가 끝난 뒤 버전/서명 revision을 다시 검사한다.
+
+check_resources는 Torch를 가져오지 않는 공통 온도/VRAM/RAM 안전 검사다. GPU/OS 상태 조회는 창을 숨기고 timeout을 둔다. 평가용 GGUF 서버는 시작/HTTP 요청150초, 정상 종료 대기15초 제한을 사용한다. 엔진 교체는 CUDA 잔여 메모리를 피하도록 자식 프로세스 완전 종료 뒤 다음 엔진을 실행하며 각 자식이 InstanceLease를 소유한다. GUI destroy는 예약 poll/콜백/폰트 참조를 UI 스레드에서 정리한다. 테스트에서 발견한 Tcl 다른 스레드 GC 종료를 회귀 대상으로 남긴다.
+
 ## 백그라운드 프로세스와 무콘솔 진입점 (2026-10-19)
 
 processes.background_options는 Windows에서만 CREATE_NO_WINDOW를 제공한다. pythonw 자식인 nvidia-smi와 초기 설정 whoami/icacls에 적용하며 shell=True를 쓰지 않는다. GPU/ACL 조회의 timeout과 실패 전파는 유지한다. EchoMate.vbs는 자신의 위치에서 pythonw를 직접 실행한다. 환경/작업 경로는 실행 시 구하며 소유자/토큰/개인 경로는 스크립트에 넣지 않는다. /check는 파일 존재와 VBS 구문만 검증하고 앱을 열지 않는다. 기존 .cmd/PowerShell 진입점은 호환용으로 보존한다.

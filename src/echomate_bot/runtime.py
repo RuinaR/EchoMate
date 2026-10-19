@@ -21,6 +21,7 @@ from .vision import download
 from .character import effective_character
 from .telemetry import Trace,active_trace,summarize
 from .naming import guild_name,name_candidate
+from .adult_policy import turn_profile,adult_request_blocked,boundary_limited
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,32 @@ class Runtime:
         self.ingest_locks=weakref.WeakValueDictionary()
         self.stopped=False;self.diagnostics=[];self.progress={};self.latencies=[];self.traces=[]
         self.telemetry_lock=asyncio.Lock()
+        self.model_lock=asyncio.Lock();self.changing_model=False;self.deferred_events={}
+
+    async def switch_model(self,owner,mode):
+        from .settings import MODELS
+        self.settings.authorize(owner)
+        if mode not in MODELS:raise ValueError('Unknown model')
+        async with self.model_lock:
+            self.changing_model=True;self.note('model_preparing')
+            try:
+                tasks=list(self.tasks.values())
+                for task in tasks:task.cancel()
+                await asyncio.gather(*tasks,return_exceptions=True)
+                await self.backend.prepare_mode(mode)
+                if self.stopped:raise RuntimeError('Runtime closing; model unchanged')
+                self.settings.set(owner,'model',mode)
+                self.note('model_ready')
+            except BaseException:
+                # Commit the selection only after preparation; prior settings/model remain.
+                self.note('model_previous_preserved');raise
+            finally:
+                self.changing_model=False
+                deferred=self.deferred_events;self.deferred_events={}
+                for channel,(event,request) in deferred.items():
+                    state=self.states.get(channel)
+                    if not self.stopped and state and scope(self.settings.get(),event.guild,channel,event.parent)!='silent':
+                        self._schedule(event,state,request)
 
     def note(self,code):
         record=dict(at=time.time(),code=code)
@@ -94,6 +121,7 @@ class Runtime:
         if task:task.cancel()
         self.states.pop(channel,None)
         self.pending_mentions.pop(channel,None)
+        self.deferred_events.pop(channel,None)
 
     def invalidate_all(self):
         for channel in list(self.states):self.invalidate(channel)
@@ -118,7 +146,9 @@ class Runtime:
         if len(self.seen)>5000:self.seen.pop(next(iter(self.seen)))
         if event.channel not in self.states and len(self.states)>=32:
             self.invalidate(next(iter(self.states)))
-        state=self.states.setdefault(event.channel,DialogueState(limit=100,max_age_seconds=3600))
+        retention=max(3600,cfg['engagement_seconds'])
+        state=self.states.setdefault(event.channel,DialogueState(limit=100,max_age_seconds=retention))
+        state.max_age_seconds=retention
         metadata=json.dumps(dict(visual_inputs=len(event.assets),kinds=sorted({a.split(':')[0] for a,_ in event.assets}),
             analysis_state='not_analyzed',vision_enabled=self.settings.get()['vision'])) if event.assets else None
         if event.standard_stickers:
@@ -142,17 +172,27 @@ class Runtime:
                 request_content=pending[2]
                 event=replace(event,response_to=pending[3])
             else:self.pending_mentions.pop(event.channel,None)
+        if self.changing_model:
+            self.deferred_events[event.channel]=(event,request_content);return
+        self._schedule(event,state,request_content)
+
+    def _schedule(self,event,state,request_content=None):
         old=self.tasks.get(event.channel)
         if old:old.cancel()
         task=asyncio.create_task(self.process(event,state,request_content),name="echomate-turn")
         self.tasks[event.channel]=task
         task.add_done_callback(lambda t,c=event.channel:self.tasks.pop(c,None) if self.tasks.get(c) is t else None)
 
-    async def fresh(self,event,state,version,revision):
-        return (not self.stopped and self.states.get(event.channel) is state and
+    async def fresh(self,event,state,version,revision,require_adult=False):
+        def current():return (not self.stopped and not self.changing_model and self.states.get(event.channel) is state and
                 state.is_current(channel_id=event.channel,thread_id=None,version=version) and
-                self.settings.revision==revision and scope(self.settings.get(),event.guild,event.channel,event.parent)!="silent" and
-                (await self.transport.permissions(event)).get("view",False))
+                self.settings.revision==revision and scope(self.settings.get(),event.guild,event.channel,event.parent)!="silent")
+        if not current():return False
+        permissions=await self.transport.permissions(event)
+        age_ok=permissions.get('age_restricted') is True
+        if require_adult and age_ok and permissions.get('view',False) and hasattr(self.transport,'verify_adult'):
+            age_ok=await self.transport.verify_adult(event)
+        return current() and permissions.get('view',False) and (not require_adult or age_ok is True)
 
     async def process(self,event,state,request_content=None):
         trace=Trace(event.received_at);token=active_trace.set(trace)
@@ -216,8 +256,12 @@ class Runtime:
                     self.stage(event,'continuity',started)
                     evidence=await self.backend.continuity(context)
                 reply_verified=any(t.is_bot and t.message_id==str(event.reply_to) for t in turns[:-1])
-                continuing=continue_engagement(EngagementPolicy(max_gap_seconds=cfg["engagement_seconds"]),ongoing=True,
+                continuing=continue_engagement(EngagementPolicy(),ongoing=True,
                     seconds_since_last_bot_reply=since,addressed_to_bot=reply_verified or evidence.addressed_to_bot,topic_continues=evidence.topic_continues)
+                # A new question explicitly addressed to the established bot is
+                # not a random new interruption merely because its topic changed.
+                if evidence.addressed_to_bot and assessment.has_useful_contribution and assessment.interruption_is_appropriate:
+                    continuing=True
             if not direct and not continuing:
                 if mode=="mention":return
                 decision=decide(ParticipationPolicy(enabled=True,allowed_channel_ids=frozenset({event.channel}),
@@ -288,13 +332,22 @@ class Runtime:
             if reaction_only and proposed.kind!=Kind.REACTION:
                 self.note('reaction_mode_veto');return
             action=proposed
+            adult_for_turn=False
             if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA}:
                 self.stage(event,'text',started)
-                character=effective_character(cfg,event.content);character['_selected_action']=action.kind.value
+                permissions=await self.transport.permissions(event)
+                profile=turn_profile(cfg,age_restricted=permissions.get('age_restricted',False))
+                if profile['_adult_active'] and boundary_limited(context):
+                    profile['_adult_active']=False;profile['_adult_unavailable']=True
+                adult_for_turn=profile['_adult_active']
+                character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
                 character['_guild_name']=guild_name(cfg,event.guild)
                 indicator=(asyncio.create_task(self.transport.indicate_typing(event,lambda:self.fresh(event,state,version,revision)))
                            if hasattr(self.transport,'indicate_typing') else None)
-                try:answer=await self.backend.text(context,character)
+                try:
+                    if adult_for_turn and adult_request_blocked(event.content):
+                        answer='그런 식으로 누군가를 성적으로 괴롭히거나 미성년자를 성적 농담에 넣는 건 안 할게. 다른 농담으로 가자.'
+                    else:answer=await self.backend.text(context,character)
                 finally:
                     if indicator:
                         indicator.cancel();await asyncio.gather(indicator,return_exceptions=True)
@@ -302,6 +355,8 @@ class Runtime:
             if (event.guild,action.asset) in self.blocked_assets:
                 self.note('blocked_asset_veto');return
             permissions=await self.transport.permissions(event)
+            if adult_for_turn and permissions.get('age_restricted') is not True:
+                self.note('adult_age_gate_veto');return
             if action.kind in {Kind.REACTION,Kind.TEXT_REACTION} and not reaction_permitted:return
             if action.kind in {Kind.TEXT,Kind.TEXT_REACTION,Kind.TEXT_MEDIA,Kind.MEDIA,Kind.STICKER} and text_mode=='silent':return
             # Catalog membership is re-fetched at send time to detect deleted assets.
@@ -316,7 +371,7 @@ class Runtime:
             try:
                 self.stage(event,'sending',started)
                 sent=await self.transport.execute(event,action,self.library,
-                    lambda:self.fresh(event,state,version,revision))
+                    lambda:self.fresh(event,state,version,revision,require_adult=adult_for_turn))
                 self.ledger.completed(event,"sent")
                 self.pending_mentions.pop(event.channel,None)
                 bot_content=action.text
@@ -356,4 +411,5 @@ class Runtime:
         for task in tasks:task.cancel()
         await asyncio.gather(*tasks,return_exceptions=True)
         self.states.clear()
-        await self.backend.close()
+        self.deferred_events.clear()
+        async with self.model_lock:await self.backend.close()

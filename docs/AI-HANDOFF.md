@@ -1,5 +1,23 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 최신 — 성인 유머·공통 성별·지속 대화 (2026-10-19)
+
+자동 판정 추가 검토: 정상166응답 전부 만점이었으나, 같은 판정기의 사전 고정 대조6개 중 기대 기준 일치는3개(부정 대조 검출2/5)였다. 따라서 자동 점수는 모델 선정/품질 동등성 근거에서 제외한다. GGUF 승격은 보류하고 사람 블라인드 평가를 남긴다. 세부 결과는 ADULT-MODE-QA를 따른다.
+
+**모델 결론:** 기존 개인 r8 q/k/v/o60+정책은 여전히 잠정이다. 앱의 세 번째 선택지 **성인 유머 · 자유로운 표현은 기존 기본 Gemma 4+전용 정책 대안**이며 GGUF 신규 가중치의 실사용 승인이 아니다. 두 GGUF의 거절 감소/속도만으로 승격하지 않는다. 상세 결과는 [ADULT-MODE-QA](ADULT-MODE-QA.md)를 먼저 읽는다. 기본 모델 선택/원본 가중치/개인 LoRA/사용자 설정을 보존했다.
+
+구현: 여성/남성/중성·성별 없음 공통 설정, HMAC 검증 후 neutral 마이그레이션, 소유자 검사, 준비 중 표시/취소/성공 후 선택 저장/실패 시 이전 선택 유지, 전환 중 최신 이벤트 보류·재검사. 성인 정책은 NSFW와 부모 채널 확인/송신 직전 REST 재확인, 최근 명시적 미성년·불편 의사 반영을 사용한다. 규칙은 연령/동의 인증이나 포괄적 안전 판정이 아니다. 일반 채널에서는 기본 일반 대화 정책이다. 성별은 자기소개 범위이며 고정관념을 강제하지 않는다.
+
+완료: 전체292테스트 OK(13.418초), 숨긴 Tk DPI 경계 검사/명시적 UI 정리. 실제 GPU 개발144 GGUF 생성 전부 EOS, 독립168회 중166회 정상 출력. 기본/개인 각1건의 출력 채널 guard 실패는 검사 완화 없이 기록했다. 세 앱 모드의 실제 GPU+합성 Discord45시나리오와 제한된 사실 문자열21개 확인, 주입 준비 실패3회 복구 확인. 신규 진입 확률과 지속 대화를 분리하고 고정 시간 종료는 제거했다. 사용자가 연령 제한 테스트 채널이 없다고 답해 **새 코드의 실제 Discord 송수신은 하지 않았다**. 사용자 화면 자동 조작도 하지 않는다.
+
+실행 문제: 큰 GPU 버퍼/HTTP 재사용/mmap RAM/도구 오류/Tk GC 크래시를 구분해 보존·수정했다. Transformers close 후 같은 프로세스의 잔여 CUDA 메모리를 확인했으므로 평가 엔진은 별도 프로세스/InstanceLease로 순차 실행한다. 생산 GGUF hot-swap은 미구현이며 현재 세 선택지는 하나의 NF4 상주 모델을 공유한다. 장시간 soak/실제 사용자 화면/사람 블라인드 품질 평가는 미완료다.
+
+비공개 산출물: `local_data/adult-qa-20261019/` 아래 `gguf-dev-3`, `holdout-3`(NF4), `gguf-holdout-4`, `holdout-combined`(합친 블라인드/키/집계), `conversation-1`, `local-judge-1`. queue-3은 이전 큐, **최종 상태는 queue-4-status.json**이다. local judge는 기본 모델의 자동 판정으로 자기 선호/문체 편향이 있고 사람 승인이나 승격 근거로 단독 사용하지 않는다. 기존 private701파일은 모두 존재하며 runtime.lock 외700파일 크기/mtime는 보존했다.
+
+다음 우선순위: (1) 키를 열지 않고 로컬 blind-review.md/json에 사람 평가 (2) Windows 앱 재실행 후 세 버튼/성별 유지/창 크기 직접 확인 (3) 성인 동의와 테스트 채널이 확보된 때만 실제 Discord QA (4) 핵심 능력 저하가 없다는 근거가 생긴 후 GGUF 생산 통합 검토. holdout을 보며 프롬프트를 튜닝하지 않는다. 새 학습/멀티모달/등록 미디어 확장은 없다.
+
+코드 작업 기준 커밋7abcb74, 이번 완료 커밋은 `git log -1 --oneline`로 확인한다. 검증: `$env:PYTHONPATH='src'`; `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`; `-m compileall -q src/echomate_bot`; GUI 시작은 `EchoMate.vbs`. 모델 재평가 명령/프로토콜은 ADULT-MODE-QA를 따른다. GPU 평가 중 앱을 동시에 시작하지 않는다.
+
 ## 最新 — 일시적 콘솔 창 수정 (2026-10-19)
 
 응답/로딩 중 nvidia-smi health 호출과 초기 설정 whoami/icacls에 Windows CREATE_NO_WINDOW를 적용했다. processes.background_options를 공유하고 명령별 timeout/출력 수집을 유지한다. GPU 조회 불능은 RuntimeError로 안전 중단하며 온도/메모리 검사를 생략하지 않는다.

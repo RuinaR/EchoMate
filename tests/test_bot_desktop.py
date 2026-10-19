@@ -57,7 +57,10 @@ class DesktopWidgets(unittest.TestCase):
                 self.assertEqual(controller.commands[1][1]['values']['activity'],'normal')
                 for page in ('spaces','outputs','character','status','labs'):
                     app.page=page;app.render();root.update_idletasks()
-            finally:root.destroy()
+            finally:
+                app.destroy();app=None;root=None
+                import gc
+                gc.collect()
 
     def test_duplicate_instance_lock_is_released_after_close(self):
         from echomate_bot.instance import InstanceLease
