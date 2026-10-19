@@ -1,5 +1,14 @@
 # 현재 상태
 
+## 2026-10-20 최종 안정화 — 최신
+
+마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.
+
+원본 no-LoRA와 검증한12-shard QA 복사본 모두 실제 로딩·동일 두 질문 출력에 성공했다. OS peak private31.35/13.01GiB, load25.016/25.485초. 원본 admission34.28GiB는 유지하고 측정 config/버전/크기의 shard만 약16GiB estimate를 사용한다. 새 독립 청자26/32·개발40/44로 정식 배포는 BLOCKED다. 사람 품질·실제 Discord·다른 Windows·Maple 병행은 미검증이다.
+
+상세 근거·실패·미검증·재현·마감: [최종 안정화 QA](STABILIZATION-QA.md). 아래 이전 차수의 숫자는 당시 기록이다.
+
+
 ## 2026-10-19 GPU·Portable 재개 — 최신 / BLOCKED
 
 시작263eedc clean0/0. 공식 no-LoRA 로딩·최소 추론, 캐릭터12생성, 전체 응답9/9·같은 GPU A/B18/18(출력9쌍 동일), 공정 큐, 실제 재로딩/실패 복구/생성 중 두 요청 보존, **Portable 실제 Gemma4·숨긴 Tk 미리보기** 통과. 전체 **506 OK55.636초**. [실제 결과·실패·재현](RESUMED-GPU-QA.md).

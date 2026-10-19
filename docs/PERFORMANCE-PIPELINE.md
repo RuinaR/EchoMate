@@ -1,5 +1,14 @@
 # 전체 응답 파이프라인 계측
 
+## 2026-10-20 최종 안정화 — 최신
+
+마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.
+
+최신 cold loader 비교에서 원본/공식 shard 복사본 load25.016/25.485초, OS peak private31.35/13.01GiB였다. 로딩 속도 개선으로 주장하지 않는다. 현재 최종 GPU suite는 직접 호출→mock 전송, 캐릭터 기술 설명, 분류 token-choice cache A/B, 공정 큐/전환, sparse GPU 혼합 운용을 구분한다. 완료한 수치만 링크 문서의 마감에 기록하며 실제 Discord network 지연은 포함하지 않는다.
+
+상세 근거·실패·미검증·재현·마감: [최종 안정화 QA](STABILIZATION-QA.md). 아래 이전 차수의 숫자는 당시 기록이다.
+
+
 ## 2026-10-19 재개 — 실제 생성과 같은 GPU A/B (최신)
 
 기본 no-LoRA 로딩·최소 추론을 통과했다. 초기 backend load25.969초, Windows process peak commit31.35GiB/working set4.81GiB, 반복 로딩 peak 약32.6GiB. 기존 weight+2GiB는 부족해 실측 준비비용 reserve10GiB+margin2GiB로 보강했다. 모델 해제 뒤 cuBLAS workspace가 큰 split segment를 붙들어 남은 PyTorch reserved 약6.99GiB를, worker 종료 후 안전한 workspace 정리로2MiB까지 줄였다. 다른 Torch 버전은 capability 검사하며 미검증이다.

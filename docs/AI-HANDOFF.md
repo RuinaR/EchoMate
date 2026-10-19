@@ -1,5 +1,14 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-20 최종 안정화 — 최신
+
+마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.
+
+시작 main/원격 d7cf29a clean0/0. 원본과 동일 텐서677개를 검증한 공식 shard QA 복사본에서 cold private commit peak31.35→13.01GiB를 확인했다. 기본 선택·원본·운영 자료는 보존한다. 새 독립 청자32는26/32(오개입0·누락5·연결1), 개발44는40/44로 **릴리즈 BLOCKED**다. 남은 우려/평가/바깥 질문 누락과 그룹 연결을 다음 품질 우선순위로 둔다. 실행 중 검사와 최종 source/Portable/회귀·보존·commit은 아래 링크의 마감 절에서 확인한다.
+
+상세 근거·실패·미검증·재현·마감: [최종 안정화 QA](STABILIZATION-QA.md). 아래 이전 차수의 숫자는 당시 기록이다.
+
+
 ## 2026-10-19 메모리 확보 후 재개 — 최신 기준
 
 시작/원격 main `263eedc` clean0/0. **506 전체 검사 OK55.636초**. [재개 GPU QA](RESUMED-GPU-QA.md), [배포 QA](DISTRIBUTION-QA.md), [성능](PERFORMANCE-PIPELINE.md)을 먼저 읽는다. 기본 no-LoRA·최소 추론/캐릭터12생성/전체 응답9/교차A/B18/공정 큐/실제 모델 전환·실패 복구·생성 중 요청 보존/Portable 실제 GPU 미리보기를 완료했다. 공식 기본은 여전히 Gemma4 하나이며 가중치 변경·학습·자동 승격 없음.

@@ -9,10 +9,13 @@ import math
 from .paths import MODEL_HOME
 
 OFFICIAL='google/gemma-4-12B-it'
+CALIBRATED_CONFIG_SHA256='478c46e8d2c52d5c2d85bf67e3b3e8c90e7c9d91086cee27e3c267907e936bd9'
 
 def small_json(path,limit=4*1024**2):
     if path.stat().st_size>limit:raise ValueError('설정 파일이 너무 커요')
-    return json.loads(path.read_text(encoding='utf-8'))
+    value=json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(value,dict):raise ValueError('설정 JSON은 객체여야 해요')
+    return value
 
 @dataclass(frozen=True)
 class ModelEntry:
@@ -26,11 +29,13 @@ class ModelEntry:
     bytes:int=0
     estimated_vram_gib:int=10
     runtime_verified:bool=False
+    largest_shard_bytes:int=0
+    memory_profile:str='uncalibrated'
     def public(self):return asdict(self)
 
 class ModelValidator:
     def validate(self,path):
-        p=Path(path).resolve();kind='unknown';size=0;reason='지원하는 모델 설정이 없어요';ok=False
+        p=Path(path).resolve();kind='unknown';size=0;largest=0;profile='uncalibrated';reason='지원하는 모델 설정이 없어요';ok=False
         try:
             if p.is_file() and p.suffix.lower()=='.gguf':
                 kind='GGUF';size=p.stat().st_size;reason='GGUF 전용 엔진 미지원'
@@ -44,6 +49,7 @@ class ModelValidator:
                 if cfg.get('model_type')!='gemma4_unified' or cfg.get('architectures')!=['Gemma4UnifiedForConditionalGeneration']:
                     raise ValueError('현재 검증 경로는 Gemma 4 Unified뿐이에요')
                 text=cfg.get('text_config',{})
+                if not isinstance(text,dict):raise ValueError('텍스트 모델 설정이 불완전해요')
                 if any(type(text.get(k)) is not int or text[k]<=0 for k in ('hidden_size','num_hidden_layers','vocab_size')):raise ValueError('텍스트 모델 설정이 불완전해요')
                 # Memory estimate is advisory. Unknown/larger configurations are
                 # not promoted merely because their architecture name matches.
@@ -53,23 +59,31 @@ class ModelValidator:
                 tok=small_json(p/'tokenizer_config.json') if (p/'tokenizer_config.json').exists() else {}
                 if not (p/'chat_template.jinja').is_file() and not tok.get('chat_template'):raise ValueError('채팅 템플릿이 없어요')
                 idx=p/'model.safetensors.index.json'
-                names=set(small_json(idx)['weight_map'].values()) if idx.exists() else {'model.safetensors'}
+                has_index=idx.exists();index=small_json(idx)['weight_map'] if has_index else None
+                if has_index and (not isinstance(index,dict) or not index or len(index)>10000 or
+                    any(not isinstance(k,str) or not isinstance(v,str) for k,v in index.items())):raise ValueError('가중치 목록이 잘못됐어요')
+                names=set(index.values()) if index is not None else {'model.safetensors'}
                 if not names or len(names)>128:raise ValueError('가중치 목록이 잘못됐어요')
+                tensor_names=set()
                 for name in names:
                     f=(p/name).resolve()
                     # HF snapshots normally link weights to sibling blob paths;
                     # the index itself must still name a plain local shard.
                     if Path(name).name!=name or not f.is_file():raise ValueError('가중치 조각이 없거나 경로가 잘못됐어요')
-                    n=f.stat().st_size;size+=n
+                    n=f.stat().st_size;size+=n;largest=max(largest,n)
                     with f.open('rb') as h:
                         raw=h.read(8)
                         if len(raw)!=8:raise ValueError('가중치 헤더가 손상됐어요')
                         length=struct.unpack('<Q',raw)[0]
                         if length>16*1024**2 or length+8>n:raise ValueError('가중치 헤더 길이가 잘못됐어요')
                         header=json.loads(h.read(length));ranges=[]
+                        if not isinstance(header,dict):raise ValueError('가중치 헤더가 잘못됐어요')
                         for key,value in header.items():
                             if key=='__metadata__':continue
+                            if key in tensor_names or index is not None and index.get(key)!=name:raise ValueError('가중치 인덱스와 파일 내용이 달라요')
+                            tensor_names.add(key)
                             lo,hi=value['data_offsets']
+                            if type(lo) is not int or type(hi) is not int:raise ValueError('가중치 범위가 잘못됐어요')
                             if not 0<=lo<=hi<=n-8-length:raise ValueError('가중치 파일이 불완전해요')
                             dtype={'F64':8,'F32':4,'F16':2,'BF16':2,'I64':8,'I32':4,'I16':2,'I8':1,'U8':1,'BOOL':1}.get(value['dtype'])
                             shape=value['shape']
@@ -78,7 +92,11 @@ class ModelValidator:
                         if not ranges or max(hi for lo,hi in ranges)!=n-8-length:raise ValueError('가중치 크기가 헤더와 일치하지 않아요')
                         ordered=sorted(ranges)
                         if ordered[0][0]!=0 or any(left[1]!=right[0] for left,right in zip(ordered,ordered[1:])):raise ValueError('가중치 범위가 겹치거나 비어 있어요')
+                if index is not None and set(index)!=tensor_names:raise ValueError('인덱스에 기록된 가중치가 없어요')
                 if size>32*1024**3:raise ValueError('현재 메모리 경로의 지원 크기를 넘어요')
+                if (len(names)>1 and largest<=2*1024**3 and 20*1024**3<=size<=24*1024**3 and
+                    hashlib.sha256((p/'config.json').read_bytes()).hexdigest()==CALIBRATED_CONFIG_SHA256):
+                    profile='gemma4-12b-sharded-2g'
                 ok=True;reason='파일 구조 확인 완료 · GPU 최소 추론 검증 후 적용'
         except (OSError,ValueError,KeyError,TypeError,struct.error):
             # No private paths/exception repr in UI or general logs.
@@ -86,7 +104,7 @@ class ModelValidator:
             exc=sys.exc_info()[1]
             reason=str(exc) if isinstance(exc,ValueError) and str(exc).endswith('요') else '모델 파일을 읽거나 검증하지 못했어요'
         key='local:'+hashlib.sha256(str(p).casefold().encode()).hexdigest()[:24]
-        return ModelEntry(key,p.name,str(p),kind,compatible=ok,reason=reason,bytes=size)
+        return ModelEntry(key,p.name,str(p),kind,compatible=ok,reason=reason,bytes=size,largest_shard_bytes=largest,memory_profile=profile)
 
 class ModelRegistry:
     def __init__(self,roots=None,cache=None):

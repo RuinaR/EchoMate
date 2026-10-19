@@ -1,5 +1,18 @@
 # 작업 로그
 
+## 2026-10-20 최종 안정화 (시작 d7cf29a)
+
+마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.
+
+변경 파일: runtime/desktop/distribution_check/model_registry/loader_memory/inference/social/character_profiles/desktop_ui, prepare_sharded_model/verify_loader_memory/verify_resumed_release_gpu/verify_stability_soak/build_portable와 관련 회귀·문서. 재현: PYTHONPATH=src;tests;tools, `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`; GPU는 `tools/verify_resumed_release_gpu.py --capacity --fairness --soak-seconds 1200 --output <새 local_data 경로>`, native 로더는 `tools/verify_loader_memory.py --mode full --model-path <검증한 shard 폴더> --output <새 local_data JSON>`. 실제 Discord 접속 없이 현재 호스트에서만 수행했다.
+
+Git/main clean0/0·506회귀 OK60.676초를 다시 확인했다. social 문법의 타인/불확실 청자와 출력 허가 모순을 제거하고 legacy acknowledgement 침묵 정규화는 보존했다. 후보 지침/act-first는 품질 실패로 미채택했다. 새 독립32는26/32·개발44는40/44로 BLOCKED를 유지한다.
+
+model_registry/loader_memory/inference와 공식 shard 복제·계측 도구: 원본677 tensor를 hash/shape 검증한12 shard 복사본을 별도 local_data에 만들고 원본과 cold process A/B로 private peak31.35→13.01GiB·두 출력 일치를 확인했다. 단일 원본 guard는 유지하고 측정 config/버전의 shard profile만 별도 reserve를 적용한다. 시스템 설정·다른 앱·운영 모델 선택은 변경하지 않았다.
+
+character_profiles/desktop_ui의 여섯 표현 축을 다섯 구간으로 세분화했다. verify_stability_soak/verify_resumed_release_gpu는 혼합 SQLite/공정 큐/실제 원본 reply·중복/삭제 veto/재시작·sparse GPU20분 검증을 기록한다. build_portable은 큰 파일 전체 read 대신 streaming SHA-256을 사용하고 검증한 bundle/src 내부 생성 bytecode만 정리한다. 실패 로그와 상세 실행/최종 회귀·Portable/보존/commit은 [안정화 QA](STABILIZATION-QA.md)에 누적한다.
+
+
 ## 2026-10-19 메모리 확보 후 실제 GPU·Portable 재개
 
 - 시작/원격263eedc clean0/0, 사용자 추가 자원 확보 후 실제 GPU 검증. 초기 로딩PASS 뒤 host 여유 감소로 admission 차단1회, 기준을 낮추지 않고 자원 확보 후 재개했다. Discord 로그인/송신/명령 sync/사용자 데스크톱 조작 없음.

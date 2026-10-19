@@ -13,6 +13,19 @@ from echomate_bot.processes import model_memory_budget,ResourceLimitError,resour
 
 
 class LoaderMemory(unittest.TestCase):
+    def test_sharded_reserve_only_uses_measured_profile_and_library_versions(self):
+        from echomate_bot.loader_memory import loading_reserve,LOADER_PREPARATION_BYTES
+        entry=SimpleNamespace(bytes=22*GIB,largest_shard_bytes=2*GIB,memory_profile='gemma4-12b-sharded-2g')
+        versions={'transformers':'5.20.1','safetensors':'0.8.0','torch':'2.9.1+cu128'}
+        with patch('echomate_bot.loader_memory.metadata.version',side_effect=lambda n:versions[n]):
+            self.assertEqual(loading_reserve(entry),(2*GIB,12*GIB))
+            self.assertEqual(budget_requirement(*loading_reserve(entry)),16*GIB)
+            versions['safetensors']='999.0'
+            self.assertEqual(loading_reserve(entry),(22*GIB,LOADER_PREPARATION_BYTES))
+        with patch('echomate_bot.loader_memory.metadata.version',side_effect=lambda n:dict(versions,safetensors='0.8.0')[n]):
+            entry.memory_profile='uncalibrated'
+            self.assertEqual(loading_reserve(entry),(22*GIB,LOADER_PREPARATION_BYTES))
+
     def test_admission_bound_is_not_lowered_and_invalid_sizes_rejected(self):
         self.assertEqual(budget_requirement(22*GIB),24*GIB)
         for bad in (-1,True,1.5):

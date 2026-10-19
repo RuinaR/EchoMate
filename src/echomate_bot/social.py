@@ -24,6 +24,11 @@ class SocialDecision:
 def choices():
     result=[]
     for target,relation,anchor,act,answer in product(TARGETS,RELATIONS,('none','0','1','2','3'),ACTS,('yes','no','react')):
+        # Encode recipient invariants in the grammar as well as the executor.
+        # A question addressed to another human never authorizes a bot answer.
+        if target in ('human','uncertain') and answer!='no':continue
+        if target=='broadcast' and answer=='yes':continue
+        if act=='acknowledgement' and answer!='no':continue
         valid=(target=='bot' and ((relation=='new' and anchor=='none') or (relation in ('continue','join','resume','end') and anchor!='none')) or
                target=='bot_group' and relation in ('continue','join') and anchor!='none' or
                target in ('human','broadcast','uncertain') and relation in ('new','commentary','shift','uncertain') and anchor=='none')
@@ -33,6 +38,10 @@ def choices():
 SOCIAL_CHOICES=choices()
 
 def parse_social(raw):
+    # Historical cached acknowledgement votes are normalized to silence. New
+    # constrained generation cannot emit their contradictory yes/react form.
+    if isinstance(raw,str) and raw.endswith((' acknowledgement yes',' acknowledgement react')):
+        raw=raw.rsplit(' ',1)[0]+' no'
     if raw not in SOCIAL_CHOICES:raise ValueError('Invalid social decision')
     target,relation,anchor,act,answer=raw.split()
     return SocialDecision(target,relation,anchor,act,answer in ('yes','react') and act!='acknowledgement',answer=='react' and act!='acknowledgement')

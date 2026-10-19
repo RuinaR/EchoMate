@@ -5,12 +5,31 @@ import os
 import threading
 import time
 from contextlib import contextmanager
+from importlib import metadata
 
 GIB = 1024**3
 # Windows/Torch 2.9.1 + Transformers 5.20.1 measured pre-open private usage
 # was 9.03 GiB (allocator warmup included); round up, keep 2 GiB margin.
 # This is a conservative admission estimate, not a universal model peak bound.
 LOADER_PREPARATION_BYTES = 10*GIB
+
+
+def loading_reserve(entry):
+    """Measured native pread profile only; unknown versions use full-file sum.
+
+    Same 677 tensors in <=2 GiB shards peaked at 13.01 GiB private commit.
+    Allow largest COW reservation + 12 GiB preparation, then the unchanged
+    2 GiB margin in model_memory_budget. Monolithic admission is unchanged.
+    No environment knobs, monkeypatches or reduced physical/GPU safety limits.
+    """
+    try:
+        measured=(metadata.version('transformers')=='5.20.1' and metadata.version('safetensors')=='0.8.0' and metadata.version('torch').split('+')[0]=='2.9.1')
+    except metadata.PackageNotFoundError:measured=False
+    largest=getattr(entry,'largest_shard_bytes',0)
+    if (os.name=='nt' and measured and getattr(entry,'memory_profile',None)=='gemma4-12b-sharded-2g'
+            and 0<largest<=2*GIB and largest<entry.bytes):
+        return largest,12*GIB
+    return entry.bytes,LOADER_PREPARATION_BYTES
 
 
 def release_idle_cuda(torch):
@@ -47,6 +66,7 @@ def memory_snapshot():
     kernel.GlobalMemoryStatusEx.argtypes = [ctypes.POINTER(Status)]
     psapi.GetPerformanceInfo.argtypes = [ctypes.POINTER(Performance), w.DWORD]
     psapi.GetProcessMemoryInfo.argtypes = [w.HANDLE, ctypes.POINTER(Counters), w.DWORD]
+    kernel.GetProcessHandleCount.argtypes = [w.HANDLE, ctypes.POINTER(w.DWORD)]
     status = Status(); status.length = ctypes.sizeof(status)
     perf = Performance(); perf.cb = ctypes.sizeof(perf)
     proc = Counters(); proc.cb = ctypes.sizeof(proc)
@@ -54,8 +74,12 @@ def memory_snapshot():
             psapi.GetPerformanceInfo(ctypes.byref(perf), perf.cb) and
             psapi.GetProcessMemoryInfo(kernel.GetCurrentProcess(), ctypes.byref(proc), proc.cb)):
         raise ctypes.WinError(ctypes.get_last_error())
+    handles=w.DWORD()
+    handle_count=handles.value if kernel.GetProcessHandleCount(kernel.GetCurrentProcess(),ctypes.byref(handles)) else None
+    # The OS high-water mark is since boot, NOT the peak of this test run.
     return dict(ram_available=status.available, commit_used=perf.commit*perf.page_size,
                 commit_limit=perf.limit*perf.page_size, commit_available=(perf.limit-perf.commit)*perf.page_size,
+                system_commit_peak_since_boot=perf.peak*perf.page_size,process_handles=handle_count,
                 process_private=proc.private, process_peak_private=proc.peak_pagefile,
                 process_ws=proc.ws, process_peak_ws=proc.peak_ws)
 
@@ -72,7 +96,7 @@ class MemoryRecorder:
             try:row=dict(seconds=time.monotonic()-self.started, phase=self.phase, **self.sample())
             except OSError:row=dict(seconds=time.monotonic()-self.started,phase=self.phase,counters_unavailable=True)
             for key,value in row.items():
-                if key.startswith(('process_','gpu_')) or key=='commit_used':
+                if isinstance(value,(int,float)) and (key.startswith(('process_','gpu_')) or key=='commit_used'):
                     self.peaks[key]=max(self.peaks.get(key,0),value)
             if len(self.rows)<self.limit:self.rows.append(row)
             else:self.dropped_samples+=1

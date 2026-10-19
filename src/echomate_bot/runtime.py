@@ -572,9 +572,30 @@ class Runtime:
         if not social:self.conversations.observe(flow,event)
         flow.last_at=self.activity_clock()
         if self.key(event) not in self.states and len(self.states)>=32:
-            idle=next((key for key in self.states if key not in self.tasks and
+            protected=self.tasks.keys()|self.deferred_events.keys()|self.requests.keys()|self.pending_mentions.keys()
+            idle=next((key for key in self.states if key not in protected and
                 (key not in self.conversations.flows or self.conversations.flows[key].ended or
                  self.activity_clock()-self.conversations.flows[key].last_at>min(300,cfg['engagement_seconds']))),None)
+            explicit_request=bool(explicit or verified_reply or event.reply_to and event.reply_author==self.transport.bot_id)
+            peer_candidate=bool(social and flow.candidate_keys)
+            if idle is None and (explicit_request or peer_candidate):
+                # Capacity is a history budget, not a lifetime quota on direct
+                # questions. Never evict an unsettled request (including model
+                # switch deferrals); completed histories may be retired for a
+                # fresh explicit request. LRU is used ONLY for RAM reclamation,
+                # never as evidence of audience or conversation membership.
+                if peer_candidate and not explicit_request:
+                    # Preserve the same bounded evidence frames that the
+                    # semantic router will inspect. Admission to that router
+                    # does NOT grant a same-speaker message permission to send.
+                    _,evidence=self.social.packet(event,self.conversations,self.states,self.transport.bot_id)
+                    protected|={candidate.key for candidate,version in evidence}
+                completed=[old for key,old in self.conversations.flows.items()
+                    if key in self.states and key not in protected and old.last_bot]
+                own=[old for old in completed if (old.guild,old.channel)==(event.guild,event.channel) and event.author in old.direct_peers]
+                victim=min(own or completed,key=lambda old:old.last_at,default=None)
+                if victim:
+                    idle=victim.key;self.note('conversation_history_evicted')
             if idle is None:self.conversations.drop(flow.key);self.note("conversation_capacity_veto");return
             self._drop_flow(idle)
         retention=max(3600,cfg['engagement_seconds'])

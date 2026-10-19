@@ -129,9 +129,10 @@ class LocalBackend:
         from .model_registry import ModelRegistry
         entry=ModelRegistry(self.model_roots).resolve(self.model_id);model_path=entry.path
         from .processes import model_memory_budget
-        from .loader_memory import LOADER_PREPARATION_BYTES
+        from .loader_memory import loading_reserve
         baseline_private=self._memory_origin_private
-        admission=model_memory_budget(entry.bytes,preparation_bytes=LOADER_PREPARATION_BYTES,baseline_private=baseline_private)
+        reserve_bytes,preparation_bytes=loading_reserve(entry)
+        admission=model_memory_budget(reserve_bytes,preparation_bytes=preparation_bytes,baseline_private=baseline_private)
         if baseline_private is None and admission:
             baseline_private=self._memory_origin_private=admission['process_private']
         observe('framework_imports')
@@ -139,7 +140,7 @@ class LocalBackend:
         import torch
         from transformers import AutoModelForMultimodalLM, AutoProcessor, AutoConfig, AutoTokenizer, BitsAndBytesConfig
         # Imports consume Windows commit too. Recheck at the actual load stage.
-        model_memory_budget(entry.bytes,preparation_bytes=LOADER_PREPARATION_BYTES,baseline_private=baseline_private)
+        model_memory_budget(reserve_bytes,preparation_bytes=preparation_bytes,baseline_private=baseline_private)
         observe('processor')
         try:self.health()
         except RuntimeError:self.failed=True;raise
@@ -160,7 +161,7 @@ class LocalBackend:
                 image_processor=Gemma4UnifiedImageProcessor(patch_size=cfg.patch_size,pooling_kernel_size=cfg.pooling_kernel_size,
                     max_soft_tokens=cfg.num_soft_tokens),tokenizer=tok,video_processor=Gemma4UnifiedVideoProcessor(),chat_template=tok.chat_template)
             self.processor_origin="local implementation defaults plus cached vision config; image-only use; official processor equivalence unverified"
-        model_memory_budget(entry.bytes,preparation_bytes=LOADER_PREPARATION_BYTES,baseline_private=baseline_private)
+        model_memory_budget(reserve_bytes,preparation_bytes=preparation_bytes,baseline_private=baseline_private)
         observe('model_init_weights_nf4')
         model,loading=AutoModelForMultimodalLM.from_pretrained(model_path,local_files_only=True,trust_remote_code=False,output_loading_info=True,
             device_map={"":0},dtype=torch.bfloat16,attn_implementation="sdpa",

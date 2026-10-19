@@ -35,6 +35,7 @@ NO_RESPONSE = {
     'reaction_disabled':'이 범위의 이모지 반응이 꺼져 있어요',
     'member_other_addressee':'다른 구성원에게 한 말로 확인했어요',
     'queue_rejected':'작업 대기 한도에 도달했어요', 'request_expired':'요청의 최대 대기 시간이 지났어요',
+    'conversation_capacity_veto':'동시에 처리 중인 대화가 많아 새 요청을 받지 못했어요',
     'stale_context':'생성 중 대화나 설정이 바뀌었어요', 'generation_failed':'AI 처리 중 오류가 났어요',
     'action_silence':'현재 문맥에서는 침묵을 선택했어요', 'send_failed':'Discord 전송을 확인하지 못했어요',
 }

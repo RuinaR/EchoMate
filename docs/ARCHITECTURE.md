@@ -1,5 +1,16 @@
 # 아키텍처
 
+## 2026-10-20 최종 안정화 — 최신
+
+마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.
+
+ModelValidator는 최대 shard와 측정 config fingerprint를 확인하고 loading_reserve는 동일 Windows/Transformers/Safetensors/Torch 버전에서만 shard별 COW peak를 사용한다. 원본 가중치나 라이브러리를 패치하지 않는다. 타인/불확실 청자와 봇 출력 허가의 모순 조합을 constrained grammar에서 제외하고 최종 실행 검증을 유지한다. 캐릭터 표현 여섯 축은 다섯 강도 구간으로 컴파일하며 권한·사실성·기분/정체성 저장을 변경하지 않는다.
+
+상세 근거·실패·미검증·재현·마감: [최종 안정화 QA](STABILIZATION-QA.md). 아래 이전 차수의 숫자는 당시 기록이다.
+
+
+완료 이력의32개 RAM 예산과 진행 요청 한도를 구분한다. task/deferred/request/pending mention을 보호하고, 명확한 직접 요청 또는 기존 상대의 의미 판정 후보에 필요한 공간은 완료 캐시에서만 회수한다. 후속 후보의 상위4개 실제 근거 frame을 보존한다. 이 자원 정리는 청자 판단/대화의 의미적 종료 확정이 아니며 정리한 이력을 있었던 대화로 재구성하지 않는다.
+
 ## 2026-10-19 로더·해제 수명주기 후속
 
 실제 로딩 계측에 따라 파일 COW 예약 외 준비 reserve를 admission에 반영하며 최초 process private 기준을 backend 수명 동안 보존해 import/재로딩 이중 계산을 막는다. 단일 worker drain 후 모델 참조/traceback을 해제하고, 초기화된 CUDA에서만 synchronize → capability 확인한 cuBLAS workspace 정리 → allocator empty_cache를 수행한다. 일반 생성마다 workspace를 지우지 않으며 실패 cleanup은 원래 오류와 안전 비활성 상태를 보존한다. no-LoRA/복구/생성 중 전환/Portable 실제 미리보기 검증과 남은 청자 품질 차단은 [재개 QA](RESUMED-GPU-QA.md)를 따른다.

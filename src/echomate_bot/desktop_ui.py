@@ -447,7 +447,7 @@ class DesktopApp(CompanionViews):
             p['length']={'상황에 맞게':'adaptive','짧게':'short'}[v['length']]
             p['swearing']={'끔':False,'가벼운 감탄만':True}[v['swearing']]
             validate_profile(p);self.set_value('character_profile',p)
-        self.form('표현 고급 설정',[(k,label+' · 0~100',p[k]) for k,label in (('calmness','차분함'),('honesty','솔직함'),('exclamation','감탄 빈도'),('emoji','텍스트 이모지 빈도'))]+[('length','잡담 길이 · 상황에 맞게 / 짧게','상황에 맞게' if p['length']=='adaptive' else '짧게'),('swearing','가벼운 비속어 · 끔 / 가벼운 감탄만','가벼운 감탄만' if p['swearing'] else '끔')],save,'반복 자모는 현재 정책에서 제한해요. 충분한 기술 설명과 개인정보·참여 정책이 우선해요.')
+        self.form('표현 고급 설정',[(k,label+' · 0~100',p[k]) for k,label in (('calmness','차분함'),('honesty','솔직함'),('exclamation','감탄 빈도'),('emoji','텍스트 이모지 빈도'))]+[('length','잡담 길이 · 상황에 맞게 / 짧게','상황에 맞게' if p['length']=='adaptive' else '짧게'),('swearing','가벼운 비속어 · 끔 / 가벼운 감탄만','가벼운 감탄만' if p['swearing'] else '끔')],save,'표현 강도는 5단계로 반영돼요. 사실·필수 설명·권한은 바꾸지 않아요.')
 
     def profile_files(self):
         from tkinter import filedialog

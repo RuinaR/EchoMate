@@ -40,6 +40,22 @@ class ModelsAndProfiles(unittest.TestCase):
         self.assertFalse(ModelValidator().validate(p).compatible)
         (p/'model.safetensors.index.json').unlink();cfg=json.loads((p/'config.json').read_text());cfg['auto_map']={'x':'malware'};(p/'config.json').write_text(json.dumps(cfg))
         self.assertFalse(ModelValidator().validate(p).compatible)
+
+    def test_malformed_json_shapes_do_not_abort_discovery_of_other_models(self):
+        good=fixture(self.root/'good');bad=fixture(self.root/'bad')
+        for value in ([],None,dict(model_type='gemma4_unified',architectures=['Gemma4UnifiedForConditionalGeneration'],text_config=[])):
+            (bad/'config.json').write_text(json.dumps(value),encoding='utf-8')
+            entries=ModelRegistry([self.root],cache=self.root/'none').scan()
+            self.assertEqual(sum(e.compatible for e in entries),1)
+            self.assertTrue(any(e.path==str(good.resolve()) and e.compatible for e in entries))
+
+    def test_index_must_match_serialized_keys_and_not_claim_missing_tensors(self):
+        p=fixture(self.root/'indexed');index=p/'model.safetensors.index.json'
+        for mapping in (None,[],{'ghost':'model.safetensors'},{'sample':'model.safetensors','ghost':'model.safetensors'}):
+            index.write_text(json.dumps(dict(weight_map=mapping)),encoding='utf-8')
+            self.assertFalse(ModelValidator().validate(p).compatible)
+        index.write_text(json.dumps(dict(weight_map={'sample':'model.safetensors'})),encoding='utf-8')
+        self.assertTrue(ModelValidator().validate(p).compatible)
     def test_legacy_settings_authenticate_migrate_without_overwriting_or_enabling_adult(self):
         for slot in ('base','persona','adult'):
             key=secrets.token_hex(32);path=self.root/(slot+'.json');old=deepcopy(DEFAULTS)
@@ -66,6 +82,15 @@ class ModelsAndProfiles(unittest.TestCase):
         file=self.root/'large.json';file.write_bytes(b'x'*17000)
         with self.assertRaises(ValueError):s.import_file(1,'mine',file)
         self.assertIn('mine',s.list())
+
+    def test_expression_controls_have_distinct_behavior_bands_without_changing_identity(self):
+        for field in ('energy','calmness','honesty','exclamation','emoji','humor'):
+            prompts=[compile_profile(dict(DEFAULT_PROFILE,**{field:value})) for value in (0,25,50,75,100)]
+            self.assertEqual(len(set(prompts)),5,field)
+            self.assertTrue(all('명령이 아니야' in p for p in prompts))
+        original=dict(DEFAULT_PROFILE)
+        compile_profile(original)
+        self.assertEqual(original,DEFAULT_PROFILE)
     def test_windows_protected_setup_roundtrip_and_no_overwrite(self):
         import os
         if os.name!='nt':self.skipTest('Windows DPAPI')

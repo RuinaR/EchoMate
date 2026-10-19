@@ -153,22 +153,40 @@ async def wrapper_ab(backend,root,protocol):
         if backend.adapter is not None:backend.model=backend.model.unload();backend.adapter=None
 
 
+async def cache_ab(backend,root):
+    """Matched resident-GPU classification A/B, not end-to-end Discord latency."""
+    from dataclasses import asdict
+    root.mkdir();rows=[];original=backend.choice_cache
+    packets=[]
+    for text in ('그건 왜 그렇게 하는 거야','그 순서는 이해했어','다들 준비됐으면 시작하자'):
+        packets.append(dict(bot_id='999',current=dict(id='200',speaker='4',text=text,reply=None,roles={}),
+            frames=[dict(index='0',participants=['4'],current_peers=['4'],last_recipient='4',turns=[dict(id='100',speaker='4',bot=False,reply=None,text='준비 순서를 설명해 줘'),dict(id='101',speaker='999',bot=True,reply='100',text='목표를 정하고 필요한 자료를 모은 뒤 확인하면 돼.')])],
+            surrounding=[],current_peer_frames=['0'],pending_human_exchange=None,candidates_truncated=False,reaction_available=False))
+    try:
+        for repeat in range(-1,5):
+            for index,packet in enumerate(packets):
+                for cached in ((False,True) if (repeat+index)%2 else (True,False)):
+                    backend.choice_cache=cached;started=time.monotonic();decision=await backend.assess_social(packet)
+                    rows.append(dict(repeat=repeat,prompt=index,cached=cached,seconds=time.monotonic()-started,decision=asdict(decision),metric=dict(backend.metrics[-1])))
+        measured=[r for r in rows if r['repeat']>=0]
+        equal=all([r['decision'] for r in measured if r['repeat']==repeat and r['prompt']==i][0]==[r['decision'] for r in measured if r['repeat']==repeat and r['prompt']==i][1] for repeat in range(5) for i in range(3))
+        result=dict(equal_pairs=15 if equal else None,pairs=15,warmup_calls=6,
+            variants={str(c):distribution([r['seconds'] for r in measured if r['cached']==c]) for c in (False,True)},
+            criterion='>=5% lower median, no >3% p95 regression, all outputs equal; descriptive small-sample evidence')
+        a=result['variants']['False'];b=result['variants']['True']
+        result['adopt']=equal and b['p50']<=a['p50']*.95 and b['p95']<=a['p95']*1.03
+        atomic_private_json(root/'results-private.json',rows);atomic_private_json(root/'summary.json',result);return result
+    finally:backend.choice_cache=original
+
+
 async def run(args):
     root=private_path(args.output);root.mkdir(parents=True,exist_ok=False)
-    lease=InstanceLease();backend=LocalBackend(adapter=ADAPTER if args.legacy_adapter else None)
+    lease=InstanceLease();backend=LocalBackend(adapter=ADAPTER if args.legacy_adapter else None,choice_cache=getattr(args,'cache_choices',False))
     original_close=backend.close;summary={};before=[]
     from echomate_bot import social as social_policy
     original_prompt=social_policy.PROMPT
-    if args.social_system:
-        path=private_path(args.social_system)
-        if path.stat().st_size>32*1024:raise ValueError('QA prompt too large')
-        social_policy.PROMPT=path.read_text(encoding='utf-8')
     async def borrowed_close():pass
     backend.close=borrowed_close
-    atomic_private_json(root/'manifest.json',dict(code_head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
-        real_gpu=True,real_discord=False,legacy_adapter=args.legacy_adapter,shared_model=True,
-        social_prompt_sha256=hashlib.sha256(social_policy.PROMPT.encode()).hexdigest(),
-        source_hashes={p.as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in Path('src').rglob('*.py')}))
     async def protocol(name,path):
         a=SimpleNamespace(output=str(root/name),protocol=path,modes='base',generate=False,legacy_adapter=args.legacy_adapter,cache_choices=False)
         with patch.object(social,'LocalBackend',lambda **kw:backend),patch.object(social,'InstanceLease',LeaseBorrow):await social.run(a)
@@ -178,17 +196,39 @@ async def run(args):
         atomic_private_json(root/name/'summary.json',result)
         return {k:v for k,v in result.items() if k not in ('scheduler',)}
     try:
+        if args.social_system:
+            path=private_path(args.social_system)
+            if path.stat().st_size>32*1024:raise ValueError('QA prompt too large')
+            social_policy.PROMPT=path.read_text(encoding='utf-8')
+        import shutil
+        for source in [*Path('src').rglob('*.py'),Path(__file__),Path('tools/verify_social_gpu.py'),Path('tools/verify_stability_soak.py')]:
+            relative=source.resolve().relative_to(Path.cwd().resolve())
+            target=root/'source'/relative;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
+        atomic_private_json(root/'manifest.json',dict(code_head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+            real_gpu=True,real_discord=False,legacy_adapter=args.legacy_adapter,shared_model=True,
+            social_prompt_sha256=hashlib.sha256(social_policy.PROMPT.encode()).hexdigest(),cache_choices=backend.choice_cache,
+            source_hashes={p.as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in Path('src').rglob('*.py')}))
         await backend.ready();await backend.probe();before.append(gpu_memory())
         if args.social:summary['social']=await protocol('social',args.social)
         if args.social_regression:summary['social_regression']=await protocol('social-regression',args.social_regression)
         if args.characters:summary['characters']=await protocol('characters',args.characters)
         if args.pipeline:summary['pipeline']=await protocol('pipeline',args.pipeline)
+        if getattr(args,'cache_ab',False):summary['cache_ab']=await cache_ab(backend,root/'cache-ab')
         if args.wrapper_ab:summary['wrapper_ab']=await wrapper_ab(backend,root/'wrapper-ab',args.wrapper_ab)
         if args.fairness:
             with patch.object(fairness,'LocalBackend',lambda:backend),patch.object(fairness,'InstanceLease',LeaseBorrow):await fairness.run(root/'fairness')
             summary['fairness']=json.loads((root/'fairness/summary.json').read_text())
         if args.lifecycle:summary['lifecycle']=await lifecycle(backend,root/'lifecycle')
+        if getattr(args,'capacity',False):
+            from verify_stability_soak import capacity_probe
+            summary['capacity']=await capacity_probe(root/'capacity',backend)
+        if getattr(args,'soak_seconds',0):
+            from verify_stability_soak import run as soak
+            summary['soak']=await soak(root/'soak',args.soak_seconds,backend,restart_interval=max(60,args.soak_seconds/2))
         summary['memory_before_after_workloads']=[*before,gpu_memory()]
+    except BaseException as exc:
+        summary['failure']=dict(type=type(exc).__name__,reason=getattr(exc,'reason',None),status='BLOCKED')
+        raise
     finally:
         backend.close=original_close
         try:await backend.close();summary['memory_after_close']=gpu_memory()
@@ -201,6 +241,15 @@ if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--characters');p.add_argument('--pipeline');p.add_argument('--social')
     p.add_argument('--wrapper-ab')
     p.add_argument('--social-regression')
+    p.add_argument('--cache-choices',action='store_true')
+    p.add_argument('--cache-ab',action='store_true')
+    p.add_argument('--soak-seconds',type=float,default=0)
+    p.add_argument('--capacity',action='store_true')
     p.add_argument('--social-system',help='Offline QA-only system prompt below local_data')
     p.add_argument('--fairness',action='store_true');p.add_argument('--lifecycle',action='store_true');p.add_argument('--legacy-adapter',action='store_true')
-    asyncio.run(run(p.parse_args()))
+    args=p.parse_args()
+    try:asyncio.run(run(args))
+    finally:
+        import threading
+        root=private_path(args.output)
+        if root.exists():atomic_private_json(root/'shutdown.json',dict(python_threads=threading.active_count(),worker_threads=sum(t.name.startswith(('echomate-gpu','asyncio_','ThreadPoolExecutor')) for t in threading.enumerate()),memory=memory_snapshot()))

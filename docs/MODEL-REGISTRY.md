@@ -1,5 +1,14 @@
 # 로컬 모델 레지스트리
 
+## 2026-10-20 최종 안정화 — 최신
+
+마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.
+
+검증한 공식12B config hash·20~24GiB 총 크기·2GiB 이하 shards에서만 측정 메모리 프로필을 부여한다. Windows와 Torch2.9.1/Transformers5.20.1/Safetensors0.8.0이 모두 일치할 때 largest shard+준비12GiB+기존 margin2GiB(이번 약16GiB)를 사용한다. 그 외에는 총 가중치+기존10GiB 준비+2GiB로 보수적으로 복귀한다. 원본 단일 파일34.28GiB admission·RAM/VRAM/온도 기준은 유지한다. 별도 검증 복사본은 자동 기본 선택하지 않는다.
+
+상세 근거·실패·미검증·재현·마감: [최종 안정화 QA](STABILIZATION-QA.md). 아래 이전 차수의 숫자는 당시 기록이다.
+
+
 공식 기본은 google/gemma-4-12B-it 하나다. base/persona/adult 이전 설정은 서명 확인 후 base로 읽고 원본 파일은 자동으로 다시 쓰지 않는다. 다음 소유자 저장 때 새 스키마로 서명한다. 기존 LoRA·실험·가중치는 보존하며 기본 로더는 PEFT를 요구하거나 로딩하지 않는다. 명시적 adapter 인자는 과거 로컬 비교 도구만을 위한 호환 경계다.
 
 model_registry.py가 기본 models 폴더, 소유자 지정 최대8루트, 공식 HF 캐시 snapshot을 읽기 전용 탐색한다. 루트128항목/캐시16snapshot 제한으로 무제한 재귀·다운로드를 피한다. 전체 모델 목록을 스크롤/키보드로 선택하고 위치·형식·크기·검사 사유를 본다. 모델 ID는 경로 hash이며 권한이나 내용 무결성 hash는 아니다. 파일 이동/제거는 재검색·적용 시 다시 검사한다.

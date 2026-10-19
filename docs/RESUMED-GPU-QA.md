@@ -1,5 +1,14 @@
 # 메모리 여유 확보 후 GPU·Portable QA 재개 — 2026-10-19
 
+## 2026-10-20 최종 안정화 — 최신
+
+마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.
+
+d7cf29a에서 재개한 최신 검증은 별도 안정화 기록을 우선한다. 이전 미사용8을 이번에 처음 실행해8/8, 개발44 재현40/44, 새로운 독립32는26/32였다. 원본31.35GiB 대비 공식 shard QA 복사본13.01GiB peak private를 확인했다. 이전 실패·미사용 상태 기록은 당시 사실로 보존하며 새 결과와 합산하지 않는다.
+
+상세 근거·실패·미검증·재현·마감: [최종 안정화 QA](STABILIZATION-QA.md). 아래 이전 차수의 숫자는 당시 기록이다.
+
+
 시작 main/HEAD/원격 `263eedc`, clean·fetch 차이0/0. 실제 Discord 로그인·송신·명령 동기화 없이 RTX4070Ti SUPER16GB/Windows에서 검증했다. 운영 설정·토큰·DB·모델·개인 LoRA는 보존한다. **메모리 때문에 중단했던 실행은 재개했지만, 사회적 청자 품질과 다른 Windows 검증이 남아 정식 릴리즈는 BLOCKED다.**
 
 ## 로딩과 메모리: 실제 확인 및 수정

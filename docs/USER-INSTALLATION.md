@@ -1,5 +1,14 @@
 # 일반 사용자 설치·시작 안내
 
+## 2026-10-20 최종 안정화 — 최신
+
+마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.
+
+현재 정식 릴리즈는 BLOCKED이며 실제 Discord/다른 Windows/Maple 병행/24시간은 검증되지 않았다. 기존 HF 원본은 그대로 쓸 수 있다. 개발 QA에서 만든 동일 텐서 shard 복사본은 AI 모델 화면의 폴더 선택으로 별도 등록할 수 있지만 운영 설정을 자동 전환하지 않았다. 복사본은 추가 약22.28GiB 디스크가 필요하며 패키지에 포함되지 않는다. 부족한 자원은 안내하고 페이지 파일·다른 프로그램을 자동 변경하지 않는다.
+
+상세 근거·실패·미검증·재현·마감: [최종 안정화 QA](STABILIZATION-QA.md). 아래 이전 차수의 숫자는 당시 기록이다.
+
+
 Portable은 릴리즈 승인 전 검증 후보다. 설치 프로그램/자동 업데이터/깨끗한 VM 지원 완료를 선언하지 않는다. 후보 폴더에 Python·의존성이 있고 모델은 없다. 소스 실행에는 기존 가상환경이 필요하다.
 
 1. Portable 폴더 전체를 보존해 EchoMate.vbs를 실행한다. runtime/src/docs/models를 따로 떼거나 runtime만 교체하지 않는다.

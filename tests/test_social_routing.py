@@ -10,6 +10,21 @@ from unittest.mock import AsyncMock
 import test_bot_integration as base
 from echomate_bot.social import SocialDecision,parse_social,SOCIAL_CHOICES
 
+class RecipientGrammar(unittest.TestCase):
+    def test_other_recipient_and_unknown_cannot_propose_bot_output(self):
+        for raw in SOCIAL_CHOICES:
+            decision=parse_social(raw)
+            if decision.target in ('human','uncertain'):
+                self.assertFalse(decision.respond)
+                self.assertFalse(decision.reaction_only)
+            if decision.target=='broadcast':self.assertFalse(decision.respond and not decision.reaction_only)
+        for invalid in ('human shift none question yes','uncertain uncertain none other react','broadcast new none question yes'):
+            with self.assertRaises(ValueError):parse_social(invalid)
+
+    def test_bot_questions_reactions_and_public_reactions_remain_representable(self):
+        for raw in ('bot continue 0 question yes','bot continue 0 reaction yes','bot_group continue 0 question yes','broadcast new none information react'):
+            self.assertTrue(parse_social(raw).respond)
+
 class SocialRuntime(unittest.IsolatedAsyncioTestCase):
     setUp=base.BotIntegration.setUp
     asyncTearDown=base.BotIntegration.asyncTearDown
@@ -208,6 +223,35 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event(id=20,content='그건 그렇고 저녁에는 어떤 메뉴가 좋아'));await self.settle()
         self.assertEqual([e.id for e,_ in self.transport.sent],[10,20])
         self.assertNotEqual(first.conversation_id,self.transport.sent[-1][0].conversation_id)
+
+    async def test_completed_history_capacity_cannot_become_a_direct_question_quota(self):
+        self.configure();self.runtime.direct_spam_window=0
+        for i in range(40):
+            await self.runtime.ingest(self.event(id=1000+i,content=f'<@999> 별개 질문 {i}번을 짧게 설명해 줘'))
+            await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],list(range(1000,1040)))
+        self.assertLessEqual(len(self.runtime.states),32)
+        self.assertTrue(any(d['code']=='conversation_history_evicted' for d in self.runtime.diagnostics))
+        self.assertFalse(any(d['code']=='conversation_capacity_veto' for d in self.runtime.diagnostics))
+
+    async def test_history_reclamation_preserves_deferred_request_and_semantic_gate(self):
+        self.configure();self.runtime.direct_spam_window=0
+        for i in range(32):
+            await self.runtime.ingest(replace(self.event(id=1100+i,content=f'<@999> 별개 질문 {i}번을 짧게 설명해 줘'),author=4+i))
+            await self.settle()
+        held=next(iter(self.runtime.states));flow=self.runtime.conversations.flows[held]
+        original=self.transport.sent[0][0];self.runtime.deferred_events[held]=(original,original.content)
+        flow.last_at=self.runtime.activity_clock()-1000
+        self.backend.assess_social.return_value=SocialDecision('broadcast','new','none','question',False)
+        count=len(self.transport.sent)
+        await self.runtime.ingest(self.event(id=1200,content='다들 이번 주말 일정은 어떻게 돼'));await self.settle()
+        self.assertGreater(self.backend.assess_social.await_count,0,[d['code'] for d in self.runtime.diagnostics[-12:]])
+        self.assertEqual(len(self.transport.sent),count)
+        self.assertIn(held,self.runtime.states);self.assertIn(held,self.runtime.deferred_events)
+        self.assertEqual(self.runtime.conversations.flows[held].conversation_id,flow.conversation_id)
+        await self.runtime.ingest(self.event(id=1201,content='<@999> 별개 새 질문을 짧게 설명해 줘'));await self.settle()
+        self.assertEqual(self.transport.sent[-1][0].id,1201)
+        self.assertIn(held,self.runtime.states)
 
     async def test_optional_link_error_cannot_drop_an_explicit_call(self):
         await self.start();self.backend.assess_social.side_effect=ValueError('Synthetic invalid relation')
