@@ -1,5 +1,13 @@
 # 현재 상태
 
+## 2026-10-19 GPU·Portable 재개 — 최신 / BLOCKED
+
+시작263eedc clean0/0. 공식 no-LoRA 로딩·최소 추론, 캐릭터12생성, 전체 응답9/9·같은 GPU A/B18/18(출력9쌍 동일), 공정 큐, 실제 재로딩/실패 복구/생성 중 두 요청 보존, **Portable 실제 Gemma4·숨긴 Tk 미리보기** 통과. 전체 **506 OK55.636초**. [실제 결과·실패·재현](RESUMED-GPU-QA.md).
+
+실측으로 준비 reserve를 보강했고, GPU 작업 종료 뒤 cuBLAS workspace가 pin한 큰 allocator segment를 정리해 PyTorch reserved 약6.99GiB→2MiB를 확인했다. E2E no-LoRA p50/p95 4.047/4.715초, disabled-PEFT4.234/4.797초, n9씩이며 큰 속도 개선으로 주장하지 않는다. 데이터·원본 모델·LoRA를 보존했다.
+
+남은 차단은 메모리 실패가 아니라 **사회적 청자 품질**이다. 최종 미사용12는11/12, 이전44 개발 재검40/44. 추가 후보는 최소 probe 실패로 폐기했다. 사람 캐릭터 평가/다른 Windows/드라이버/장시간 운용/실제 Discord는 NOT VERIFIED. 정식 릴리즈 승인 없음. 패키지 최종 소스 일치·공개 감사는 DISTRIBUTION-QA 마감 절을 확인한다.
+
 ## 2026-10-19 f1c0ec6 후속 — 최신 / BLOCKED
 
 시작 main/원격 `f1c0ec6` clean0/0. 기존490 OK61.101초, 최종 **500 OK60.204초**. [Windows1455 감사](LOADER-MEMORY-QA.md)에서 파일 크기 비례 COW 예약을 실제 CPU 프로파일로 확인했다. pread도 전체 매핑을 선행하며 오류는 NF4/PEFT 이전 단계다. no-LoRA import가 PEFT 포함보다 약114MiB 작았다.

@@ -13,7 +13,7 @@ import struct
 import sys
 import tempfile
 
-from echomate_bot.loader_memory import MemoryRecorder,budget_requirement,native_loader_phases,memory_snapshot
+from echomate_bot.loader_memory import MemoryRecorder,budget_requirement,native_loader_phases,memory_snapshot,LOADER_PREPARATION_BYTES
 
 
 def probe(args):
@@ -72,8 +72,8 @@ def probe(args):
                 from echomate_bot.model_registry import ModelRegistry
                 from echomate_bot.processes import model_memory_budget
                 entry=ModelRegistry().resolve('base')
-                result.update(weight_bytes=entry.bytes,admission_bytes=budget_requirement(entry.bytes))
-                model_memory_budget(entry.bytes)
+                result.update(weight_bytes=entry.bytes,admission_bytes=budget_requirement(entry.bytes,LOADER_PREPARATION_BYTES))
+                model_memory_budget(entry.bytes,preparation_bytes=LOADER_PREPARATION_BYTES)
                 from echomate_bot.instance import InstanceLease
                 lease=InstanceLease()
                 try:

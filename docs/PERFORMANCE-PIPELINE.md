@@ -1,5 +1,15 @@
 # 전체 응답 파이프라인 계측
 
+## 2026-10-19 재개 — 실제 생성과 같은 GPU A/B (최신)
+
+기본 no-LoRA 로딩·최소 추론을 통과했다. 초기 backend load25.969초, Windows process peak commit31.35GiB/working set4.81GiB, 반복 로딩 peak 약32.6GiB. 기존 weight+2GiB는 부족해 실측 준비비용 reserve10GiB+margin2GiB로 보강했다. 모델 해제 뒤 cuBLAS workspace가 큰 split segment를 붙들어 남은 PyTorch reserved 약6.99GiB를, worker 종료 후 안전한 workspace 정리로2MiB까지 줄였다. 다른 Torch 버전은 capability 검사하며 미검증이다.
+
+같은 GPU·가중치·캐릭터·입력·디코딩에서 bare/disabled-PEFT를 교차하고 질문별 warmup pair를 제외했다. 각9회, E2E p50 **4.047/4.234초**, p95 **4.715/4.797초**, TTFT 근사 p50 .531/.547초, 생성 전체 tokens/sec p50 8.314/8.172. 출력9쌍 동일·재생성0. 표본이 작아 통계적으로 확정된 속도 개선은 아니다. LoRA 스타일 효과 비교도 아니다.
+
+별도 직접 호출9/9은 E2E p50 4.218/p95 4.865초, text stage p50 4.203/p95 4.846초, idle queue0, mock sending p95 .016초였다. 실제 Discord 네트워크/최초 로딩은 제외, TTFT는 첫 callback의 wall-time 근사다. stage0은 시계 해상도 아래일 수 있다. 기존 분류만1~2초/서로 다른 질문6초·30초와 혼합하지 않는다. 캐릭터12문항 p95 24.881초는 기술 설명이 포함돼 짧은 잡담과 동일 조건 비교가 아니다.
+
+실제 공정 큐·생성 중 전환/실패 복구·Portable GPU 미리보기는 통과했다. 다만 사회적 청자 평가의 오개입/누락과 다른 Windows·장시간 안정성은 남아 **릴리즈 BLOCKED**. 전체506 OK55.636초. [계측·원본·재현](RESUMED-GPU-QA.md)을 우선하며 아래 N/A·GPU 중단 기록은 과거다.
+
 ## 2026-10-19 f1c0ec6 후속 — 로딩 병목과 측정 경계
 
 Windows1455를 native pread의 선행 전체 COW 매핑까지 추적했다. 합성파일64/256MiB 각2회와512MiB1회에서 거의 파일 크기만큼 순간 commit 예약을 확인했다. 50ms system commit 표본과 OS process peak/private·working set을 함께 기록한다. 순간 매핑은 open 반환 후 사라져 current RAM만 보면 놓칠 수 있다. [상세 원인·수치·재현](LOADER-MEMORY-QA.md).

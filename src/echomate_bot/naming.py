@@ -50,7 +50,12 @@ def name_address(text,name,aliases=(),partial=True,other_names=()):
     before=clean[:match.start()].strip();after=clean[match.end():].lstrip(' ,!.?~…:')
     # Korean indirect speech reports a past call; the registered spelling alone
     # does not turn that quoted speech act into a fresh invitation.
-    if re.search(r'(?:냐고|라고|다고|자고)\s*(?:물|말|전|했|하더|부르)',after):return 'ambiguous'
+    # An indirect-speech complement is not necessarily a report: "...라고
+    # 말해 줘" is a current request. Require retrospective reporting morphology.
+    if re.search(r'(?:냐고|라고|다고|자고)\s*(?:물(?:었|어봤|어보더)|말(?:했|하더)|전(?:했|하더)|했|하더|불렀|부르더)',after):return 'ambiguous'
+    # Nominalized quoted speech can mention a call as the subject of a report.
+    # It remains a semantic candidate: an outer question may still address us.
+    if re.search(r'(?:라는|다는|냐는|자는)\s*(?:말|요청|부탁|질문)(?:[은는이가을를도의]|\s)',after):return 'ambiguous'
     if re.search(r'<@!?\d+>|너\s*말고|봇\s*말고|(?:저|그|다른)\s*사람(?:한테|에게)',after):return 'ambiguous'
     if not before:
         if not after or match['call'] in ('아','야'):return 'direct'

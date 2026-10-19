@@ -4,7 +4,7 @@
 
 EchoMate 소스는 [MIT](LICENSE) 라이선스입니다. 모델·번들 의존성은 [각 라이선스](docs/THIRD-PARTY-NOTICES.md)를 따릅니다.
 
-**현재는 검증 후보입니다.** 모델·캐릭터 분리와 Portable 런타임을 구현했지만, 새 기본 로더의 GPU 재검·사회적 청자 독립 평가·깨끗한 Windows 설치 검증이 남았습니다. 일반 배포 릴리즈 PASS가 아닙니다. [배포 QA](docs/DISTRIBUTION-QA.md)를 확인하세요.
+**현재는 검증 후보입니다.** 기본 모델의 실제 GPU 로딩·모델 전환·Portable 로컬 미리보기는 확인했습니다. 사회적 청자 평가에 오개입·후속 대화 누락이 남아 있으며, 깨끗한 다른 Windows 설치와 장시간 운용도 미검증입니다. 일반 배포 릴리즈 PASS가 아닙니다. [배포 QA](docs/DISTRIBUTION-QA.md)를 확인하세요.
 
 ## 처음 사용하기
 
@@ -27,6 +27,6 @@ EchoMate 소스는 [MIT](LICENSE) 라이선스입니다. 모델·번들 의존�
 
 ## 요구 환경과 검증 범위
 
-기존 GPU 실행 환경은 RTX4070Ti SUPER16GB / RAM32GB입니다. 모든 NVIDIA GPU·CPU 전용·다른 Windows 버전의 지원을 뜻하지 않습니다. 현재 Windows 가상 메모리 부족(1455)이 발생해 새 기본 로더의 최종 GPU 검증을 중단했습니다. [실제 검사와 미검증](docs/DISTRIBUTION-QA.md) · [전체 지연 계측](docs/PERFORMANCE-PIPELINE.md).
+검증한 GPU 환경은 RTX4070Ti SUPER16GB / RAM32GB입니다. 모든 NVIDIA GPU·CPU 전용·다른 Windows 버전의 지원을 뜻하지 않습니다. Windows 메모리 할당 여유도 필요하며 부족하면 앱이 숫자와 함께 안내합니다. 이전1455 중단 후 실제 로딩을 재개하고 해제 시 큰 VRAM 예약이 남는 문제도 수정했습니다. [실제 검사와 미검증](docs/DISTRIBUTION-QA.md) · [전체 지연 계측](docs/PERFORMANCE-PIPELINE.md).
 
 개발자는 [AI-HANDOFF](docs/AI-HANDOFF.md)부터 읽으세요. 소스 실행은 기존 가상환경의 `EchoMate.vbs`/`EchoMate.cmd`를 유지합니다. Portable 빌드 도구는 `tools/build_portable.py`이며 일반 사용자용 명령이 아닙니다. 과거 개발·실험 기록은 [README 이력](docs/README-HISTORY.md)에 보존했습니다.

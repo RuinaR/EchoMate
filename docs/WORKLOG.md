@@ -1,5 +1,15 @@
 # 작업 로그
 
+## 2026-10-19 메모리 확보 후 실제 GPU·Portable 재개
+
+- 시작/원격263eedc clean0/0, 사용자 추가 자원 확보 후 실제 GPU 검증. 초기 로딩PASS 뒤 host 여유 감소로 admission 차단1회, 기준을 낮추지 않고 자원 확보 후 재개했다. Discord 로그인/송신/명령 sync/사용자 데스크톱 조작 없음.
+- `inference.py`, `loader_memory.py`, `processes.py`: pre-open 약9.03GiB/peak31.35GiB와 반복32.6GiB 계측에 따라 준비 reserve10GiB+margin2GiB·최초 private 기준 재사용. 생성 후 cuBLAS workspace의 segment pin을 재현/수정, 실제 모델 생성·전환 해제 reserved 약6.99GiB→2MiB. 미초기화 CUDA cleanup 없음·원래 로딩 오류 보존/안전 비활성.
+- `naming.py`, `social.py`: 현재 간접 발화 요청과 과거 보고 구분, 명사화 인용은 semantic 후보, 바깥 질문·평가 의도 지침. 현재 요청을 보고로 오인한 전체9요청6/9 문제는 수정 후9/9. 최종 새12문항11/12, 이전44 개발40/44로 품질 차단 유지. 추가 합성 예시 후보는 최소 human 수신자 probe 실패로 폐기, 최종 미사용8은 평가하지 않았다.
+- `verify_resumed_release_gpu.py`: 한 resident 모델·원본/trace/source hash 보존, 캐릭터12생성, 같은 GPU·디코딩의 교차 bare/disabled-PEFT A/B18성공/출력9쌍 동일, 워밍업6제외. p50 4.047/4.234초·p95 4.715/4.797초(n9씩), 통계적 큰 개선 주장 없음. 공정 큐 네 요청 순서/원본/중복0, 실제 reload/실패복구·생성 중 모델 전환901/902 보존 통과.
+- `distribution_check.py`: opt-in 실제 GPU 로컬 미리보기, Discord 강제 차단·격리 저장소. 검사 자체의 중복 lease/초기 비동기 속성 조회 오류를 고친 v3에서 번들 Python·시스템Python 없는PATH·숨긴Tk·모델발견/실제로드/미리보기/DPAPI/저장·복원·종료 통과, 관계·기억·알림 생성 없음.
+- 새 메모리/정리/보고문 회귀 포함 전체 **506 OK55.636초** (`PYTHONPATH=src;tests;tools`, `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`). 중간502는 test fixture 가변 참조 오류로 실패했으며 수정 후 전체 재실행했다. 모든 실패 로그는 보존했다.
+- 비공개 `local_data/resumed-qa-20261019/`에 측정/응답/프로토콜/봉인/캐릭터 블라인드(사람평가 미실시) 보존. 공개에는 비식별 요약만 기록. [전체 재개 QA](RESUMED-GPU-QA.md). 사회적 정확도·다른Windows/드라이버·장시간·실제Discord 미검증으로 정식 릴리즈 BLOCKED. 최종 package/source/hash·운영 자료 보존·공개 감사/commit은 마감 절에 이어 기록한다.
+
 ## 2026-10-19 f1c0ec6 후속 — Windows1455 원인·메모리 안전성
 
 - 시작/원격 main f1c0ec6 clean0/0, 기존490 전체 OK61.101초. 기존 성공 소스와 실패 traceback/설치 라이브러리·공식 소스를 비교했다.

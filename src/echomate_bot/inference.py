@@ -55,6 +55,7 @@ class LocalBackend:
         # Explicit legacy evaluation only; normal app startup never loads LoRA.
         self.adapter=private_path(adapter) if adapter is not None else None
         self.model_id=model_id;self.model_roots=model_roots;self.load_seconds=None;self.switch_seconds=None
+        self._memory_origin_private=None
         self.executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="echomate-gpu")
         self._physical_pending=0;self.max_pending=max_pending;self.model=None;self.processor=None
         self.scheduler=GPUScheduler(limit=max_pending)
@@ -104,7 +105,9 @@ class LocalBackend:
         import gc,sys
         gc.collect()
         torch=sys.modules.get('torch')
-        if torch is not None and torch.cuda.is_available():torch.cuda.empty_cache()
+        if torch is not None:
+            from .loader_memory import release_idle_cuda
+            release_idle_cuda(torch)
 
     def load(self):
         if self.model is not None:return
@@ -114,7 +117,9 @@ class LocalBackend:
             # Drop those references before cleanup; retain the exception/stack.
             import traceback
             traceback.clear_frames(exc.__traceback__)
-            self.unload()
+            try:self.unload()
+            except Exception as cleanup:
+                self.failed=True;self.cleanup_failure=type(cleanup).__name__
             raise
 
     def _load_impl(self):
@@ -124,13 +129,17 @@ class LocalBackend:
         from .model_registry import ModelRegistry
         entry=ModelRegistry(self.model_roots).resolve(self.model_id);model_path=entry.path
         from .processes import model_memory_budget
-        model_memory_budget(entry.bytes)
+        from .loader_memory import LOADER_PREPARATION_BYTES
+        baseline_private=self._memory_origin_private
+        admission=model_memory_budget(entry.bytes,preparation_bytes=LOADER_PREPARATION_BYTES,baseline_private=baseline_private)
+        if baseline_private is None and admission:
+            baseline_private=self._memory_origin_private=admission['process_private']
         observe('framework_imports')
         os.environ.update(HF_HUB_OFFLINE="1",TRANSFORMERS_OFFLINE="1",HF_HUB_DISABLE_TELEMETRY="1",WANDB_DISABLED="true")
         import torch
         from transformers import AutoModelForMultimodalLM, AutoProcessor, AutoConfig, AutoTokenizer, BitsAndBytesConfig
         # Imports consume Windows commit too. Recheck at the actual load stage.
-        model_memory_budget(entry.bytes)
+        model_memory_budget(entry.bytes,preparation_bytes=LOADER_PREPARATION_BYTES,baseline_private=baseline_private)
         observe('processor')
         try:self.health()
         except RuntimeError:self.failed=True;raise
@@ -151,7 +160,7 @@ class LocalBackend:
                 image_processor=Gemma4UnifiedImageProcessor(patch_size=cfg.patch_size,pooling_kernel_size=cfg.pooling_kernel_size,
                     max_soft_tokens=cfg.num_soft_tokens),tokenizer=tok,video_processor=Gemma4UnifiedVideoProcessor(),chat_template=tok.chat_template)
             self.processor_origin="local implementation defaults plus cached vision config; image-only use; official processor equivalence unverified"
-        model_memory_budget(entry.bytes)
+        model_memory_budget(entry.bytes,preparation_bytes=LOADER_PREPARATION_BYTES,baseline_private=baseline_private)
         observe('model_init_weights_nf4')
         model,loading=AutoModelForMultimodalLM.from_pretrained(model_path,local_files_only=True,trust_remote_code=False,output_loading_info=True,
             device_map={"":0},dtype=torch.bfloat16,attn_implementation="sdpa",

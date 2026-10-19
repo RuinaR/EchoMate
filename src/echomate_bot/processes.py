@@ -22,7 +22,7 @@ def background_options():
     # Capturing stdout alone does not suppress a console under pythonw on Windows.
     return {'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}
 
-def model_memory_budget(weight_bytes):
+def model_memory_budget(weight_bytes,preparation_bytes=0,baseline_private=None):
     """Conservative Windows commit guard before opening large weight mappings.
 
     Does not change page-file/system settings or terminate other processes.
@@ -31,11 +31,13 @@ def model_memory_budget(weight_bytes):
     from .loader_memory import memory_snapshot,budget_requirement,GIB
     try:status=memory_snapshot()
     except OSError:raise ResourceLimitError('Memory query unavailable','ram') from None
-    required=budget_requirement(weight_bytes)
+    # Imports/warmup already present in this process must not be counted twice.
+    consumed=max(0,status['process_private']-baseline_private) if baseline_private is not None else 0
+    required=budget_requirement(weight_bytes,max(0,preparation_bytes-consumed))
     if status['ram_available']<3*GIB:raise ResourceLimitError('Insufficient RAM for model preparation','ram')
     if status['commit_available']<required:
         # Safe aggregate only: no model path, message, user ID or credentials.
-        raise ResourceLimitError('Windows commit headroom %.2f GiB; weight-opening admission bound %.2f GiB; deficit %.2f GiB. Full-load peak remains uncalibrated' %
+        raise ResourceLimitError('Windows commit headroom %.2f GiB; model-loading admission estimate %.2f GiB; deficit %.2f GiB. Full-load peak remains environment-dependent' %
             (status['commit_available']/GIB,required/GIB,(required-status['commit_available'])/GIB),'commit',
             dict(available=status['commit_available'],required=required))
     return status

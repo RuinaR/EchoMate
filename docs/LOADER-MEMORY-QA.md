@@ -1,5 +1,11 @@
 # Windows 1455 로더 메모리 감사 — 2026-10-19
 
+## 후속 실제 로딩 완료 — 이 절이 최신
+
+사용자가 여유를 확보한 뒤 no-LoRA native 로딩·최소 추론·실제 전환/복구·Portable GPU 미리보기를 통과했다. 전체 로딩 계측에서 pre-open private9.03GiB, OS peak31.35GiB(반복 약32.6GiB), working set4.81GiB, CUDA peak allocated7.72GiB를 확인했다. **아래 weight+2GiB는 당시 미검증 admission 기록이며 현재 기준이 아니다.** 준비 reserve10GiB+margin2GiB를 사용하고 이미 사용한 process commit 증가를 중복 계산하지 않는다. 공식 원본22.28GiB의 시작 기준은 약34.28GiB이며 환경별 보장은 아니다.
+
+생성 뒤 cuBLAS workspace가 큰 segment를 pin하는 별도 잔류 문제도 수정했다. worker 종료 후 synchronize/capability 확인한 workspace 해제/empty_cache 순서로 PyTorch reserved 약6.99GiB→2MiB를 실제 검증했다. 가중치 변환·page file 변경·다른 프로그램 종료는 하지 않았다. 상세한 측정 경계·예외와 여전히 남은 품질 차단은 [재개 GPU QA](RESUMED-GPU-QA.md)를 따른다.
+
 시작 HEAD/원격 main `f1c0ec6`, main clean·fetch 후 차이 0/0. **정식 릴리즈 BLOCKED**. 실제 Discord 로그인/송신/동기화와 사용자 데스크톱 조작을 하지 않았다. 운영 설정·토큰·DB·개인 LoRA·원본 모델을 보존했다.
 
 ## 실패 지점과 기존 경로 비교

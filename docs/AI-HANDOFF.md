@@ -1,5 +1,17 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-19 메모리 확보 후 재개 — 최신 기준
+
+시작/원격 main `263eedc` clean0/0. **506 전체 검사 OK55.636초**. [재개 GPU QA](RESUMED-GPU-QA.md), [배포 QA](DISTRIBUTION-QA.md), [성능](PERFORMANCE-PIPELINE.md)을 먼저 읽는다. 기본 no-LoRA·최소 추론/캐릭터12생성/전체 응답9/교차A/B18/공정 큐/실제 모델 전환·실패 복구·생성 중 요청 보존/Portable 실제 GPU 미리보기를 완료했다. 공식 기본은 여전히 Gemma4 하나이며 가중치 변경·학습·자동 승격 없음.
+
+실제 pre-open 준비 commit9.03GiB + COW22.28GiB가 겹쳤다. 기존 weight+2GiB는 부족해 준비10GiB+margin2GiB(시작약34.28GiB)로 보강하고 import/재로딩 비용을 이중 계산하지 않는다. cuBLAS workspace가 pin한 약7GiB reserved 문제를 worker drain 후 정리하여 실제2MiB로 감소했다. API presence 검사·CUDA 미초기화 cleanup·원래 예외 보존/안전 비활성화를 갖춘다. 세부 환경 한계를 일반 최소 사양으로 확대하지 않는다.
+
+no-LoRA vs disabled-PEFT: E2E p50 4.047/4.234초·p95 4.715/4.797초(n9씩), 출력9쌍 동일. 실제 network는 mock, 큰 속도 개선 주장 없음. 캐릭터는 말투 차이 일부 확인/일부 인사 동일, 사람 블라인드 평가는 로컬 양식만 준비했다.
+
+**정식 릴리즈 BLOCKED**: 최종 미사용12는11/12(후속 우려 누락1), 이전44 개발 재검40/44(오개입1·누락3). 추가 few-shot 의미 후보는 minimum human 수신자 probe부터 실패해 폐기, 앱에 적용하지 않았다. 더 이상 같은 문항으로 최종 점수를 튜닝하지 않는다. 다음 우선순위는 남은 전달/간접 평가·2인칭 수신자 오류의 일반화, 새로운 독립 평가와 사람 검토, 다른 깨끗한 Windows/드라이버/장시간 운용이다. 실제 Discord와 사용자 데스크톱 조작은 계속 금지다.
+
+운영 자료·LoRA·모델·기존 평가 봉인은 보존한다. 원본은 `local_data/resumed-qa-20261019/`. 검증은 PYTHONPATH=src;tests;tools 후 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`. 프로토콜·Portable GPU 실행의 격리/잠금 조건은 재개 QA를 따른다. 최종 구현 commit/패키지 일치는 마감 절과 git log를 확인한다. 아래 GPU 불가/500 기준은 과거 기록이다.
+
 ## 2026-10-19 f1c0ec6 후속 — 최우선 최신 기준
 
 시작/원격 main `f1c0ec6` clean·차이0/0. 기존490검사 OK61.101초 → 최종 **500 OK60.204초**. [Windows1455 상세 감사](LOADER-MEMORY-QA.md), [배포 QA](DISTRIBUTION-QA.md), [전체 지연](PERFORMANCE-PIPELINE.md)를 우선 읽는다. 정식 릴리즈 **BLOCKED**.

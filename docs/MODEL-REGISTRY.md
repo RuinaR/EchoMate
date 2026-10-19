@@ -10,6 +10,6 @@ GGUF는 별도 엔진이 없어 사용 불가, PEFT LoRA는 기본 모델 일치
 
 적용은 파일 재검→runtime 보류·기존 GPU 작업 종료→기존 모델 해제→새 로딩→최소 출력 및 타인 청자 분류 probe→설정 확정 순이다. 누락/크기 불일치 가중치 로딩은 거절한다. 실패 시 기존 ID를 다시 로딩·검증하고 복구 실패 시 안전 정지한다. 이전 설정은 성공 전에 확정하지 않는다. 같은 실제 경로를 고르면 중복 로딩을 피한다. 봇 OFF에서도 준비 검증 후 적용하며 임시 backend를 종료한다. 최소 probe는 상태/구조화 청자 한 사례 검사이며 한국어/행동/요약 전 기능 인증이 아니다. 별도 실제 품질 평가는 [배포 QA](DISTRIBUTION-QA.md)의 미완료 항목이다.
 
-Windows1455 재현 후 파일 크기+2GiB의 보수적 commit 여유와 물리 RAM3GiB를 열기 전에 요구한다. 시스템 page file을 바꾸거나 다른 앱을 종료하지 않는다. CPU-only 미지원, VRAM10GB 안내는 추정치이며 context/드라이버에 따라 달라진다. 네트워크 모델 다운로드/대체 GGUF 엔진은 추가하지 않았다.
+Windows1455 후 실제 전체 로딩을 계측해 파일 크기+2GiB만으로 부족함을 확인했다. 관측한 준비 private 약9.03GiB를 바탕으로 준비 reserve10GiB+margin2GiB를 쓰며 import/processor/같은 backend 재로딩에서 이미 사용한 commit을 중복 계산하지 않는다. 공식 단일 원본의 시작 estimate는 약34.28GiB, RAM3GiB 하한이며 성공 보장/일반 최소 사양이 아니다. 작업이 배출된 모델 해제 시 capability 확인한 Torch cuBLAS workspace도 정리한다. 시스템 page file을 바꾸거나 다른 앱을 종료하지 않는다. CPU-only 미지원, VRAM10GB 안내는 추정치이며 context/드라이버에 따라 달라진다. 네트워크 모델 다운로드/대체 GGUF 엔진은 추가하지 않았다. [실제 로딩·전환·복구·미리보기](RESUMED-GPU-QA.md).
 
 [공식 모델 카드와 라이선스](https://huggingface.co/google/gemma-4-12B-it)는 Apache2.0으로 표시돼 있다. 실제 다운로드 파일의 라이선스/접근 조건을 확인해야 한다. 패키지에는 모델을 넣지 않는다. 이전 Gemma 모델 약관을 Gemma4에 그대로 적용하지 않는다.

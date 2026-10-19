@@ -48,6 +48,40 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event(id=22,content='다온아 다시 너한테 물어볼게'));await self.settle()
         self.assertEqual(len(self.transport.sent),2)
 
+    async def test_report_does_not_invite_but_following_outer_question_keeps_peer_flow(self):
+        flow=await self.start()
+        self.backend.assess_social.return_value=SocialDecision('bot','continue','0','information',False)
+        await self.runtime.ingest(self.event(id=31,content='다른 친구가 다온아 기록 정리해 달라고 했대'))
+        await self.settle()
+        self.assertEqual(len(self.transport.sent),1)
+        self.assertIn(4,flow.direct_peers)
+        self.backend.assess_social.return_value=SocialDecision('bot','continue','0','question',True)
+        await self.runtime.ingest(self.event(id=32,content='그 부탁에 대해서 너는 어떻게 생각해'))
+        await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],[10,32])
+        self.assertEqual(self.transport.sent[-1][0].conversation_id,flow.conversation_id)
+        self.assertEqual(self.backend.assess_social.await_count,2)
+
+    async def test_current_speech_request_is_not_mistaken_for_a_past_report(self):
+        self.configure()
+        self.backend.assess_social.return_value=SocialDecision('uncertain','uncertain','none','other',False)
+        for i,text in enumerate(('다온아 잠깐 쉬자고 말해 줘','다온아 먼저 시작하라고 전해 줘')):
+            await self.runtime.ingest(self.event(id=40+i,content=text));await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],[40,41])
+        self.backend.assess_social.assert_not_awaited()
+
+    async def test_nominalized_report_stays_semantic_and_does_not_end_peer_flow(self):
+        from echomate_bot.naming import name_address
+        await self.start()
+        report='다온아 시작하라는 말은 예전에 나래가 했던 부탁이야'
+        self.assertEqual(name_address(report,'다온봇'),'ambiguous')
+        self.backend.assess_social.return_value=SocialDecision('bot','continue','0','information',False)
+        await self.runtime.ingest(self.event(id=50,content=report));await self.settle()
+        self.assertEqual(len(self.transport.sent),1)
+        self.backend.assess_social.return_value=SocialDecision('bot','continue','0','question',True)
+        await self.runtime.ingest(self.event(id=51,content='다온아 시작하라는 말은 무슨 뜻으로 했어'));await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],[10,51])
+
     async def test_third_party_comment_cannot_bootstrap_membership_even_with_yes(self):
         first=await self.start()
         for i,target in enumerate(('bot','bot_group')):

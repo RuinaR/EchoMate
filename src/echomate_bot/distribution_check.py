@@ -1,9 +1,9 @@
-"""Offline installation probe; never logs in, loads weights or touches user DBs."""
+"""Offline isolated installation probe; optional GPU preview, never Discord."""
 import json
 from pathlib import Path
 import sys
 
-def run(output):
+def run(output,gpu=False):
     import os,time
     if not os.environ.get('ECHOMATE_DATA_HOME'):raise RuntimeError('Installation probe requires an isolated ECHOMATE_DATA_HOME')
     import tkinter as tk
@@ -20,6 +20,7 @@ def run(output):
     from .character_profiles import DEFAULT_PROFILE
     from .onboarding import load_bootstrap
     first_run=not (ROOT/'bootstrap.json').exists()
+    preview_generated=False;preview_no_companion_writes=None
     async def forbidden(*args,**kwargs):raise AssertionError('Network forbidden in distribution check')
     discord.Client.login=forbidden;discord.Client.start=forbidden
     root=tk.Tk();root.withdraw();controller=LocalController();app=DesktopApp(root,controller)
@@ -37,6 +38,17 @@ def run(output):
         controller.submit('profiles',action='apply',key='probe')
         until(lambda:controller.settings.get()['character_profile'].get('energy')==25)
         controller.submit('models');until(lambda:bool(getattr(controller,'notice','')))
+        if gpu:
+            # LocalController already owns the isolated installation's lease.
+            controller.submit('preview',text='캐시가 무엇인지 두 문장으로 설명해 줘')
+            until(lambda:getattr(controller,'preview_task',None) is not None,seconds=10)
+            until(lambda:controller.preview_task.done(),seconds=180)
+            preview=controller.preview_result
+            preview_generated=bool(preview and not preview.startswith(('미리보기 실패','로컬에서 답변','미리보기를 취소')))
+            if not preview_generated:raise RuntimeError('Packaged GPU preview failed')
+            Path(output).with_suffix('.preview-private.json').write_text(json.dumps(dict(text=preview),ensure_ascii=False),encoding='utf-8')
+            preview_no_companion_writes=not (controller.companion.users(2) or controller.companion.memories(2) or controller.companion.reminders(2))
+            if not preview_no_companion_writes:raise AssertionError('Preview wrote companion data')
     finally:
         controller.submit('shutdown');until(controller.closed.is_set)
         app.destroy();app=None;root=None
@@ -48,7 +60,11 @@ def run(output):
     result=dict(python=sys.version.split()[0],discord=discord.__version__,torch=torch.__version__,transformers=transformers.__version__,
                 cuda_available=torch.cuda.is_available(),tk=True,gemma4_import=True,model_discovery=len(ModelRegistry().scan()),
                 local_data_isolated=True,first_run=first_run,encrypted_setup=True,profile_saved=True,restart_settings=True,frontend_closed=True,
-                discord_connected=False,weights_loaded=False)
+                discord_connected=False,weights_loaded=preview_generated,preview_generated=preview_generated,
+                preview_no_companion_writes=preview_no_companion_writes)
     Path(output).write_text(json.dumps(result,indent=2),encoding='utf-8');print(json.dumps(result))
 
-if __name__=='__main__':run(sys.argv[1])
+if __name__=='__main__':
+    import argparse
+    p=argparse.ArgumentParser();p.add_argument('output');p.add_argument('--gpu',action='store_true');a=p.parse_args()
+    run(a.output,gpu=a.gpu)

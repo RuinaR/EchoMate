@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 2026-10-19 로더·해제 수명주기 후속
+
+실제 로딩 계측에 따라 파일 COW 예약 외 준비 reserve를 admission에 반영하며 최초 process private 기준을 backend 수명 동안 보존해 import/재로딩 이중 계산을 막는다. 단일 worker drain 후 모델 참조/traceback을 해제하고, 초기화된 CUDA에서만 synchronize → capability 확인한 cuBLAS workspace 정리 → allocator empty_cache를 수행한다. 일반 생성마다 workspace를 지우지 않으며 실패 cleanup은 원래 오류와 안전 비활성 상태를 보존한다. no-LoRA/복구/생성 중 전환/Portable 실제 미리보기 검증과 남은 청자 품질 차단은 [재개 QA](RESUMED-GPU-QA.md)를 따른다.
+
 ## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
 
 시작 HEAD/원격5249fd2·clean을 확인했다. 공식 기본 Gemma4 12B 하나와 독립 캐릭터를 사용하며 기존 persona/adult 고정 UI·기본 LoRA 의존을 제거한다. 이전 서명 설정은 검증 후 base로 읽고 기존 가중치/자료는 삭제하지 않는다. 성인 유머는 별도 기본OFF 정책이다. 로컬 모델/HF 캐시 탐색·호환성 검사·전환/복구, 프로필 서명 저장·편집·미리보기, GUI 첫 설정/Windows DPAPI와 Portable 런타임을 구현했다. 기존 개인정보 동의/기억/관계/요약/알림/검색/공정 큐/Unicode 반응/원본 reply를 유지한다.

@@ -59,6 +59,33 @@ class LoaderMemory(unittest.TestCase):
         error.details['available']='synthetic private text'
         self.assertEqual(resource_message(error,'fallback'),'fallback')
 
+    def test_idle_cuda_workspace_release_is_ordered_and_never_initializes_cuda(self):
+        from echomate_bot.loader_memory import release_idle_cuda
+        events=[]
+        cuda=SimpleNamespace(is_initialized=lambda:False,synchronize=lambda:events.append('sync'),empty_cache=lambda:events.append('empty'))
+        torch=SimpleNamespace(cuda=cuda,_C=SimpleNamespace(_cuda_clearCublasWorkspaces=lambda:events.append('clear')))
+        release_idle_cuda(torch);self.assertEqual(events,[])
+        cuda.is_initialized=lambda:True
+        release_idle_cuda(torch);self.assertEqual(events,['sync','clear','empty'])
+        events.clear();torch._C=SimpleNamespace()
+        release_idle_cuda(torch);self.assertEqual(events,['sync','empty'])
+
+    @unittest.skipUnless(os.name=='nt','Windows admission')
+    def test_measured_preparation_reserve_is_not_double_counted_after_imports(self):
+        from echomate_bot.loader_memory import LOADER_PREPARATION_BYTES
+        self.assertEqual(budget_requirement(22*GIB,LOADER_PREPARATION_BYTES),34*GIB)
+        status=dict(ram_available=8*GIB,commit_available=34*GIB,process_private=GIB)
+        with patch('echomate_bot.loader_memory.memory_snapshot',return_value=status):
+            first=dict(model_memory_budget(22*GIB,preparation_bytes=LOADER_PREPARATION_BYTES))
+        status.update(commit_available=32*GIB,process_private=3*GIB)
+        with patch('echomate_bot.loader_memory.memory_snapshot',return_value=status):
+            model_memory_budget(22*GIB,preparation_bytes=LOADER_PREPARATION_BYTES,baseline_private=first['process_private'])
+        status['commit_available']=31*GIB
+        with patch('echomate_bot.loader_memory.memory_snapshot',return_value=status):
+            with self.assertRaises(ResourceLimitError) as got:
+                model_memory_budget(22*GIB,preparation_bytes=LOADER_PREPARATION_BYTES,baseline_private=first['process_private'])
+            self.assertEqual(got.exception.details['required'],32*GIB)
+
     def test_failed_load_releases_partial_model_owned_by_traceback(self):
         from echomate_bot.inference import LocalBackend
         backend=LocalBackend();refs=[]
@@ -77,6 +104,15 @@ class LoaderMemory(unittest.TestCase):
             self.assertIsNone(backend.processor);self.assertIsNone(backend.model)
             self.assertFalse(backend.capabilities_verified)
             asyncio.run(backend.close())
+
+    def test_cleanup_failure_keeps_original_load_error_and_disables_inference(self):
+        from echomate_bot.inference import LocalBackend
+        from unittest.mock import Mock
+        b=LocalBackend();b._load_impl=Mock(side_effect=ValueError('synthetic original failure'))
+        b.unload=Mock(side_effect=OSError('synthetic cleanup failure'))
+        with self.assertRaisesRegex(ValueError,'original'):b.load()
+        self.assertTrue(b.failed);self.assertEqual(b.cleanup_failure,'OSError')
+        b.unload=Mock();asyncio.run(b.close())
 
     def test_admission_failure_precedes_framework_import_and_cleanup_does_not_import_it(self):
         from echomate_bot.inference import LocalBackend

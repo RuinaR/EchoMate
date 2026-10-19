@@ -1,5 +1,15 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## 263eedc 후속 — GPU·Portable 재개 (최신)
+
+메모리 여유 확보 후 공식 no-LoRA 로딩/최소 추론, 네 캐릭터12생성, 전체 응답9/9, 교차 A/B18/18(출력9쌍 동일), 실제 전환·실패 복구·생성 중 두 요청 보존, 최종 네 요청 공정 큐, **Portable 실제 모델 로딩·숨긴 Tk 미리보기**를 완료했다. 전체 **506 OK55.636초**. 초기 메모리 부족만을 현재 차단 사유로 쓰지 않는다.
+
+실측으로 기존 weight+2GiB가 부족함을 확인해 준비 reserve10GiB+margin2GiB(공식 단일22.28GiB 기준 시작34.28GiB)로 보강하고 이미 사용한 process commit을 중복 계산하지 않는다. cuBLAS workspace가 큰 segment를 붙든 문제를 수정해 생성·전환 후 PyTorch reserved 약6.99GiB→2MiB를 실제 확인했다. no-LoRA/disabled-PEFT E2E p50 4.047/4.234초, p95 4.715/4.797초(n9씩, 큰 개선 주장 없음).
+
+**정식 릴리즈 BLOCKED**: 최종 미사용 청자12는11/12(누락1), 이전44 개발 재검40/44(오개입1·누락3). 추가 의미 후보는 최소 수신자 probe 실패로 폐기했다. 캐릭터 사람 평가·다른 Windows/드라이버·장시간 실사용·실제 Discord는 NOT VERIFIED. 다른 PC가 제공되지 않아 현재 호스트의 격리 PATH/저장소 검사로 대체 성공을 선언하지 않는다.
+
+구체적 단계/실패/수치/재현과 비공개 파일 목록은 [재개 GPU QA](RESUMED-GPU-QA.md). 아래490/500·GPU 미실행·Portable weights=false 기록은 과거 상태다. 최종 패키지·보존·공개 감사는 마감 절에 누적한다.
+
 ## f1c0ec6 후속 — Windows 1455 메모리 감사 (최신)
 
 시작 main/HEAD/원격 `f1c0ec6`, clean·fetch 차이0/0. 기존490검사 OK61.101초, 최종 **500검사 OK60.204초**. 추가10검사는 실제 Windows counter 단위·admission/재검사·실패 traceback 정리·Torch 미import cleanup·안전한 UI 오류 숫자를 검증한다. 기존 사회적 라우팅/공정 큐/동의·DB·UI 전체 모의 회귀를 포함한다.

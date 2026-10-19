@@ -7,6 +7,24 @@ import time
 from contextlib import contextmanager
 
 GIB = 1024**3
+# Windows/Torch 2.9.1 + Transformers 5.20.1 measured pre-open private usage
+# was 9.03 GiB (allocator warmup included); round up, keep 2 GiB margin.
+# This is a conservative admission estimate, not a universal model peak bound.
+LOADER_PREPARATION_BYTES = 10*GIB
+
+
+def release_idle_cuda(torch):
+    """Only after our single GPU worker has drained and model refs are gone.
+
+    Torch 2.9.1's global cuBLAS workspace can pin an otherwise empty multi-GiB
+    allocator segment. Capability-check this private hook; never reset CUDA or
+    change workspace/environment settings. No CUDA initialization for cleanup.
+    """
+    if not getattr(torch.cuda,'is_initialized',lambda:False)():return
+    torch.cuda.synchronize()
+    clear=getattr(getattr(torch,'_C',None),'_cuda_clearCublasWorkspaces',None)
+    if callable(clear):clear()
+    torch.cuda.empty_cache()
 
 
 def memory_snapshot():
@@ -72,7 +90,7 @@ class MemoryRecorder:
         return dict(interval_seconds=self.interval,samples=self.rows,dropped_samples=self.dropped_samples,peaks=self.peaks)
 
 
-def budget_requirement(weight_bytes):
+def budget_requirement(weight_bytes, preparation_bytes=0):
     """Current monolithic COW mapping reserve plus provisional overhead margin.
 
     This is an admission bound, NOT a calibrated full-load peak prediction.
@@ -80,7 +98,8 @@ def budget_requirement(weight_bytes):
     """
     if isinstance(weight_bytes,bool) or not isinstance(weight_bytes,int) or weight_bytes<0:
         raise ValueError('Invalid weight byte count')
-    return weight_bytes+2*GIB
+    if type(preparation_bytes) is not int or preparation_bytes<0:raise ValueError('Invalid preparation byte count')
+    return weight_bytes+preparation_bytes+2*GIB
 
 
 @contextmanager
