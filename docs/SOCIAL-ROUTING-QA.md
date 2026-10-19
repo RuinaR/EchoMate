@@ -112,4 +112,6 @@ PowerShell에서 `$env:PYTHONPATH='src;tests'` 후 `.venv-gemma4/Scripts/python.
 
 ## 공개 변경 마감
 
+구현·검증 커밋 **6dd3ba2**. 후속 인수인계 문서 커밋은 `git log -1 --oneline`로 확인한다.
+
 시작/최종 fetch 모두 origin/main과 HEAD3cc53eb의 차이0/0을 확인한 뒤 공개30파일만 staged 검토했다. 실제 bootstrap/설정의 민감 리터럴 일치0, 비공개 파일 경로0, 개인 절대 경로0, 문서 상대 링크 오류0, `git diff --cached --check` 통과. 운영 설정/bootstrap/관계·기억 DB/송신 DB 네 파일 hash4/4가 작업 전과 동일하다. 기존 모델/어댑터/데이터를 재학습·삭제·업로드하지 않았다. 검사 중 Windows 기본 인코딩으로 읽던 감사 도구 오류1회는 UTF-8 명시 후 재실행했다. 소스/합성 테스트/비식별 문서만 커밋하며 최종 구현 커밋은 AI-HANDOFF 최신 절에 기록한다. 실제 Discord 접속·명령 동기화·송신 및 사용자 데스크톱 조작은 없었다.
