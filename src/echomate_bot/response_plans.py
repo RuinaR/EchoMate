@@ -44,6 +44,6 @@ def parse(raw,peers):
     return dict(human=SocialDecision('human','shift','none','other',False,plan=raw),
                 excluded=SocialDecision('human','commentary','none','other',False,plan=raw),
                 broadcast=SocialDecision('broadcast','new','none','other',False,plan=raw),
-                report_only=SocialDecision('bot','continue',peers[0],'information',False,plan=raw),
+                report_only=SocialDecision('uncertain','commentary','none','information',False,plan=raw),
                 uncertain=SocialDecision('uncertain','uncertain','none','other',False,plan=raw),
                 new_request=SocialDecision('bot','new','none','request',True,plan=raw))[raw]

@@ -174,6 +174,64 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event(id=20,content='그쪽 이야기는 좀 다르더라'));await self.settle()
         self.assertTrue(any(4 in f.direct_peers and f.last_bot for f in self.runtime.conversations.flows.values()))
 
+    async def test_semantic_closure_releases_load_without_destroying_followup_evidence(self):
+        flow=await self.start()
+        self.backend.assess_social.return_value=SocialDecision('bot','end','0','closing',False)
+        await self.runtime.ingest(self.event(id=61,content='그렇게 마무리되는 거였구나'));await self.settle()
+        self.assertFalse(flow.ended);self.assertFalse(flow.engaged)
+        self.assertEqual(flow.status,'resting');self.assertIn(4,flow.direct_peers)
+        self.assertEqual(self.runtime.activity_changed(),0)
+        self.backend.assess_social.return_value=SocialDecision('bot','continue','0','question',True)
+        await self.runtime.ingest(self.event(id=62,content='그런데 처음에 말한 조건은 어떻게 되는 거야'));await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],[10,62])
+        self.assertEqual(self.transport.sent[-1][0].conversation_id,flow.conversation_id)
+
+    async def test_semantic_closure_does_not_cancel_pending_independent_work(self):
+        flow=await self.start();task=asyncio.create_task(asyncio.sleep(60))
+        self.runtime.tasks[flow.key]=task
+        try:
+            self.runtime.rest_conversation(flow,4)
+            self.assertFalse(task.cancelled());self.assertFalse(flow.ended)
+            self.assertTrue(flow.engaged)
+        finally:
+            task.cancel();await asyncio.gather(task,return_exceptions=True)
+            self.runtime.tasks.pop(flow.key,None)
+
+    async def test_group_closure_releases_only_actual_recipient_siblings(self):
+        first=await self.start();first.direct_peers.add(5)
+        second=replace(first,key=(2,3,'group-sibling'),last_recipient=5,
+                       direct_peers={4,5},participants={4,5})
+        self.runtime.conversations.flows[second.key]=second
+        self.runtime.rest_conversation(first,4)
+        self.assertFalse(first.engaged);self.assertTrue(second.engaged)
+        self.assertEqual(self.runtime.activity_changed(),1)
+        self.runtime.rest_conversation(second,5)
+        self.assertFalse(second.engaged);self.assertEqual(self.runtime.activity_changed(),0)
+
+    async def test_retained_bot_source_is_candidate_evidence_not_only_human_topic(self):
+        from echomate_studio.dialogue_state import DialogueState,Turn
+        flow=await self.start()
+        state=self.runtime.states[flow.key]
+        state.append(channel_id=3,thread_id=None,turn=Turn('801','999','망원경은 삼각대가 흔들리지 않게 고정해.',self.event().timestamp,True,'10'))
+        # A competing human topic used to exclude the actual bot source before
+        # semantic classification, even though both are legitimate candidates.
+        decoy_event=replace(self.event(id=80,content='망원경 운반에 대해 물어볼게'),author=6)
+        decoy,_=self.runtime.conversations.choose(decoy_event,direct=True,pending=set())
+        self.runtime.conversations.observe(decoy,decoy_event);self.runtime.conversations.bot(decoy,802)
+        decoy.direct_peers.add(6)
+        other=DialogueState(limit=100,max_age_seconds=3600);self.runtime.states[decoy.key]=other
+        other.append(channel_id=3,thread_id=None,turn=Turn('80','6',decoy_event.content,decoy_event.timestamp))
+        other.append(channel_id=3,thread_id=None,turn=Turn('802','999','상자에 넣어서 옮겨.',decoy_event.timestamp,True,'80'))
+        e=replace(self.event(id=63,content='망원경 삼각대는 어떤 걸로 고정해야 해'),author=5)
+        packet,frames=self.runtime.social.packet(e,self.runtime.conversations,self.runtime.states,999)
+        self.assertIn(flow,[f for f,v in frames])
+        self.assertFalse(packet['current_peer_frames']) # relevance never grants membership
+
+    async def test_explicit_end_still_closes_confirmed_flow(self):
+        flow=await self.start()
+        await self.runtime.ingest(self.event(id=64,content='대화끝'));await self.settle()
+        self.assertTrue(flow.ended);self.assertFalse(flow.engaged)
+
     async def test_explicit_new_speaker_is_separate_unless_reply_or_proven_group_join(self):
         first=await self.start()
         self.backend.assess_social.return_value=SocialDecision('bot','new','none','question',True)

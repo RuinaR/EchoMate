@@ -7,7 +7,7 @@ from echomate_bot.inference import LocalBackend
 class ResponsePlans(unittest.IsolatedAsyncioTestCase):
     def packet(self):
         return dict(bot_id='999',current={'speaker':'4','text':'synthetic'},current_peer_frames=['0'],surrounding=[],
-                    frames=[dict(index='0',current_peers=['4'],turns=[{'text':'actual source'},{'text':'actual bot'}]),
+                    frames=[dict(index='0',current_peers=['4'],turns=[{'id':'10','text':'actual source'},{'id':'11','bot':True,'text':'actual bot'}]),
                             dict(index='1',current_peers=['5'],turns=[])])
     def test_only_actual_speaker_peers_are_available(self):
         p=self.packet();p['current_peer_frames'].append('1')
@@ -29,3 +29,7 @@ class ResponsePlans(unittest.IsolatedAsyncioTestCase):
             b._job.return_value='reply_999'
             with self.assertRaises(ValueError):await b.assess_social(p)
         finally:await b.scheduler.close();b.executor.shutdown()
+
+    def test_unanchored_report_does_not_choose_first_of_multiple_flows(self):
+        decision=plans.parse('report_only',['0','1'])
+        self.assertEqual(decision.anchor,'none');self.assertFalse(decision.respond)

@@ -203,10 +203,26 @@ class Runtime:
             pending=self.requests.get(key)
             if pending and pending[0].author!=author:continue
             sibling.ended=True;sibling.engaged=False
-            sibling.status='ended';sibling.link_evidence='explicit_or_semantic_end'
+            sibling.status='ended';sibling.link_evidence='explicit_end'
             task=self.tasks.get(key)
             if task:task.cancel()
             self.pending_mentions.pop(key,None);self.deferred_events.pop(key,None)
+        self.activity_changed()
+
+    def rest_conversation(self,flow,author):
+        """A semantic closure vote releases engagement, not confirmed history.
+
+        Unlike explicit cancellation/termination it cannot cancel independent
+        work or erase the evidence needed to judge a subsequent follow-up.
+        """
+        for key,sibling in self.conversations.flows.items():
+            if sibling.conversation_id!=flow.conversation_id:continue
+            # Each sibling owns the audience of its actual last bot reply.
+            # Historical group membership must not keep every sibling active
+            # forever, or let one person's closure suspend another's work.
+            if key in self.tasks or sibling.last_recipient not in (None,author):continue
+            sibling.engaged=False;sibling.status='resting'
+            sibling.link_evidence='semantic_closure_unconfirmed'
         self.activity_changed()
 
     def pause_gateway(self):
@@ -818,7 +834,10 @@ class Runtime:
         if job:job['social']=observed
         self.note(reason)
         if reason=='social_end':
-            self.end_conversation(anchor,event.author);return None
+            self.rest_conversation(anchor,event.author)
+            if flow.status=='candidate':flow.ended=True;flow.engaged=False
+            observed['state_effect']='rest_without_cancellation'
+            return None
         if reason=='social_autonomy_opportunity':
             observed['eligibility']='autonomy_policy_required'
             return event,False,False,False

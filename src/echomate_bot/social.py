@@ -122,15 +122,22 @@ class SocialRouter:
             old=groups.get(f.conversation_id)
             if old is None or len(f.messages)>len(old.messages):groups[f.conversation_id]=f
         # Relevance supplies candidates only. Never select the last speaker/session.
-        candidates=list(groups.values())
-        candidates.sort(key=lambda f:(-int(event.author in f.direct_peers),-len(query&terms(f.topic)),min(f.messages or {''})))
-        relevant=[f for f in candidates if event.author in f.direct_peers or query&terms(f.topic)]
+        candidates=list(groups.values());retained={}
+        for f in candidates:
+            version,turns=states[f.key].snapshot(channel_id=event.channel,thread_id=None)
+            before=[t for t in turns if t.message_id!=str(event.id)]
+            if any(t.is_bot for t in before):retained[f.key]=(version,before[-6:])
+        # Rank the evidence that will actually reach the judge. A reply may
+        # reference the bot's proposal, which need not occur in the human topic.
+        candidates=[f for f in candidates if f.key in retained]
+        def overlap(f):
+            return len(query & terms(' '.join(t.content[:480] for t in retained[f.key][1])))
+        candidates.sort(key=lambda f:(-int(event.author in f.direct_peers),-overlap(f),min(f.messages or {''})))
+        relevant=[f for f in candidates if event.author in f.direct_peers or overlap(f)]
         if not relevant:relevant=candidates
         frames=[];selected=[]
         for f in relevant[:4]:
-            version,turns=states[f.key].snapshot(channel_id=event.channel,thread_id=None)
-            before=[t for t in turns if t.message_id!=str(event.id)]
-            if not any(t.is_bot for t in before):continue # retained IDs alone cannot revive expired evidence
+            version,before=retained[f.key]
             frames.append(dict(index=str(len(frames)),participants=list(map(str,sorted(f.participants))),current_peers=list(map(str,sorted(f.direct_peers))),
                 last_recipient=str(f.last_recipient) if f.last_recipient else None,
                 turns=[dict(id=t.message_id,speaker=t.author_id,bot=t.is_bot,reply=t.reply_to,text=t.content[:480]) for t in before[-6:]]))
