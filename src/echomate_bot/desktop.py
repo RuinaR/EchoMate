@@ -17,14 +17,14 @@ import tkinter as tk
 
 from .settings import ROOT,Settings,MOODS,ACTIVITY
 
-STAGES={'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
-        'action':'행동 선택','text':'답변 작성','sending':'Discord 전송','research':'공식 인터넷 근거 확인','output_check':'출력 정책 검사'}
+STAGES={'summary':'대화 요약 확인·압축', 'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
+        'action':'행동 선택','text':'답변 작성','sending':'Discord 전송','research':'인터넷 원문·근거 확인','output_check':'출력 정책 검사'}
 NO_RESPONSE = {
+    'resource_stop_temperature':'GPU 온도 보호로 멈췄어요', 'resource_stop_vram':'GPU 메모리 여유가 부족해 멈췄어요', 'resource_stop_ram':'PC 메모리 여유가 부족해 멈췄어요', 'resource_stop_gpu_query':'GPU 상태를 확인할 수 없어 멈췄어요',
     'name_not_recognized':'등록된 호출 형태가 없어요', 'name_ambiguous':'이름은 보이지만 부른 대상이 불분명해요',
     'followup_not_linked':'이어지는 대화 근거가 부족해요', 'continuation_rejected':'대상이나 종료 판단에 따라 답하지 않았어요',
     'autonomy_cooldown':'새 자율 참여의 대기 시간 또는 부하 제한이에요', 'scope_denied':'허용된 대화 범위가 아니에요',
     'permission_denied':'채널을 볼 권한이 없어요',
-    'daily_limit_reached':'오늘의 전송 한도에 도달했어요 · 한국 시각 오전 9시에 새 한도 시작',
     'duplicate_request':'이미 처리한 요청이에요', 'response_cooldown':'발언 간격을 기다리고 있어요',
     'reaction_disabled':'이 범위의 이모지 반응이 꺼져 있어요',
     'member_other_addressee':'다른 구성원에게 한 말로 확인했어요',
@@ -112,22 +112,17 @@ class LocalController:
                 progress.append(dict(channel=channel.name if channel else '허용된 채널',stage=STAGES.get(p['stage'],p['stage']),seconds=round(time.time()-p['started'],1)))
         preparing=bool(runtime and getattr(runtime,'changing_model',False))
         try:
-            if runtime and cfg:budget=runtime.ledger.budget(cfg['daily_limit'])
-            elif cfg:
-                from datetime import datetime,timezone
-                path=self.settings.path.parent/'sent.sqlite3';used=0
-                if path.exists():
-                    with closing(sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True,timeout=.1)) as db:used=db.execute('SELECT COUNT(*) FROM sent WHERE day=?',(datetime.now(timezone.utc).date().isoformat(),)).fetchone()[0]
-                budget=dict(used=used,limit=cfg['daily_limit'],remaining=max(0,cfg['daily_limit']-used))
-            else:budget={}
-        except (OSError,sqlite3.Error):budget=dict(error=True);self.error='전송 한도 기록을 읽지 못했어요'
-        snapshot=dict(phase='모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
+            from .ledger import Ledger
+            statistics=runtime.ledger.statistics() if runtime else Ledger.read_statistics(self.settings.path.parent/'sent.sqlite3') if cfg else {}
+        except (OSError,sqlite3.Error):statistics=dict(error=True);self.error='전송 통계를 읽지 못했어요'
+        snapshot=dict(phase='AI 안전 보호로 정지 · 진단 확인 후 다시 시작' if runtime and runtime.stopped and getattr(client.backend,'failed',False) else '모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
                       model_preparing=preparing,
                       recent_reason=next((NO_RESPONSE.get(r['code'],'') for r in reversed(runtime.diagnostics) if r['code'] in NO_RESPONSE or r['code']=='response_sent'),'') if runtime else '',
                       scheduler=client.backend.scheduler.snapshot() if client and hasattr(client.backend,'scheduler') else {},
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
                       companion_loading=getattr(self,'companion_loading',False),
-                      budget=budget,
+                      statistics=statistics,
+                      runtime_totals=dict(runtime.totals) if runtime else {},
                       jobs=runtime.monitor() if runtime and hasattr(runtime,'monitor') else getattr(self,'last_jobs',[]),
                       memory_pending=runtime.memory_queue.qsize() if runtime else 0,
                       private_service=bool(runtime and runtime.service_task and not runtime.service_task.done()),
@@ -209,7 +204,7 @@ class LocalController:
                 self.phase='정지'
             elif operation=='settings':
                 values=kwargs['values']
-                allowed={'enabled','text','reactions','vision','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','daily_limit','command_sync_pending','web_search','summaries_auto'}
+                allowed={'enabled','text','reactions','vision','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','command_sync_pending','web_search','summaries_auto'}
                 if set(values)-allowed:raise ValueError('Unknown GUI setting')
                 from .settings import validate
                 validate(dict(self.settings.get(),**values))
@@ -280,6 +275,14 @@ class LocalController:
                         if key is None:raise ValueError('Subject opted out or source deleted')
                     else:await asyncio.to_thread(store.edit_memory,gid,kwargs['key'],kwargs['summary'],expires,kwargs.get('status','active'))
                 elif action=='memory_delete':await asyncio.to_thread(store.delete_memory,gid,kwargs['key'])
+                elif action=='summary_delete':
+                    await asyncio.to_thread(store.delete_digest,gid,kwargs['key'])
+                    if self.client:
+                        for task in self.client.runtime.summary_tasks:task.cancel()
+                elif action=='summary_reset':
+                    await asyncio.to_thread(store.clear_digests,gid,user)
+                    if self.client:
+                        for task in self.client.runtime.summary_tasks:task.cancel()
                 elif action in ('reminder_cancel','reminder_edit'):
                     from .temporal import editor_timestamp
                     tz=self.settings.get()['guilds'].get(str(gid),{}).get('timezone','Asia/Seoul')
@@ -364,17 +367,17 @@ class LocalController:
         self.companion_loading=True;self._publish()
         def read():
             store=self.companion
-            memories=store.memories(guild,user,query=query,kind=kind)
+            memories=store.memories(guild,user,query=query,kind=kind,include_expired=True)
             reminders=store.reminders(guild,user)
             people={r['user']:dict(r) for r in store.users(guild)}
             for uid in store.consent_users(guild):people.setdefault(uid,dict(user=uid,affinity=50,interactions=0,last_at=0))
             aliases=store.aliases(guild,user=user)
             for row in aliases:people.setdefault(row['user'],dict(user=row['user'],affinity=50,interactions=0,last_at=0))
-            for row in [*store.memories(guild),*store.reminders(guild)]:
+            for row in [*store.memories(guild,include_expired=True),*store.reminders(guild)]:
                 uid=row.get('user',row.get('requester'))
                 people.setdefault(uid,dict(user=uid,affinity=50,interactions=0,last_at=0))
             for person in people.values():person['consent']=store.consent(guild,int(person['user']))
-            return dict(guild=guild,user=user,people=list(people.values()),aliases=aliases,memories=memories,reminders=reminders,query=query,kind=kind,history=store.relationship_history(guild,user) if user else [],summaries=store.summaries(guild,int(user)) if user else [])
+            return dict(guild=guild,user=user,people=list(people.values()),aliases=aliases,memories=memories,reminders=reminders,query=query,kind=kind,history=store.relationship_history(guild,user) if user else [],summaries=store.summaries(guild,int(user)) if user else [],digests=store.digests(guild,int(user),include_expired=True) if user else [])
         try:view=await asyncio.to_thread(read)
         except Exception:
             if request==self.companion_request:self.companion_loading=False;self.companion_view=dict(guild=guild,user=user,load_error=True)
@@ -418,7 +421,7 @@ class LocalController:
                 finally:
                     self.client=None
                     try:
-                        self.last_jobs=client.runtime.monitor();self.last_budget=client.runtime.ledger.budget(self.settings.get()['daily_limit'])
+                        self.last_jobs=client.runtime.monitor();self.last_statistics=client.runtime.ledger.statistics()
                     except (AttributeError,OSError,sqlite3.Error):pass
                     try:atomic_private_json(ROOT/'desktop-performance.json',client.backend.metrics)
                     except OSError:self.error='PerformanceWriteError'

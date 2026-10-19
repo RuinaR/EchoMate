@@ -175,7 +175,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.transport.sent),1)
         self.assertEqual(self.backend.catalog['allowed_actions'],['SILENCE','TEXT'])
         await self.runtime.ingest(event);await self.settle();self.assertEqual(len(self.transport.sent),1)
-        self.assertFalse(self.runtime.ledger.reserve(event,100,0))
+        self.assertFalse(self.runtime.ledger.reserve(event,0))
     async def test_disallowed_channel_bot_and_dm_do_not_infer(self):
         await self.runtime.ingest(self.event(channel=8));await self.settle()
         await self.runtime.ingest(replace(self.event(id=11),bot=True))

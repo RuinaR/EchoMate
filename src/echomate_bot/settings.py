@@ -17,7 +17,7 @@ MODELS={'base','persona','adult'}
 DEFAULTS = dict(enabled=False, text=True, reactions=False, stickers=False, media=False,
                 vision=False, mood="평온", warmth=75, cuteness=40, playfulness=20,
                 auto_mood=False, activity="normal", cooldown=60, engagement_seconds=600,
-                media_probability=0., daily_limit=100, model="persona", guilds={},asset_policy=3,gender='neutral',
+                media_probability=0., model="persona", guilds={},asset_policy=3,gender='neutral',
                 memory_auto=False,relations_auto=True,context_excerpts=True,reminders_enabled=True,reminder_grace=900,
                 memory_plan_grace=3600,memory_date_grace=86400,memory_state_hours=6,
                 command_sync_pending=False,web_search=False,summaries_auto=False)
@@ -64,7 +64,7 @@ def validate(cfg):
     if cfg["mood"] not in MOODS or cfg["activity"] not in ACTIVITY or cfg["model"] not in MODELS or cfg['gender'] not in GENDERS:
         raise ValueError("Unknown mood, activity or trusted model")
     for key, lo, hi in (("warmth", 0, 100), ("cuteness", 0, 100), ("playfulness", 0, 100),
-                        ("cooldown", 2, 3600), ("engagement_seconds", 10, 86400), ("daily_limit", 1, 1000),('reminder_grace',0,86400),('memory_plan_grace',0,86400),('memory_date_grace',0,86400),('memory_state_hours',1,72)):
+                        ("cooldown", 2, 3600), ("engagement_seconds", 10, 86400),('reminder_grace',0,86400),('memory_plan_grace',0,86400),('memory_date_grace',0,86400),('memory_state_hours',1,72)):
         if type(cfg[key]) is not int or not lo <= cfg[key] <= hi:
             raise ValueError("Setting outside permitted range")
     if type(cfg["media_probability"]) not in (int, float) or not 0 <= cfg["media_probability"] <= 1:
@@ -137,7 +137,9 @@ class Settings:
             actual = hmac.new(self._key, canonical(envelope["data"]), hashlib.sha256).hexdigest()
             if not hmac.compare_digest(actual, envelope["signature"]):
                 raise PermissionError("Settings integrity failure; start disabled and repair locally")
-            verified=envelope['data']
+            verified=dict(envelope['data'])
+            # Authenticate original bytes before dropping the obsolete quota.
+            verified.pop('daily_limit',None)
             if 'asset_policy' not in verified:
                 # Authenticate first; previous QA vision opt-in must not enable the new experiment.
                 verified=dict(verified,asset_policy=2,vision=False,media=False,media_probability=0.)

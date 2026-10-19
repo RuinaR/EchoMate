@@ -4,7 +4,7 @@ import tkinter as tk
 from .temporal import display_time
 
 PAGES={'relations':'사람과 관계','memories':'기억 관리','reminders':'예약 알림'}
-KINDS={'전체':None,'약속':'plan','잠깐의 상태':'state','진행 중 목표':'goal','취향':'preference','직접 기억':'explicit'}
+KINDS={'전체':None,'약속':'plan','잠깐의 상태':'state','진행 중 목표':'goal','취향':'preference','직접 기억':'explicit','대화 요약':'summary'}
 STATES={'scheduled':'예약 중','processing':'발송 확인 중','delivered':'전송 완료','cancelled':'취소됨','expired':'기한 지남','failed':'실패·확인 필요','active':'사용 중','disabled':'잠시 끔','uncertain':'확인 필요'}
 
 
@@ -85,6 +85,7 @@ class CompanionViews:
             '별명도 문맥을 보고 판단해요. 한국은 Asia/Seoul, 세계 표준시는 UTC예요.')
 
     def edit_record(self,add=False):
+        if not add and self.record_key and self.record_key.startswith('digest:'):self.show_digest();return
         data=(self.snapshot or {}).get('companion',{});page=self.page
         table=data.get('memories' if page=='memories' else 'reminders',[])
         row=next((r for r in table if r.get('memory_id',r.get('reminder_id'))==self.record_key),None)
@@ -102,7 +103,7 @@ class CompanionViews:
                 channels=[*g.get('channels',{}),*g.get('threads',{})]
                 def create(values):
                     user=int(values.pop('subject'));kind=KINDS[values.pop('type')]
-                    if not user or kind is None:raise ValueError()
+                    if not user or kind is None or kind=='summary':raise ValueError()
                     self.controller.submit('companion',action='memory_add',guild=self.guild_id,user=user,kind=kind,**values)
                 self.form('기억 직접 추가',[
                     ('subject','당사자 User ID',self.record_user or ''),('channel','출처 채널 / 스레드 ID',next(iter(self.channel_ids),channels[0] if channels else '')),
@@ -121,6 +122,7 @@ class CompanionViews:
     def reset_records(self,all_users=False):
         if not self.guild_id or (not all_users and not self.record_user):return
         action={'memories':'memory_reset','relations':'relationship_reset','reminders':'reminder_reset'}[self.page]
+        if self.page=='memories' and self.record_kind=='summary':action='summary_reset'
         def confirm(values):
             if values['confirm']!='삭제':raise ValueError()
             self.controller.submit('companion',action=action,guild=self.guild_id,user=None if all_users else self.record_user)
@@ -149,11 +151,18 @@ class CompanionViews:
         rows=data.get('memories' if self.page=='memories' else 'reminders',[]) if self.page!='relations' else data.get('people',[])
         if self.page!='relations' and data.get('user')!=self.record_user:rows=[]
         if self.page=='memories':
-            if self.record_status=='사용 중':rows=[r for r in rows if r['status']=='active']
-            elif self.record_status=='곧 만료':rows=[r for r in rows if r['expires_at'] is not None and r['expires_at']<=time.time()+86400]
+            if self.record_status=='사용 중':rows=[r for r in rows if r['status']=='active' and (r['expires_at'] is None or r['expires_at']>time.time())]
+            elif self.record_status=='곧 만료':rows=[r for r in rows if r['expires_at'] is not None and time.time()<r['expires_at']<=time.time()+86400]
+            elif self.record_status=='만료':rows=[r for r in rows if r['expires_at'] is not None and r['expires_at']<=time.time()]
             elif self.record_status=='잠시 끔':rows=[r for r in rows if r['status']=='disabled']
             elif self.record_status=='확인 필요':rows=[r for r in rows if r['status']=='uncertain']
-            items=[dict(id=r['memory_id'],label=r['summary'],hint=next((k for k,v in KINDS.items() if v==r['kind']),r['kind'])+' · '+('장기 기억' if not r['expires_at'] else display_time(r['expires_at'],tz)+' 만료')+' · '+STATES[r['status']]) for r in rows]
+            items=[dict(id=r['memory_id'],label=r['summary'],hint=next((k for k,v in KINDS.items() if v==r['kind']),r['kind'])+' · '+('장기 기억' if not r['expires_at'] else display_time(r['expires_at'],tz)+' 만료')+' · '+('만료됨' if r['expires_at'] and r['expires_at']<=time.time() else STATES[r['status']])) for r in rows]
+            if self.record_kind=='summary':
+                rows=data.get('digests',[]) if data.get('user')==self.record_user else []
+                if self.record_status=='만료':rows=[r for r in rows if r['expires']<=time.time()]
+                elif self.record_status=='사용 중':rows=[r for r in rows if r['expires']>time.time() and r['usable']]
+                if self.record_search:rows=[r for r in rows if self.record_search in str(r['body'])]
+                items=[dict(id='digest:'+r['id'],label='손상된 요약 · 삭제 관리 가능' if r.get('damaged') else ' / '.join(i['text'] for i in r['body']['items']),hint='대화 요약 · '+('조회 오류' if r.get('damaged') else '만료됨' if r['expires']<=time.time() else '동의 철회로 활용 중지' if not r['usable'] else '사용 중')+' · '+display_time(r['expires'],tz)+' 만료') for r in rows]
         elif self.page=='reminders':
             if self.record_status=='실패':rows=[r for r in rows if r['status']=='failed']
             elif self.record_status=='예약 중':rows=[r for r in rows if r['status']=='scheduled']
@@ -171,15 +180,15 @@ class CompanionViews:
         self.button(246,y,120,30,'전체 사용자',lambda:(setattr(self,'record_user',None),self.refresh_records()))
         self.button(376,y,120,30,'선택 수정',lambda:self.edit_record(),enabled=bool(self.record_key or self.page=='relations' and self.record_user))
         if self.page=='memories':
-            self.button(506,y,120,30,'기억 추가',lambda:self.edit_record(True))
-            self.button(636,y,120,30,'검색·종류',lambda:self.form('기억 검색',[('query','검색어',self.record_search),('kind','종류 · 전체 / 약속 / 잠깐의 상태 / 진행 중 목표 / 취향 / 직접 기억',next((k for k,v in KINDS.items() if v==self.record_kind),'전체'))],self.search_records))
+            self.button(506,y,120,30,'기존 발췌 보기' if self.record_kind=='summary' else '기억 추가',self.show_legacy_summaries if self.record_kind=='summary' else lambda:self.edit_record(True))
+            self.button(636,y,120,30,'검색·종류',lambda:self.form('기억·요약 검색',[('query','검색어',self.record_search),('kind','종류 · 전체 / 약속 / 잠깐의 상태 / 진행 중 목표 / 취향 / 직접 기억 / 대화 요약',next((k for k,v in KINDS.items() if v==self.record_kind),'전체'))],self.search_records))
             self.button(766,y,120,30,'보기: '+self.record_status,self.cycle_record_status)
         elif self.page=='reminders':
             self.button(506,y,120,30,self.record_status,lambda:self.cycle_record_status())
             self.button(636,y,120,30,'유예 시간',lambda:self.form('늦어진 알림 처리',[('seconds','재시작 뒤 허용 지연 · 0~86400초',cfg['reminder_grace'])],lambda v:self.set_value('reminder_grace',int(v['seconds']))))
         elif self.page=='relations':
             self.button(506,y,120,30,'호칭 추가·관리',self.member_alias_editor,enabled=bool(self.record_user))
-            self.button(636,y,120,30,'발언 요약 보기',self.show_summaries,enabled=bool(self.record_user))
+            self.button(636,y,120,30,'대화 요약 보기',self.show_summaries,enabled=bool(self.record_user))
         if self.page in ('memories','reminders'):
             self.button(246,y+40,120,30,'선택 삭제' if self.page=='memories' else '예약 취소',self.remove_record,enabled=bool(self.record_key))
         else:self.button(246,y+40,120,30,'별명·시간대',self.server_options)
@@ -215,17 +224,32 @@ class CompanionViews:
             ('plan','시각이 있는 약속 · 지난 뒤 보관할 분 (0~1440)',cfg['memory_plan_grace']//60),
             ('date','날짜만 있는 약속 · 날짜 종료 후 보관할 분 (0~1440)',cfg['memory_date_grace']//60),
             ('state','기간 없는 일시 상태 · 보관할 시간 (1~72)',cfg['memory_state_hours']),
-            ('summaries','동의한 본인 발언 요약 · 켜기 / 끄기','켜기' if cfg['summaries_auto'] else '끄기')],save,'새 기억에 적용돼요. 요약은 별도 본인 동의가 있어야 저장하며 30일 후 만료해요.')
+            ('summaries','참여자 모두 동의한 대화 자동 요약 · 켜기 / 끄기','켜기' if cfg['summaries_auto'] else '끄기')],save,'요약은 종료·휴지 상태에서만 낮은 우선순위로 만들고 새 요청이 오면 중단해요. 30일 후 만료하며 만료 자료는 정리 주기 뒤 목록에서 빠져요.')
 
     def show_summaries(self):
+        self.page='memories';self.record_kind='summary';self.record_key=None;self.refresh_records();self.render()
+
+    def show_digest(self):
+        row=next((r for r in (self.snapshot or {}).get('companion',{}).get('digests',[]) if 'digest:'+r['id']==self.record_key),None)
+        if not row:return
+        tz=self.snapshot['cfg']['guilds'].get(str(self.guild_id),{}).get('timezone','Asia/Seoul')
+        labels={'topic':'주제','question':'질문','answer':'당시 답변','correction':'정정','decision':'결정','plan':'계획','open_question':'미해결','ending':'종료'}
+        fields=[(str(i),labels.get(item['kind'],'요약')+' · 출처 '+item['source'],item['text']) for i,item in enumerate(row['body']['items'])]
+        self.form('대화 요약 · 출처가 있는 압축 기록',fields,lambda v:None,
+                  '수정되지 않는 조회 창이에요. 정정은 실제 대화의 새 요약으로 반영해요. 채널 '+row['channel']+' · '+display_time(row['updated'],tz)+' 갱신 / '+display_time(row['expires'],tz)+' 만료')
+
+    def show_legacy_summaries(self):
         rows=(self.snapshot or {}).get('companion',{}).get('summaries',[])[:4]
         self.form('선택한 사람의 발언 요약 · 로컬 조회',[(str(i),'출처 '+r['source']+' · 채널 '+r['channel'],r['summary']) for i,r in enumerate(rows)] or [('empty','조회 결과','저장된 요약 자료가 없어요')],lambda v:None,'본인 발언만 선별 발췌해 30일 보관해요. 동의는 본인의 /동의에서만 바꿀 수 있어요. 이 창은 읽기용이에요.')
 
     def cycle_record_status(self):
-        values=['전체','사용 중','곧 만료','잠시 끔','확인 필요'] if self.page=='memories' else ['전체','예약 중','실패']
+        values=['전체','사용 중','곧 만료','잠시 끔','확인 필요','만료'] if self.page=='memories' else ['전체','예약 중','실패']
         self.record_status=values[(values.index(self.record_status)+1)%len(values)] if self.record_status in values else values[0];self.render()
 
     def remove_record(self):
+        if self.record_key and self.record_key.startswith('digest:'):
+            key=self.record_key.removeprefix('digest:')
+            self.form('대화 요약 삭제',[('confirm','삭제 라고 입력','')],lambda v:self.record_action('summary_delete',key=key) if v['confirm']=='삭제' else None,'이 요약과 출처 연결을 지워요. 대기 중 자동 요약이 같은 출처로 복원하지 못하게 막아요.');return
         data=(self.snapshot or {}).get('companion',{});table='memories' if self.page=='memories' else 'reminders'
         row=next((r for r in data.get(table,[]) if r.get('memory_id',r.get('reminder_id'))==self.record_key),None)
         if not row:return

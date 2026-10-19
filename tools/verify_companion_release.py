@@ -31,7 +31,7 @@ CALLS=[
 
 async def run(root):
     root.mkdir(parents=True,exist_ok=False);lease=InstanceLease();backend=LocalBackend();transport=Transport()
-    settings=Settings(1,secrets.token_hex(32),root/'settings.json');settings.set(1,'enabled',True);settings.set(1,'daily_limit',1000)
+    settings=Settings(1,secrets.token_hex(32),root/'settings.json');settings.set(1,'enabled',True)
     store=CompanionStore(root/'companion.sqlite3');runtime=Runtime(settings,backend,transport,None,None,ledger_path=root/'ledger.sqlite3',rng=random.Random(2026),companion=store)
     rows=[];benchmark=[]
     atomic_private_json(root/'manifest.json',dict(synthetic=True,real_discord=False,seed=2026,calls=CALLS,

@@ -160,6 +160,17 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
         await asyncio.gather(*list(runtime.tasks.values()))
         self.assertEqual(len(self.http.reactions),1)
 
+    async def test_word_reaction_on_confirmed_previous_own_message_keeps_reply_source(self):
+        self.settings.set(1,'reactions',True);self.client.runtime.direct_cooldown=0
+        self.settings.set(1,'web_search',True)
+        # This ordinary visible message must have reached the local context first.
+        first=discord.utils.time_snowflake(datetime.now(timezone.utc));await self.client.on_message(self.message(mid=first,content='<@999> 지금 한 판 이겼어'))
+        await asyncio.gather(*list(self.client.runtime.tasks.values()))
+        await asyncio.sleep(.01)
+        second=discord.utils.time_snowflake(datetime.now(timezone.utc));await self.client.on_message(self.message(mid=second,content='<@999> 내가 방금 쓴 글에 하트 달아줘'))
+        await asyncio.gather(*list(self.client.runtime.tasks.values()))
+        self.assertEqual(self.http.reactions,[(3,first,'❤️')]);self.assertEqual(len(self.http.sends),1)
+
     async def test_gateway_resources_close_even_if_model_shutdown_fails(self):
         original=self.client.runtime.close
         await original()

@@ -44,7 +44,7 @@ class StoreAudit(unittest.TestCase):
         with self.store.db() as db:db.execute('DROP TABLE memory_flows');db.execute('DROP TABLE subject_consents');db.execute('PRAGMA user_version=1')
         migrated=CompanionStore(self.path)
         self.assertIsNone(migrated.error);self.assertEqual(migrated.memories(2,4)[0]['memory_id'],key)
-        with migrated.db() as db:self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],5)
+        with migrated.db() as db:self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],6)
         plan=migrated.add_memory(2,4,3,'나는 내일 오후 3시에 모임 약속이 있어','plan',conversation_id='one')
         migrated.delete_memory(2,plan)
         with migrated.db() as db:self.assertEqual(db.execute('SELECT COUNT(*) FROM memory_flows').fetchone()[0],0)

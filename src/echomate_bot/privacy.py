@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS conversation_summaries(guild TEXT,user TEXT,channel T
 
 class PrivacyStore:
     def guild_ids(self):
-        with self.db() as db:return [int(r[0]) for r in db.execute('SELECT guild FROM relationships UNION SELECT guild FROM memories UNION SELECT guild FROM reminders UNION SELECT guild FROM member_aliases UNION SELECT guild FROM consent_choices UNION SELECT guild FROM conversation_summaries')]
+        with self.db() as db:return [int(r[0]) for r in db.execute('SELECT guild FROM relationships UNION SELECT guild FROM memories UNION SELECT guild FROM reminders UNION SELECT guild FROM member_aliases UNION SELECT guild FROM consent_choices UNION SELECT guild FROM conversation_summaries UNION SELECT guild FROM dialogue_summaries')]
     def consent_users(self,guild):
         with self.db() as db:return [r[0] for r in db.execute('SELECT user FROM consent_choices WHERE guild=?',(str(guild),))]
     def consenting_users(self,guild,category):
@@ -41,18 +41,26 @@ class PrivacyStore:
 
     def data_counts(self,guild,user):
         with self.db() as db:
-            return {key:db.execute('SELECT COUNT(*) FROM '+table+' WHERE guild=? AND user=?',(str(guild),str(user))).fetchone()[0]
+            result={key:db.execute('SELECT COUNT(*) FROM '+table+' WHERE guild=? AND user=?',(str(guild),str(user))).fetchone()[0]
                     for key,table in (('relationships','relationships'),('memory','memories'),('summaries','conversation_summaries'))}
+            result['summaries']+=db.execute('SELECT COUNT(*) FROM summary_participants WHERE guild=? AND user=?',(str(guild),str(user))).fetchone()[0]
+            return result
 
     def delete_personal(self,guild,actor,category):
         if category not in CATEGORIES:raise ValueError('Invalid category')
-        self.set_consent(guild,actor,category,False)
+        positive_id(guild);positive_id(actor)
         with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('INSERT INTO consent_choices VALUES(?,?,?,?,1,?) ON CONFLICT(guild,user,category) DO UPDATE SET enabled=0,version=consent_choices.version+1,at=excluded.at',(str(guild),str(actor),category,0,self.clock()))
+            if category=='summaries':
+                db.execute('INSERT OR IGNORE INTO summary_tombstones SELECT s.guild,s.source FROM summary_sources s JOIN summary_participants p ON s.id=p.id WHERE p.guild=? AND p.user=?',(str(guild),str(actor)))
+                db.execute('INSERT OR IGNORE INTO summary_tombstones SELECT guild,source FROM conversation_summaries WHERE guild=? AND user=?',(str(guild),str(actor)))
+                db.execute('DELETE FROM dialogue_summaries WHERE id IN (SELECT id FROM summary_participants WHERE guild=? AND user=?)',(str(guild),str(actor)))
             tables={'relationships':('relationships','relationship_events','member_aliases','alias_evidence'),'memory':('memories',),'summaries':('conversation_summaries',)}[category]
             for table in tables:db.execute('DELETE FROM '+table+' WHERE guild=? AND user=?',(str(guild),str(actor)))
             if category=='relationships':db.execute('DELETE FROM alias_evidence WHERE guild=? AND witness=?',(str(guild),str(actor)))
             # Prevent pending work from recreating deleted personal records.
-            db.execute('INSERT INTO memory_cutoffs VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(str(guild),str(actor),self.clock()))
+            if category=='memory':db.execute('INSERT INTO memory_cutoffs VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(str(guild),str(actor),self.clock()))
 
     def save_summary(self,event,text,version):
         from .companion_store import safe_subject_text
@@ -66,6 +74,7 @@ class PrivacyStore:
             cutoff=db.execute("SELECT MAX(at) FROM memory_cutoffs WHERE guild=? AND user IN (?, '*')",(str(event.guild),str(event.author))).fetchone()[0]
             if not r or r[0]!=version or event.timestamp.timestamp()<r[1] or cutoff and event.timestamp.timestamp()<=cutoff:return False
             if db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(str(event.guild),str(event.id))).fetchone():return False
+            if db.execute('SELECT 1 FROM summary_tombstones WHERE guild=? AND source=?',(str(event.guild),str(event.id))).fetchone():return False
             if db.execute('SELECT COUNT(*) FROM conversation_summaries').fetchone()[0]>=5000:return False
             db.execute('INSERT OR IGNORE INTO conversation_summaries VALUES(?,?,?,?,?,?,?,?,?)',(str(event.guild),str(event.author),str(event.channel),str(event.id),event.conversation_id or '',excerpt,json.dumps([str(event.author)]),self.clock(),self.clock()+30*86400))
         return True

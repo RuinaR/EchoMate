@@ -18,6 +18,8 @@ def contains_code(text):
     if re.search(strong,text):return True
     other_languages=r'(?im)^\s*(?:fn\s+\w+\s*[(<]|(?:int|void|double|float|bool|auto)\s+\w+\s*\([^\n]*\)\s*\{|(?:public|private|protected)\s+(?:static\s+|final\s+|async\s+)*(?:class|void|int|string|Task)\s+|SELECT\b[^\n]*\bFROM\s+\w+|INSERT\s+INTO\s+\w+|UPDATE\s+\w+\s+SET\s+|DELETE\s+FROM\s+\w+|CREATE\s+TABLE\s+\w+|(?:echo|printf)\s+[\"\x27])'
     if re.search(other_languages,text):return True
+    if re.search(r'(?:\bprint|console\.log|(?:System\.)?Console\.Write(?:Line)?|System\.out\.print(?:ln)?)\s*\(\s*[\"\x27]|\bdef\s+\w+\s*\(|\b(?:const|let|var)\s+\w+\s*=',text):return True
+    if re.search(r'(?m)^\s*(?:(?:System\.)?Console\.Write(?:Line)?|System\.out\.print(?:ln)?)\s*\(|^\s*(?:puts|require)\s+[\"\x27]|^\s*(?:sudo\s+)?(?:bash|powershell|curl|wget)\s+[-\w]',text):return True
     # Unfenced multi-line assignments/calls are code too; prose API names remain.
     lines=text.splitlines()
     return sum(bool(re.fullmatch(r'\s*(?:[\w.]+\s*=.+|[\w.]+\([^\n]*\);?|[{};])\s*',line)) for line in lines)>=2

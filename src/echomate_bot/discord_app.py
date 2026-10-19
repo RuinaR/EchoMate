@@ -163,8 +163,13 @@ class DiscordTransport:
         if action.kind in {Kind.REACTION,Kind.TEXT_REACTION}:
             if not await fresh():raise ValueError("Stale reaction")
             if action.target:
-                if action.target not in {event.id,event.response_to,event.reply_to}:raise ValueError('Unverified reaction target')
+                if action.target not in {event.id,event.response_to,event.reply_to,event.reaction_target}:raise ValueError('Unverified reaction target')
                 if action.target!=current.id:current=await channel.fetch_message(action.target)
+                if event.reaction_target_hash:
+                    import hashlib
+                    if hashlib.sha256(current.content.encode()).hexdigest()!=event.reaction_target_hash:raise ValueError('Reaction target changed')
+            if not await fresh():raise ValueError('Stale reaction target')
+            if any(r.me and str(r.emoji)==action.asset for r in current.reactions):return sent.id if sent else None
             await current.add_reaction(action.asset)
         return sent.id if sent else None
 

@@ -44,6 +44,17 @@ class BackgroundProcesses(unittest.TestCase):
         with patch.object(torch.cuda,'is_available',return_value=True),patch('subprocess.check_output',side_effect=subprocess.TimeoutExpired('private-detail',5)):
             with self.assertRaisesRegex(RuntimeError,'^GPU health query unavailable$'):LocalBackend.health()
 
+    def test_only_reclaimable_cache_is_released_without_weakening_safety(self):
+        import torch
+        from echomate_bot.processes import ResourceLimitError
+        with patch.object(torch.cuda,'is_available',return_value=True),patch.object(torch.cuda,'memory_reserved',return_value=2048*1048576),patch.object(torch.cuda,'memory_allocated',return_value=1024*1048576),patch.object(torch.cuda,'empty_cache') as release:
+            with patch('echomate_bot.inference.check_resources',side_effect=[ResourceLimitError('GPU resource safety stop','vram'),dict(free_vram_mib=1500)]):
+                self.assertTrue(LocalBackend.health()['allocator_cache_reclaimed']);release.assert_called_once()
+            release.reset_mock()
+            with patch('echomate_bot.inference.check_resources',side_effect=ResourceLimitError('RAM resource safety stop','ram')):
+                with self.assertRaises(RuntimeError):LocalBackend.health()
+                release.assert_not_called()
+
     def test_windowless_entry_does_not_invoke_cmd_or_expose_secrets(self):
         source=Path('EchoMate.vbs').read_text(encoding='ascii')
         self.assertIn('pythonw.exe',source)

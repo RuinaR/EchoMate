@@ -1,5 +1,15 @@
 # 작업 로그
 
+## 2026-10-19 — 후속 릴리즈 안정화·무상한·공개 검색·다중 턴 요약
+
+기준0ddb4df/main과 원격 일치/초기 clean을 확인했다. 최신 사용자 지시로 AGENTS의 과거 일일 상한 요구보다 무상한을 우선하고 Ledger/설정/Runtime/UI/도구/테스트에서 차단 조건을 제거했다. 이전 운영 기록은 지우지 않았다.
+
+주요 변경 파일: ledger/settings/runtime/telemetry, safe_web/web_research/inference/structured, summary_store/summarization/companion_store/privacy/consent_ui, reaction_requests/discord_app/output_policy/processes, desktop/desktop_ui/companion_ui. 테스트는 test_followup_release 및 기존 개인정보/SDK/병렬/UI/자원 회귀를 갱신했다. 실제 GPU 재현 도구 verify_followup_gpu/verify_followup_runtime_gpu를 추가했다. 마지막 감사에서 자동 요약의 동일 버전 반복·봇 OFF 생성·백그라운드 자원 실패 안전 정지 누락을 수정했고 해당14검사 OK8.673초였다. 구체 원인·실패·비교 수치와 전체 수정 범위는 [후속 QA](FOLLOWUP-RELEASE-QA.md)에 기록한다.
+
+명령: PYTHONPATH=src;tests 후 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`. 기준436 OK, 최종452 OK46.601초. 신규 GPU 독립18/18·버스트18/18·기존 실패12/12·저장 요약 조회6/6, 모델 전환/실패 복귀/알림 병행 확인. 숨긴 Tk3스케일/임시 SQLite/HTTP·Discord SDK mock으로 검사했다. 공개 위키 조회2.703초 성공, 뉴스2회 시간 초과를 숨기지 않는다. 초기 내부 JSON 파싱/분류/주제어 실패와 첫 독립 backend 실패도 비공개 로그로 보존했다.
+
+운영 설정/bootstrap/companion/sent4파일을 해시로 보존하고 모델·어댑터·서명 키·개인 자료를 수정하지 않았다. 실제 Discord 접속/명령 동기화/송신·사용자 컴퓨터 조작 없음. 전체 실사용 NOT VERIFIED이며 새 가중치 선정/학습은 하지 않았다. 최종 전체 검사·공개 staged 검토·커밋은 후속 QA 마지막 절에 기록한다.
+
 최신 구현·검증 커밋: **99761cc**. 후속 인수인계 문서 커밋은 `git log -1 --oneline`로 확인한다.
 
 ## 2026-10-19 — 단일 개인정보 동의·Windows 관리 통합·릴리즈 후보 감사

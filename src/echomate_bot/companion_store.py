@@ -15,6 +15,7 @@ from .context import terms
 from .temporal import parse_when
 from .member_aliases import MemberAliases,SCHEMA as ALIAS_SCHEMA
 from .privacy import PrivacyStore,SCHEMA as PRIVACY_SCHEMA
+from .summary_store import SummaryStore,SCHEMA as SUMMARY_SCHEMA
 
 SENSITIVE=re.compile(r'비밀번호|패스워드|토큰|인증번호|주민번호|계좌|주소|전화|연락처|이메일|생년|성생활|성관계|섹스|병원|진단|처방|질병|질환|복용|약\s*먹|비밀|DM|디엠|https?://|\b\d{3}[- ]\d{3,4}[- ]\d{4}\b',re.I)
 
@@ -24,14 +25,14 @@ def safe_subject_text(text):
             and not re.search(r'<@|@everyone|@here|```|["“”]',text))
 
 
-class CompanionStore(MemberAliases,PrivacyStore):
+class CompanionStore(MemberAliases,PrivacyStore,SummaryStore):
     def __init__(self,path,clock=time.time):
         self.path=private_path(path);self.clock=clock;self.lock=threading.RLock();self.error=None
         try:
             self.path.parent.mkdir(parents=True,exist_ok=True)
             with self.db() as db:
                 version=db.execute('PRAGMA user_version').fetchone()[0]
-                if version>5:raise ValueError('Newer companion schema')
+                if version>6:raise ValueError('Newer companion schema')
                 db.executescript('''
 BEGIN IMMEDIATE;
 CREATE TABLE IF NOT EXISTS relationships(guild TEXT,user TEXT,affinity REAL DEFAULT 50,interactions INTEGER DEFAULT 0,last_at REAL DEFAULT 0,day TEXT,delta REAL DEFAULT 0,PRIMARY KEY(guild,user));
@@ -48,10 +49,10 @@ CREATE INDEX IF NOT EXISTS reminders_due ON reminders(status,due_at);
 CREATE TABLE IF NOT EXISTS memory_flows(memory_id TEXT PRIMARY KEY REFERENCES memories(memory_id) ON DELETE CASCADE,conversation_id TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS subject_consents(guild TEXT,user TEXT,at REAL,PRIMARY KEY(guild,user));
 '''+ALIAS_SCHEMA+'''
-'''+PRIVACY_SCHEMA+'''
+'''+PRIVACY_SCHEMA+SUMMARY_SCHEMA+'''
 INSERT OR IGNORE INTO consent_choices SELECT s.guild,s.user,'relationships',1,1,s.at FROM subject_consents s WHERE NOT EXISTS(SELECT 1 FROM optouts o WHERE o.guild=s.guild AND o.user=s.user);
 INSERT OR IGNORE INTO consent_choices SELECT s.guild,s.user,'memory',1,1,s.at FROM subject_consents s WHERE NOT EXISTS(SELECT 1 FROM optouts o WHERE o.guild=s.guild AND o.user=s.user) AND NOT EXISTS(SELECT 1 FROM memory_optouts o WHERE o.guild=s.guild AND o.user=s.user);
-PRAGMA user_version=5;
+PRAGMA user_version=6;
 COMMIT;
 ''')
             self.cleanup()
@@ -172,8 +173,9 @@ COMMIT;
             return row['memory_id']
         return self.add_memory(event.guild,event.author,event.channel,text[:300],kind,source=event.id,observed=event.timestamp.timestamp(),tz=tz,policy=policy,conversation_id=getattr(event,'conversation_id',None),require_consent=True)
 
-    def memories(self,guild,user=None,channel=None,query='',kind=None,*,conversation_id=None,allow_user_archive=False):
-        now=self.clock();sql='SELECT * FROM memories WHERE guild=? AND (expires_at IS NULL OR expires_at>?)';args=[str(guild),now]
+    def memories(self,guild,user=None,channel=None,query='',kind=None,*,conversation_id=None,allow_user_archive=False,include_expired=False):
+        now=self.clock();sql='SELECT * FROM memories WHERE guild=?';args=[str(guild)]
+        if not include_expired:sql+=' AND (expires_at IS NULL OR expires_at>?)';args.append(now)
         if user is not None:sql+=' AND user=?';args.append(str(user))
         if channel is not None:sql+=" AND channel=? AND status='active' AND (kind!='plan' OR event_end_at>?) AND (kind!='goal' OR last_confirmed_at>?)";args.extend((str(channel),now,now-90*86400))
         if kind:sql+=' AND kind=?';args.append(kind)
@@ -188,8 +190,10 @@ COMMIT;
 
     def delete_source(self,guild,source,*,known=True):
         with self.db() as db:
+            if db.execute('SELECT 1 FROM summary_sources WHERE guild=? AND source=?',(str(guild),str(source))).fetchone():known=True
             if not known and not db.execute('SELECT 1 FROM memories WHERE guild=? AND source=? UNION SELECT 1 FROM reminders WHERE guild=? AND source=? UNION SELECT 1 FROM alias_evidence WHERE guild=? AND source=? UNION SELECT 1 FROM conversation_summaries WHERE guild=? AND source=?',(str(guild),str(source))*4).fetchone():return
             db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(guild),str(source)))
+            db.execute('DELETE FROM dialogue_summaries WHERE id IN (SELECT id FROM summary_sources WHERE guild=? AND source=?)',(str(guild),str(source)))
             db.execute('DELETE FROM memories WHERE guild=? AND source=?',(str(guild),str(source)))
             db.execute('DELETE FROM alias_evidence WHERE guild=? AND source=?',(str(guild),str(source)))
             db.execute('DELETE FROM conversation_summaries WHERE guild=? AND source=?',(str(guild),str(source)))
@@ -216,6 +220,9 @@ COMMIT;
         with self.db() as db:
             subjects=[str(user)] if user is not None else [r[0] for r in db.execute('SELECT user FROM memories WHERE guild=? UNION SELECT user FROM relationships WHERE guild=? UNION SELECT requester FROM reminders WHERE guild=? UNION SELECT user FROM subject_consents WHERE guild=? UNION SELECT user FROM member_aliases WHERE guild=? UNION SELECT user FROM consent_choices WHERE guild=? UNION SELECT user FROM conversation_summaries WHERE guild=?',(g,g,g,g,g,g,g))]
             for u in subjects:
+                db.execute('INSERT OR IGNORE INTO summary_tombstones SELECT s.guild,s.source FROM summary_sources s JOIN summary_participants p ON s.id=p.id WHERE p.guild=? AND p.user=?',(g,u))
+                db.execute('INSERT OR IGNORE INTO summary_tombstones SELECT guild,source FROM conversation_summaries WHERE guild=? AND user=?',(g,u))
+                db.execute('DELETE FROM dialogue_summaries WHERE id IN (SELECT id FROM summary_participants WHERE guild=? AND user=?)',(g,u))
                 db.execute('INSERT OR IGNORE INTO optouts VALUES(?,?)',(g,u))
                 db.execute('INSERT INTO memory_cutoffs VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(g,u,self.clock()))
                 for table in ('memories','relationships','relationship_events','member_aliases','alias_evidence'):db.execute(f'DELETE FROM {table} WHERE guild=? AND user=?',(g,u))
@@ -332,6 +339,7 @@ COMMIT;
         now=self.clock()
         with self.db() as db:
             db.execute('DELETE FROM conversation_summaries WHERE expires<=?',(now,))
+            db.execute('DELETE FROM dialogue_summaries WHERE expires<=?',(now,))
             db.execute('DELETE FROM relationship_events WHERE at<?',(now-30*86400,))
             db.execute('DELETE FROM alias_evidence WHERE at<?',(now-90*86400,))
             db.execute("DELETE FROM member_aliases WHERE status!='confirmed' AND updated<?",(now-90*86400,))

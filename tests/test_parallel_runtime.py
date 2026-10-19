@@ -142,7 +142,7 @@ class ParallelFlows(unittest.IsolatedAsyncioTestCase):
         await self.start_pair();self.runtime.pause_gateway()
         self.backend.wait.set();await self.settle();self.assertFalse(self.transport.sent)
         self.assertEqual(len(self.runtime.deferred_events),2)
-        self.assertTrue(self.runtime.ledger.reserve(self.runtime.deferred_events[3][0],100,0))
+        self.assertTrue(self.runtime.ledger.reserve(self.runtime.deferred_events[3][0],0))
         await self.runtime.resume_gateway();await self.settle()
         self.assertEqual([e.id for e,_ in self.transport.sent],[11])
         self.assertTrue(self.runtime.states)

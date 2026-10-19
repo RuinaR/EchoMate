@@ -62,12 +62,12 @@ class OfflineRecords(unittest.IsolatedAsyncioTestCase):
                     await asyncio.sleep(.02)
                 login.assert_not_called();self.assertIsNotNone(c.settings);self.assertTrue(c.phase.startswith('정지'))
             finally:task.cancel();await asyncio.gather(task,return_exceptions=True)
-    async def test_budget_is_read_only_visible_offline_and_command_approval_is_deferred(self):
-        e=Event(100,2,3,4,'합성',datetime.now(timezone.utc));ledger=Ledger(self.root/'sent.sqlite3');ledger.reserve(e,100,0);ledger.completed(e,'sent')
-        self.c._publish();snapshot=self.c.updates.get_nowait();self.assertEqual(snapshot['budget']['used'],1)
+    async def test_statistics_are_read_only_visible_offline_and_command_approval_is_deferred(self):
+        e=Event(100,2,3,4,'합성',datetime.now(timezone.utc));ledger=Ledger(self.root/'sent.sqlite3');ledger.reserve(e,0);ledger.completed(e,'sent')
+        self.c._publish();snapshot=self.c.updates.get_nowait();self.assertEqual(snapshot['statistics']['responses_today'],1)
         with patch('discord.Client.login',side_effect=AssertionError('Network forbidden')):
-            await self.c.command('settings',values=dict(command_sync_pending=True,daily_limit=200))
-        self.assertTrue(self.c.settings.get()['command_sync_pending']);self.assertEqual(ledger.budget(200)['used'],1)
+            await self.c.command('settings',values=dict(command_sync_pending=True))
+        self.assertTrue(self.c.settings.get()['command_sync_pending']);self.assertEqual(ledger.statistics()['successful'],1)
 
 class ReleaseTk(unittest.TestCase):
     def test_status_selection_scroll_and_output_controls_all_dpi(self):
@@ -85,11 +85,16 @@ class ReleaseTk(unittest.TestCase):
                 text=' '.join(app.canvas.itemcget(x,'text') for x in app.canvas.find_all() if app.canvas.type(x)=='text')
                 self.assertNotIn('스티커',text)
                 app.click(SimpleNamespace(x=260,y=490));self.assertEqual(controller.submit.call_args.kwargs['values'],dict(web_search=True))
-                app.form=Mock();app.edit_budget();app.form.call_args.args[2](dict(limit='250'))
-                self.assertEqual(controller.submit.call_args.kwargs['values'],dict(daily_limit=250))
+                app.form=Mock()
                 app.approve_commands();app.form.call_args.args[2](dict(confirm='동의로 교체'))
                 self.assertEqual(controller.submit.call_args.kwargs['values'],dict(command_sync_pending=True))
                 self.assertTrue(all(y+height<=740 or root.winfo_height()>740 for x,y,width,height,cb in app.hits))
+                digest=dict(id='digest-test',channel='3',body=dict(items=[dict(kind='correction',text='금요일 모임으로 변경했다',source='111')]),updated=1000,expires=9999999999,usable=True)
+                app.page='memories';app.record_kind='summary';app.record_user='4';app.snapshot['companion']=dict(guild=2,user='4',people=[dict(user='4',consent=dict(summaries=True),affinity=50,interactions=0,last_at=0)],digests=[digest],memories=[])
+                app.render();root.update_idletasks();self.assertEqual(app.record_list.items[0]['id'],'digest:digest-test')
+                app.record_key='digest:digest-test';app.form=Mock();app.show_digest();self.assertIn('출처',app.form.call_args.args[1][0][1])
+                app.remove_record();app.form.call_args.args[2](dict(confirm='삭제'))
+                self.assertEqual(controller.submit.call_args.kwargs['action'],'summary_delete');self.assertEqual(controller.submit.call_args.kwargs['key'],'digest-test')
                 entries=[dict(id=str(i),label=str(i),hint='긴 설명 '*20) for i in range(30)]
                 app.job_list.set_items(entries);app.job_list.offset=10
                 app.job_list.set_items([dict(id='new',label='new',hint=''),*entries]);self.assertEqual(app.job_list.items[app.job_list.offset]['id'],'10')

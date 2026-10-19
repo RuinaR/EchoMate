@@ -22,7 +22,7 @@ class ConsentStorage(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory(dir='local_data');self.path=Path(self.temp.name)/'private.sqlite3';self.store=CompanionStore(self.path,clock=lambda:1000)
     def tearDown(self):self.temp.cleanup()
     def test_unfenced_source_is_blocked_but_natural_language_and_api_names_are_not(self):
-        for text in ('fn main() { println!("hi"); }','SELECT name FROM users;','int main() { return 0; }','echo "hello"'):
+        for text in ('fn main() { println!("hi"); }','SELECT name FROM users;','int main() { return 0; }','echo "hello"','이렇게 쓰면 돼: print("hello")','예시는 Console.WriteLine("hello"); 로 해.'):
             self.assertTrue(contains_code(text))
         for text in ('좋아~~~ 준비됐어.','SELECT는 자료를 조회할 때 쓰는 SQL 명령이야.','fn 키워드는 함수를 선언할 때 쓰여.','discord.Client와 파일명 main.py를 확인해 봐.'):
             self.assertFalse(contains_code(text))
@@ -57,6 +57,8 @@ class ConsentStorage(unittest.TestCase):
         self.store.set_consent(2,4,'summaries',True);e=self.event();v=self.store.consent_version(2,4,'summaries');self.store.save_summary(e,e.content,v)
         self.store.delete_personal(2,4,'summaries');self.assertFalse(self.store.summaries(2,4))
         self.assertFalse(self.store.save_summary(e,e.content,v))
+        self.store.set_consent(2,4,'summaries',True)
+        self.assertFalse(self.store.save_summary(e,e.content,self.store.consent_version(2,4,'summaries')))
     def test_withdrawal_between_extract_and_write_blocks_collection(self):
         self.store.set_consent(2,4,'memory',True);original=self.store.add_memory
         def race(*args,**kwargs):
@@ -79,15 +81,15 @@ class RuntimeRelease(unittest.IsolatedAsyncioTestCase):
     asyncTearDown=base.BotIntegration.asyncTearDown
     event=base.BotIntegration.event
     settle=base.BotIntegration.settle
-    async def test_daily_limit_detected_before_gpu_and_owner_change_resumes_without_reset(self):
-        self.runtime.direct_cooldown=0;self.settings.set(1,'daily_limit',1)
-        await self.runtime.ingest(self.event());await self.settle();calls=len(self.backend.calls)
-        await self.runtime.ingest(self.event(id=11,content='<@999> 다른 질문'));await self.settle()
-        self.assertEqual(len(self.backend.calls),calls);self.assertEqual(self.runtime.diagnostics[-1]['code'],'daily_limit_reached')
-        self.assertFalse(self.runtime.stopped);self.assertEqual(self.runtime.ledger.budget(1)['remaining'],0)
-        self.settings.set(1,'daily_limit',2)
-        await self.runtime.ingest(self.event(id=12,content='<@999> 다시 질문'));await self.settle()
-        self.assertEqual(len(self.transport.sent),2);self.assertEqual(self.runtime.ledger.budget(2)['used'],2)
+    async def test_daily_count_never_blocks_new_requests(self):
+        self.runtime.direct_cooldown=0
+        with self.runtime.ledger.db() as db:
+            now=__import__('time').time()
+            db.executemany('INSERT INTO sent VALUES(?,?,?,?,?,?)',[(str(10000+i),'3',datetime.now(timezone.utc).date().isoformat(),now,'sent','TEXT') for i in range(1001)])
+        for i in range(3):
+            await self.runtime.ingest(self.event(id=11+i,content=f'<@999> 서로 다른 질문 {i}'));await self.settle()
+        self.assertEqual(len(self.transport.sent),3);self.assertFalse(self.runtime.stopped)
+        self.assertEqual(self.runtime.ledger.statistics()['successful'],1004)
     async def test_relation_updates_only_after_subject_choice_and_stops_on_withdrawal(self):
         self.runtime.direct_cooldown=0;store=CompanionStore(self.root/'private.sqlite3');self.runtime.companion=store
         await self.runtime.ingest(self.event());await self.settle();self.assertFalse(store.users(2))
