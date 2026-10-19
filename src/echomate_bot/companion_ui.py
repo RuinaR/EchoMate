@@ -2,6 +2,7 @@
 import time
 import tkinter as tk
 from .temporal import display_time
+from .ui_controls import range_field,choice_field
 
 PAGES={'relations':'사람과 관계','memories':'기억 관리','reminders':'예약 알림'}
 KINDS={'전체':None,'약속':'plan','잠깐의 상태':'state','진행 중 목표':'goal','취향':'preference','직접 기억':'explicit','대화 요약':'summary'}
@@ -43,10 +44,11 @@ class CompanionViews:
             ('channel','호칭을 사용할 허용 채널 / 스레드 ID',channel),
             ('alias','호칭 · 변경하려면 이전 호칭을 삭제한 뒤 새로 추가',row.get('alias','')),
             ('status','처리 · 확정 / 후보 / 삭제','확정')],save,
-            '이 채널에서만 사용해요. 후보는 반복되어도 자동 확정하지 않아요. 같은 호칭을 가진 사람이 여럿이면 보류해요. 기억·알림 대상 권한은 바뀌지 않아요.')
+            '이 채널에서만 사용해요. 후보는 반복되어도 자동 확정하지 않아요. 같은 호칭을 가진 사람이 여럿이면 보류해요. 기억·알림 대상 권한은 바뀌지 않아요.',controls={'status':choice_field(['확정','후보','삭제'])})
 
-    def form(self,title,fields,submit,help_text='',read_only=False,guard_context=False):
+    def form(self,title,fields,submit,help_text='',read_only=False,guard_context=False,controls=None):
         from .desktop_ui import PANEL,CARD,FG,MUTED,ACCENT,BG,rounded
+        from .ui_controls import RangeControl,SegmentControl,CanvasFeedback
         from tkinter import font as tkfont
         dialog=tk.Toplevel(self.root);dialog.title(title);dialog.configure(bg=PANEL);dialog.transient(self.root)
         # A modal can outlive an async refresh or a programmatic selection
@@ -60,20 +62,33 @@ class CompanionViews:
         dialog._form_fonts=fonts
         heading=canvas.create_text(22,18,text=title,anchor='nw',fill=FG,font=fonts[0],width=535)
         y=canvas.bbox(heading)[3]+18;input_height=max(28,fonts[2].metrics('linespace')+8)
-        values={};entries=[]
+        values={};entries=[];controls=controls or {};typed={}
+        dialog._form_values=values;dialog._form_controls=typed
         for key,label,value in fields:
             label_item=canvas.create_text(22,y,text=label,anchor='nw',fill=MUTED,font=fonts[1],width=535)
             label_box=canvas.bbox(label_item);entry_y=(label_box[3] if label_box else y+fonts[1].metrics('linespace'))+6
             var=tk.StringVar(dialog,value=str(value));values[key]=var
-            entry=tk.Entry(canvas,textvariable=var,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=fonts[2],readonlybackground=CARD)
-            if key=='token':entry.configure(show='●')
-            if read_only:entry.configure(state='readonly')
-            canvas.create_window(22,entry_y,anchor='nw',window=entry,width=535,height=input_height);entries.append(entry)
-            def reveal(event,top=entry_y):
+            spec=controls.get(key,{}) if not read_only else {}
+            if spec.get('kind')=='range':
+                entry=RangeControl(canvas,var,width=535,**{k:v for k,v in spec.items() if k not in ('kind','help')});typed[key]=entry
+            elif spec.get('kind')=='choice':
+                entry=SegmentControl(canvas,var,spec['choices'],width=535);typed[key]=entry
+            else:
+                entry=tk.Entry(canvas,textvariable=var,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=fonts[2],readonlybackground=CARD,
+                               highlightthickness=1,highlightbackground='#344259',highlightcolor=ACCENT)
+                if key=='token':entry.configure(show='●')
+                if read_only:entry.configure(state='readonly')
+            field_height=entry.winfo_reqheight() if key in typed else input_height
+            canvas.create_window(22,entry_y,anchor='nw',window=entry,width=535,height=field_height);entries.append(entry)
+            def reveal(event,top=entry_y,field_height=field_height):
                 current=canvas.canvasy(0);visible=max(1,canvas.winfo_height())
-                if top<current+12 or top+input_height>current+visible-12:canvas.yview_moveto(max(0,(top-20)/height));thumb()
-            entry.bind('<FocusIn>',reveal)
-            y=entry_y+input_height+14
+                if top<current+12 or top+field_height>current+visible-12:canvas.yview_moveto(max(0,(top-20)/height));thumb()
+            entry.bind('<FocusIn>',reveal,add='+')
+            y=entry_y+field_height+10
+            if spec.get('help'):
+                description=canvas.create_text(22,y,text=spec['help'],anchor='nw',fill=MUTED,font=fonts[1],width=535)
+                y=canvas.bbox(description)[3]+6
+            y+=4
         help_text+=(('\n' if help_text else '')+('Esc로 닫기 · 선택한 텍스트를 복사할 수 있어요' if read_only else 'Ctrl+Enter로 적용 · Esc로 닫기'))
         hint=canvas.create_text(22,y+8,text=help_text,anchor='nw',fill=MUTED,font=fonts[1],width=535)
         hint_box=canvas.bbox(hint);footer=(hint_box[3] if hint_box else y+8+fonts[1].metrics('linespace'))+18
@@ -95,7 +110,11 @@ class CompanionViews:
             except Exception as exc:ok=False;message='처리 결과를 확인하지 못했어요 · '+type(exc).__name__
             pending[0]=None;dialog._pending_save=False
             if ok:dialog.destroy();return
-            for entry in entries:entry.configure(state='normal')
+            for entry in entries:
+                if hasattr(entry,'set_enabled'):entry.set_enabled(True)
+                else:entry.configure(state='normal')
+            feedback.regions[0]['enabled']=True;feedback.regions[-1]['enabled']=True;feedback.paint()
+            canvas.itemconfigure(apply_label,text='적용')
             update_hint('적용하지 못했어요 · '+(message or '설정과 저장소 상태를 확인해 주세요')+'\n입력은 유지했어요. 수정한 뒤 다시 적용하거나 닫아 주세요.')
         def close():
             if not dialog._pending_save:dialog.destroy()
@@ -105,7 +124,9 @@ class CompanionViews:
             if original_context is not None and context()!=original_context:
                 update_hint('선택한 서버·사람·기록이 바뀌었어요. 이 창을 닫고 다시 열어 주세요.');return
             before=getattr(self.controller,'last_submission',None)
-            try:result=submit({k:v.get().strip() for k,v in values.items()})
+            try:
+                for control in typed.values():control.validate()
+                result=submit({k:v.get().strip() for k,v in values.items()})
             except (ValueError,KeyError):update_hint('입력 형식과 선택값을 다시 확인해 주세요.');return
             from concurrent.futures import Future
             from asyncio import Future as AsyncFuture
@@ -113,21 +134,30 @@ class CompanionViews:
             future=result if isinstance(result,(Future,AsyncFuture)) else after if after is not before and isinstance(after,(Future,AsyncFuture)) else None
             if future is not None:
                 pending[0]=future;dialog._pending_save=True
-                for entry in entries:entry.configure(state='disabled')
+                for entry in entries:
+                    if hasattr(entry,'set_enabled'):entry.set_enabled(False)
+                    else:entry.configure(state='disabled')
+                for region in feedback.regions:region['enabled']=False
+                feedback.paint();canvas.itemconfigure(apply_label,text='저장 중…')
                 update_hint('적용 결과를 확인하고 있어요 · 중복 적용을 막기 위해 잠시 기다려 주세요.')
                 completion_timer[0]=dialog.after_idle(finish);return
             dialog.destroy()
         before_footer=set(canvas.find_all())
+        feedback=CanvasFeedback(canvas,keyboard=True);dialog._form_feedback=feedback
         if not read_only:
-            rounded(canvas,352,footer,92,30,CARD,8);canvas.create_text(398,footer+15,text='닫기',fill=FG,font=fonts[2])
-        rounded(canvas,456,footer,100,30,ACCENT,8)
-        canvas.create_text(506,footer+15,text='닫기' if read_only else '적용',fill=BG,font=fonts[2])
+            shape=rounded(canvas,352,footer,92,30,CARD,8);label=canvas.create_text(398,footer+15,text='닫기',fill=FG,font=fonts[2])
+            feedback.add((352,footer,92,30),shape,label,callback=close)
+        shape=rounded(canvas,456,footer,100,30,ACCENT,8)
+        apply_label=canvas.create_text(506,footer+15,text='닫기' if read_only else '적용',fill=BG,font=fonts[2])
+        feedback.add((456,footer,100,30),shape,apply_label,primary=True,danger='삭제' in title or '초기화' in title,callback=save)
         footer_items=set(canvas.find_all())-before_footer
         def update_hint(text):
             nonlocal footer,height,viewport
             canvas.itemconfigure(hint,text=text)
             next_footer=canvas.bbox(hint)[3]+18;delta=next_footer-footer
             for item in footer_items:canvas.move(item,0,delta)
+            for region in feedback.regions:
+                x,top,w,h=region['box'];region['box']=(x,top+delta,w,h)
             footer=next_footer;height=footer+55
             viewport=min(height,max(320,self.root.winfo_screenheight()-140))
             dialog.geometry(f'{width}x{viewport}');canvas.configure(scrollregion=(0,0,width,height));thumb()
@@ -151,11 +181,13 @@ class CompanionViews:
                 if completion_timer[0]:
                     try:dialog.after_cancel(completion_timer[0])
                     except tk.TclError:pass
-                values.clear();entries.clear();dialog._form_fonts.clear()
-        canvas.bind('<Button-1>',click);canvas.bind('<B1-Motion>',drag);canvas.bind('<Configure>',lambda e:thumb())
+                values.clear();entries.clear();typed.clear();feedback.clear();dialog._form_fonts.clear()
+        canvas.bind('<Button-1>',click,add='+');canvas.bind('<B1-Motion>',drag);canvas.bind('<Configure>',lambda e:thumb())
         dialog.protocol('WM_DELETE_WINDOW',close)
         dialog.bind('<MouseWheel>',scroll);dialog.bind('<Escape>',lambda e:close());dialog.bind('<Control-Return>',lambda e:save());dialog.bind('<Destroy>',closed)
-        if entries:entries[0].focus_set();entries[0].select_range(0,'end')
+        if entries:
+            entries[0].focus_set()
+            if isinstance(entries[0],tk.Entry):entries[0].select_range(0,'end')
         return dialog
 
     def server_options(self):
@@ -168,7 +200,7 @@ class CompanionViews:
             ('aliases','추가 별명 · 쉼표로 구분 (최대 8개)',','.join(g.get('aliases',[]))),
             ('timezone','서버 시간대',g.get('timezone','Asia/Seoul')),
             ('partial_names','접미사를 줄인 호출 · 켜기 / 끄기','켜기' if g.get('partial_names',True) else '끄기')],save,
-            '별명도 문맥을 보고 판단해요. 한국은 Asia/Seoul, 세계 표준시는 UTC예요.',guard_context=True)
+            '별명도 문맥을 보고 판단해요. 한국은 Asia/Seoul, 세계 표준시는 UTC예요.',guard_context=True,controls={'partial_names':choice_field(['켜기','끄기'])})
 
     def edit_record(self,add=False):
         if not add and self.record_key and self.record_key.startswith('digest:'):self.show_digest();return
@@ -183,7 +215,7 @@ class CompanionViews:
                 value=float(values['value'])
                 if not 0<=value<=100:raise ValueError()
                 self.record_action('affinity',value=value)
-            self.form('친밀도 조절',[('value','캐릭터 친밀도 · 0~100',person.get('affinity',50))],affinity,'실제 감정이나 사람에 대한 평가가 아니에요. 권한과 안전 정책에는 영향을 주지 않아요.');return
+            self.form('친밀도 조절',[('value','캐릭터 친밀도 · 0~100',person.get('affinity',50))],affinity,'실제 감정이나 사람에 대한 평가가 아니에요. 권한과 안전 정책에는 영향을 주지 않아요.',controls={'value':range_field('캐릭터의 관계 표현에만 반영돼요.',step=.1,anchors=('0 · 낮음','50 · 중간','100 · 높음'))});return
         if page=='memories':
             if add:
                 channels=[*g.get('channels',{}),*g.get('threads',{})]
@@ -194,14 +226,14 @@ class CompanionViews:
                 self.form('기억 직접 추가',[
                     ('subject','당사자 User ID',self.record_user or ''),('channel','출처 채널 / 스레드 ID',next(iter(self.channel_ids),channels[0] if channels else '')),
                     ('type','종류 · 약속 / 잠깐의 상태 / 진행 중 목표 / 취향 / 직접 기억','직접 기억'),('summary','기억할 내용 · 민감정보 제외',''),
-                    ('expires','만료 시각 · YYYY-MM-DD HH:MM (장기 기억은 비움)','')],create,'서버 시간대로 입력해요. 약속은 내용에도 날짜와 시각을 적어 주세요.');return
+                    ('expires','만료 시각 · YYYY-MM-DD HH:MM (장기 기억은 비움)','')],create,'서버 시간대로 입력해요. 약속은 내용에도 날짜와 시각을 적어 주세요.',controls={'type':choice_field(['약속','잠깐의 상태','진행 중 목표','취향','직접 기억'])});return
             if not row:return
             def edit(values):self.record_action('memory_edit',key=row['memory_id'],summary=values['summary'],expires=values['expires'],status={'사용':'active','잠시 끄기':'disabled','확인 필요':'uncertain'}[values['status']])
             self.form('기억 확인·수정',[
                 ('summary','기억 내용 · 약속 본문은 새로 추가해 날짜를 다시 계산',row['summary']),
                 ('expires','만료 시각 · YYYY-MM-DD HH:MM (없으면 비움)',display_time(row['expires_at'],tz) if row['expires_at'] else ''),
                 ('status','상태 · 사용 / 잠시 끄기 / 확인 필요',{'active':'사용','disabled':'잠시 끄기','uncertain':'확인 필요'}[row['status']])],edit,
-                f"출처 메시지 {row['source']} · 채널 {row['channel']}\n저장 {display_time(row['created_at'],tz)} / 확인 {display_time(row['last_confirmed_at'],tz)}")
+                f"출처 메시지 {row['source']} · 채널 {row['channel']}\n저장 {display_time(row['created_at'],tz)} / 확인 {display_time(row['last_confirmed_at'],tz)}",controls={'status':choice_field(['사용','잠시 끄기','확인 필요'])})
         elif row and row['status']=='scheduled':
             self.form('알림 수정',[('due','알림 시각 · YYYY-MM-DD HH:MM',display_time(row['due_at'],tz)),('text','알림 내용 · 민감정보 제외',row['text'])],lambda values:self.record_action('reminder_edit',key=row['reminder_id'],due=values['due'],text=values['text']),'서버 시간대로 입력해요. 이미 발송 중이거나 끝난 알림은 변경하지 않아요.')
 
@@ -269,11 +301,11 @@ class CompanionViews:
         self.button(376,y,120,30,'선택 수정',lambda:self.edit_record(),enabled=bool(self.record_key or self.page=='relations' and self.record_user))
         if self.page=='memories':
             self.button(506,y,120,30,'기존 발췌 보기' if self.record_kind=='summary' else '기억 추가',self.show_legacy_summaries if self.record_kind=='summary' else lambda:self.edit_record(True))
-            self.button(636,y,120,30,'검색·종류',lambda:self.form('기억·요약 검색',[('query','검색어',self.record_search),('kind','종류 · 전체 / 약속 / 잠깐의 상태 / 진행 중 목표 / 취향 / 직접 기억 / 대화 요약',next((k for k,v in KINDS.items() if v==self.record_kind),'전체'))],self.search_records))
+            self.button(636,y,120,30,'검색·종류',lambda:self.form('기억·요약 검색',[('query','검색어',self.record_search),('kind','종류 · 전체 / 약속 / 잠깐의 상태 / 진행 중 목표 / 취향 / 직접 기억 / 대화 요약',next((k for k,v in KINDS.items() if v==self.record_kind),'전체'))],self.search_records,controls={'kind':choice_field(list(KINDS))}))
             self.button(766,y,120,30,'보기: '+self.record_status,self.cycle_record_status)
         elif self.page=='reminders':
             self.button(506,y,120,30,self.record_status,lambda:self.cycle_record_status())
-            self.button(636,y,120,30,'유예 시간',lambda:self.form('늦어진 알림 처리',[('seconds','재시작 뒤 허용 지연 · 0~86400초',cfg['reminder_grace'])],lambda v:self.set_value('reminder_grace',int(v['seconds']))))
+            self.button(636,y,120,30,'유예 시간',lambda:self.form('늦어진 알림 처리',[('seconds','재시작 뒤 허용 지연 · 0~86400초',cfg['reminder_grace'])],lambda v:self.set_value('reminder_grace',int(v['seconds'])),controls={'seconds':range_field('재시작 시 늦어진 알림을 최대 몇 초까지 보낼지 정해요.',maximum=86400,anchors=('0초','12시간','24시간'))}))
         elif self.page=='relations':
             self.button(506,y,120,30,'호칭 추가·관리',self.member_alias_editor,enabled=bool(self.record_user))
             self.button(636,y,120,30,'대화 요약 보기',self.show_summaries,enabled=bool(self.record_user))
@@ -312,7 +344,11 @@ class CompanionViews:
             ('plan','시각이 있는 약속 · 지난 뒤 보관할 분 (0~1440)',cfg['memory_plan_grace']//60),
             ('date','날짜만 있는 약속 · 날짜 종료 후 보관할 분 (0~1440)',cfg['memory_date_grace']//60),
             ('state','기간 없는 일시 상태 · 보관할 시간 (1~72)',cfg['memory_state_hours']),
-            ('summaries','참여자 모두 동의한 대화 자동 요약 · 켜기 / 끄기','켜기' if cfg['summaries_auto'] else '끄기')],save,'요약은 종료·휴지 상태에서만 낮은 우선순위로 만들고 새 요청이 오면 중단해요. 30일 후 만료하며 만료 자료는 정리 주기 뒤 목록에서 빠져요.')
+            ('summaries','참여자 모두 동의한 대화 자동 요약 · 켜기 / 끄기','켜기' if cfg['summaries_auto'] else '끄기')],save,'요약은 종료·휴지 상태에서만 낮은 우선순위로 만들고 새 요청이 오면 중단해요. 30일 후 만료하며 만료 자료는 정리 주기 뒤 목록에서 빠져요.',controls={
+            'plan':range_field('약속 시각이 지난 뒤 추가 보관할 시간이에요.',maximum=1440,anchors=('0분','720분','1440분')),
+            'date':range_field('날짜가 끝난 뒤 추가 보관할 시간이에요.',maximum=1440,anchors=('0분','720분','1440분')),
+            'state':range_field('기간이 없는 잠깐의 상태를 보관해요.',minimum=1,maximum=72,anchors=('1시간','36시간','72시간')),
+            'summaries':choice_field(['켜기','끄기'],'참여자 전원의 동의가 있어야 저장해요.')})
 
     def show_summaries(self):
         self.page='memories';self.record_kind='summary';self.record_key=None;self.refresh_records();self.render()

@@ -6,6 +6,7 @@ from tkinter import font as tkfont
 from .settings import scope
 from .naming import guild_name,validate_name
 from .companion_ui import CompanionViews,PAGES
+from .ui_controls import CanvasFeedback,range_field,choice_field
 
 BG='#0b1018';PANEL='#121b28';CARD='#182333';LINE='#273447'
 FG='#e9eff9';MUTED='#94a4bb';ACCENT='#9b91ff';MINT='#5ed8b8'
@@ -25,11 +26,13 @@ class SelectionList(tk.Canvas):
     """Multi-select list with keyboard navigation and a drawn scroll thumb."""
     def __init__(self,parent,callback,multiple=False):
         super().__init__(parent,bg=PANEL,highlightthickness=0,takefocus=True)
+        self.hover_index=None;self.pressed=False
         self.callback=callback;self.multiple=multiple;self.items=[];self.selected=set();self.offset=0;self.index=0
         self.label_font=tkfont.Font(family='맑은 고딕',size=10)
         self.selected_font=tkfont.Font(family='맑은 고딕',size=10,weight='bold')
         self.hint_font=tkfont.Font(family='맑은 고딕',size=8)
         self.bind('<Configure>',lambda e:self.redraw());self.bind('<Button-1>',self.click)
+        self.bind('<Motion>',self.hover);self.bind('<Leave>',lambda e:self.hover(None));self.bind('<ButtonRelease-1>',self.release)
         self.bind('<B1-Motion>',self.drag)
         self.bind('<MouseWheel>',self.wheel)
         self.bind('<Up>',lambda e:self.move(-1));self.bind('<Down>',lambda e:self.move(1))
@@ -59,8 +62,14 @@ class SelectionList(tk.Canvas):
         super().destroy()
         self.label_font=None
         self.selected_font=None;self.hint_font=None
+    def hover(self,event):
+        index=self.offset+event.y//self.row_height if event is not None and event.x<self.winfo_width()-12 else None
+        index=index if index is not None and 0<=index<len(self.items) else None
+        if self.hover_index!=index:self.hover_index=index;self.redraw()
+    def release(self,event):self.pressed=False;self.redraw()
     def click(self,event):
-        self.focus_set()
+        if self.cget('state')=='disabled':return
+        self.pressed=True;self.hover(event);self.focus_set()
         self.dragging=event.x>self.winfo_width()-12
         if event.x>self.winfo_width()-12:
             self.drag(event);return
@@ -73,7 +82,7 @@ class SelectionList(tk.Canvas):
         self.offset=max(0,min(max(0,len(self.items)-visible),round(event.y/max(1,self.winfo_height())*len(self.items))))
         self.redraw()
     def select_index(self,index,add):
-        if not 0<=index<len(self.items):return
+        if self.cget('state')=='disabled' or not 0<=index<len(self.items) or not self.items[index].get('enabled',True):return
         self.index=index;key=self.items[index]['id']
         if self.multiple and add:
             if key in self.selected:self.selected.remove(key)
@@ -104,13 +113,17 @@ class SelectionList(tk.Canvas):
             y=index*row_height
             if y+row_height>h:break
             selected=item['id'] in self.selected
-            if selected:rounded(self,0,y,w-14,row_height-4,'#2c2b50',8)
+            disabled=self.cget('state')=='disabled' or not item.get('enabled',True)
+            hover=self.offset+index==self.hover_index and not disabled
+            if selected or hover:
+                rounded(self,0,y,w-14,row_height-4,'#423e67' if hover and self.pressed else '#35324f' if hover and selected else '#243248' if hover else '#2c2b50',8,outline=ACCENT if selected else LINE)
+            if selected:self.create_rectangle(2,y+8,5,y+row_height-12,fill=ACCENT,outline='')
             font=self.selected_font if selected else self.label_font
             label=item['label']
             if font.measure(label)>w-35:
                 while label and font.measure(label+'…')>w-35:label=label[:-1]
                 label+='…'
-            self.create_text(13,y+6+label_height/2,text=label,anchor='w',fill=FG if selected else '#c2cddd',font=font)
+            self.create_text(13,y+6+label_height/2,text=label,anchor='w',fill=MUTED if disabled else FG if selected else '#c2cddd',font=font)
             hint=item.get('hint','')
             if self.hint_font.measure(hint)>w-35:
                 while hint and self.hint_font.measure(hint+'…')>w-35:hint=hint[:-1]
@@ -120,6 +133,7 @@ class SelectionList(tk.Canvas):
         if len(self.items)*row_height>h and h>1:
             thumb=max(25,h*h/(len(self.items)*row_height));top=self.offset/max(1,len(self.items))*h
             rounded(self,w-8,top,4,min(thumb,h-top),LINE,2)
+        self.configure(cursor='hand2' if self.hover_index is not None and self.hover_index<len(self.items) and self.items[self.hover_index].get('enabled',True) and self.cget('state')!='disabled' else '')
         if self.focus_get() is self:self.create_rectangle(1,1,w-2,h-2,outline=ACCENT)
 
 
@@ -129,6 +143,7 @@ class DesktopApp(CompanionViews):
         self.button_fonts={}
         self.guild_id=None;self.channel_ids=set();self.text_mode='silent';self.react_mode='silent';self.inherit=False;self.drafts={};self.scope_baseline=None;self.closing=False;self.show_all=False
         self.canvas=tk.Canvas(root,bg=BG,highlightthickness=0,takefocus=True);self.canvas.pack(fill='both',expand=True)
+        self.feedback=CanvasFeedback(self.canvas)
         self.server_list=SelectionList(self.canvas,self.select_guild)
         self.channel_list=SelectionList(self.canvas,self.select_channels,True)
         self.setup_records()
@@ -151,19 +166,22 @@ class DesktopApp(CompanionViews):
         return self.canvas.create_text(x,y,text=value,anchor='nw',fill=color,font=('맑은 고딕',size,'bold' if bold else 'normal'),width=width or 0)
     def button(self,x,y,w,h,label,callback,selected=False,primary=False,enabled=True,font_size=10):
         while font_size>6 and self.button_font(font_size).measure(label)>w-16:font_size-=1
-        rounded(self.canvas,x,y,w,h,ACCENT if primary and enabled else '#2d2b4d' if selected else CARD,8)
-        self.canvas.create_text(x+w/2,y+h/2,text=label,fill=MUTED if not enabled else BG if primary else ACCENT if selected else FG,font=self.button_font(font_size),tags=('button_label',))
+        shape=rounded(self.canvas,x,y,w,h,CARD,8)
+        text=self.canvas.create_text(x+w/2,y+h/2,text=label,fill=FG,font=self.button_font(font_size),tags=('button_label',))
+        self.feedback.add((x,y,w,h),shape,text,enabled=enabled,selected=selected,primary=primary,danger=('삭제' in label or '초기화' in label),callback=callback)
         if enabled:self.hits.append((x,y,w,h,callback))
     def button_font(self,size):
         if size not in self.button_fonts:self.button_fonts[size]=tkfont.Font(root=self.root,family='맑은 고딕',size=size,weight='bold')
         return self.button_fonts[size]
     def toggle(self,x,y,label,on,callback):
+        background=rounded(self.canvas,x-4,y-3,294,30,CARD,7)
+        self.feedback.add((x,y,290,28),background,selected=on,callback=callback)
         rounded(self.canvas,x,y,38,22,MINT if on else LINE,11)
         self.canvas.create_oval(x+(20 if on else 3),y+3,x+(36 if on else 19),y+19,fill=BG if on else MUTED,outline='')
         self.text(x+50,y,label,10)
         self.hits.append((x,y,290,28,callback))
     def click(self,event):
-        self.canvas.focus_set()
+        self.feedback.press(event);self.canvas.focus_set()
         for i,(x,y,w,h,callback) in enumerate(self.hits):
             if x<=event.x<=x+w and y<=event.y<=y+h:
                 self.focus_index=i;callback();self.render();break
@@ -184,7 +202,7 @@ class DesktopApp(CompanionViews):
         self.page=page;self.focus_index=-1
         if page in PAGES:
             self.record_key=None;self.record_status='전체';self.refresh_records()
-    def set_value(self,key,value):self.controller.submit('settings',values={key:value})
+    def set_value(self,key,value):return self.controller.submit('settings',values={key:value})
     def ellipsize(self,value,width,size=10,middle=False):
         value=str(value).replace('\n',' ');font=self.button_font(size)
         if font.measure(value)<=width:return value
@@ -283,7 +301,7 @@ class DesktopApp(CompanionViews):
             lambda values:self.controller.submit('name',guild=gid,name=validate_name(values['name'])),
             '호격·접미사를 줄인 호출도 문맥을 확인해요. 실제 Discord 이름 변경에는 권한이 필요할 수 있어요.',guard_context=True)
     def render(self):
-        self.canvas.delete('all');self.hits=[];w=max(1040,self.canvas.winfo_width());h=max(740,self.canvas.winfo_height())
+        self.canvas.delete('all');self.hits=[];self.feedback.clear();w=max(1040,self.canvas.winfo_width());h=max(740,self.canvas.winfo_height())
         self.canvas.create_rectangle(0,0,196,h,fill='#0e1521',outline='')
         self.canvas.create_oval(24,27,44,47,fill=ACCENT,outline='');self.canvas.create_oval(30,33,38,41,fill=BG,outline='')
         self.text(56,25,'EchoMate',16,bold=True);self.text(26,63,'내 PC에서 동작하는 봇',8,MUTED)
@@ -328,7 +346,7 @@ class DesktopApp(CompanionViews):
                 s['notice']+' · 재시작 없이 적용돼요' if s and s.get('notice') else
                 '허용한 채널에서만 대화해요 · 목록을 선택하는 것만으로는 말을 하지 않아요')
         self.text(226,h-29,footer,9,MUTED)
-        if 0<=self.focus_index<len(self.hits):
+        if self.canvas.focus_get() is self.canvas and 0<=self.focus_index<len(self.hits):
             x,y,bw,bh,_=self.hits[self.focus_index];self.canvas.create_rectangle(x-2,y-2,x+bw+2,y+bh+2,outline=MINT)
     def draw_spaces(self,w,h,cfg):
         left=226;sy=143;bottom=h-66;right=w-274;mid=left+225
@@ -347,8 +365,7 @@ class DesktopApp(CompanionViews):
         x=right+16;self.text(x,sy+17,'이곳에서 어떻게 할까요?',12,bold=True)
         self.text(x,sy+46,f'{len(self.channel_ids)}곳을 선택했어요' if self.channel_ids else '먼저 왼쪽에서 채널을 골라 주세요',9,ACCENT)
         if cfg and not cfg['reactions'] and self.react_mode!='silent':
-            self.text(x,sy+68,'이모지 켜기 → 응답 방식',9,ACCENT)
-            self.hits.append((x,sy+68,216,18,lambda:self.set_page('outputs')))
+            self.button(x,sy+64,216,24,'이모지 켜기 → 응답 방식',lambda:self.set_page('outputs'),font_size=8)
         self.text(x,sy+91,'채팅',10,MUTED)
         for i,(label,mode) in enumerate(MODES.items()):self.button(x,sy+116+i*40,216,32,label,lambda m=mode:setattr(self,'text_mode',m),self.text_mode==mode)
         self.text(x,sy+256,'이모지 반응',10,MUTED)
@@ -388,7 +405,7 @@ class DesktopApp(CompanionViews):
         self.button(686,583,128,34,'가져오기·내보내기',self.profile_files)
         self.toggle(250,638,'성인 유머 · 연령 제한 채널에서만',cfg['adult_humor'],lambda:self.set_value('adult_humor',not cfg['adult_humor']))
         self.button(686,634,128,30,'표현 고급 설정',self.advanced_profile)
-        self.text(250,671,'모델은 AI 모델 화면에서 관리해요. 캐릭터 변경에는 모델 재로딩이 필요 없어요.',9,MUTED,width=w-290)
+        self.text(250,671,'기분·강도는 즉시 저장해요. 팝업은 ‘적용’으로 저장해요.',9,MUTED,width=w-290)
 
     def draw_setup(self,w,h,cfg):
         from .onboarding import GUIDE
@@ -453,7 +470,9 @@ class DesktopApp(CompanionViews):
             self.controller.submit('profiles',action='save_apply',key=v['key'],value=p)
         import secrets
         def submit(v):v['key']='character-'+secrets.token_hex(5);save(v)
-        self.form('캐릭터 편집 · 복제해서 저장',[('name','캐릭터 이름',p['name']),('intro','소개 · 지시문이 아닌 표시 자료',p['introduction']),('speech','기본 말투 · 반말 / 존댓말','반말' if p['speech']=='casual' else '존댓말'),('energy','반응 에너지 · 0~100',p['energy']),('humor','농담 참여 성향 · 0~100',p['humor']),('detail','설명 · 간단히 / 균형 / 자세히',{'brief':'간단히','balanced':'균형','detailed':'자세히'}[p['detail']])],submit,'권한·개인정보·사실성·코드 출력 제한은 프로필로 바꿀 수 없어요.')
+        self.form('캐릭터 편집 · 복제해서 저장',[('name','캐릭터 이름',p['name']),('intro','소개 · 지시문이 아닌 표시 자료',p['introduction']),('speech','기본 말투 · 반말 / 존댓말','반말' if p['speech']=='casual' else '존댓말'),('energy','반응 에너지 · 0~100',p['energy']),('humor','농담 참여 성향 · 0~100',p['humor']),('detail','설명 · 간단히 / 균형 / 자세히',{'brief':'간단히','balanced':'균형','detailed':'자세히'}[p['detail']])],submit,'적용하면 같은 이름도 별도 복사본으로 저장해요. 닫으면 편집을 취소해요. 권한·개인정보·사실성·코드 출력 제한은 바뀌지 않아요.',controls={
+            'speech':choice_field(['반말','존댓말']),'energy':range_field('첫 반응의 활기와 에너지를 조절해요.'),
+            'humor':range_field('상황에 맞는 농담에 얼마나 적극적으로 참여할지 정해요.'),'detail':choice_field(['간단히','균형','자세히'])})
 
     def profile_library(self):
         self.controller.submit('profiles')
@@ -461,7 +480,11 @@ class DesktopApp(CompanionViews):
         dialog=tk.Toplevel(self.root);dialog.title('저장한 캐릭터');dialog.configure(bg=PANEL);dialog.geometry('540x490');dialog.transient(self.root)
         canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
         canvas.create_text(24,22,text='프로필을 고르고 적용하세요',anchor='nw',fill=FG,font=('맑은 고딕',13,'bold'))
-        selected=['default'];listing=SelectionList(canvas,lambda ids:selected.__setitem__(0,next(iter(ids),'default')))
+        feedback=CanvasFeedback(canvas,keyboard=True)
+        selected=['default']
+        def select_profile(ids):
+            selected[0]=next(iter(ids),'default');refresh_feedback()
+        listing=SelectionList(canvas,select_profile)
         listing.place(x=24,y=64,width=490,height=280)
         timer=[None];deleted_label=[None];pending=[None];completion_timer=[None]
         message=canvas.create_text(24,415,text='',anchor='nw',fill=MUTED,font=('맑은 고딕',9),width=490)
@@ -475,30 +498,46 @@ class DesktopApp(CompanionViews):
             except (Exception,CancelledError) as exc:ok=False;error=type(exc).__name__
             pending[0]=None
             if ok:dialog.destroy()
-            else:canvas.itemconfigure(message,text='적용하지 못했어요 · '+(error or '저장소를 확인한 뒤 다시 시도해 주세요'))
+            else:
+                canvas.itemconfigure(message,text='적용하지 못했어요 · '+(error or '저장소를 확인한 뒤 다시 시도해 주세요'))
+                listing.configure(state='normal');refresh_feedback()
         def close():
             if pending[0] is None:dialog.destroy()
         def refresh():
             values=(self.snapshot or {}).get('profiles',{}) or {'default':DEFAULT_PROFILE}
-            listing.set_items([dict(id=k,label=v['name'],hint=v['introduction']) for k,v in values.items()])
+            listing.set_items([dict(id=k,label=v['name']+' · '+('기본' if k=='default' else '저장본 '+str(i)),hint=v['introduction']) for i,(k,v) in enumerate(values.items(),1)])
             if selected[0] not in values:selected[0]=next(iter(values))
             listing.selected={selected[0]};listing.redraw()
-            if deleted_label[0]:canvas.itemconfigure(deleted_label[0],fill=MUTED if selected[0]=='default' else FG)
+            refresh_feedback()
             timer[0]=dialog.after(400,refresh)
         for x,label in ((24,'적용'),(185,'삭제'),(346,'기본값 복원')):
-            rounded(canvas,x,365,145,36,CARD,8);item=canvas.create_text(x+72,383,text=label,fill=FG,font=('맑은 고딕',10))
+            shape=rounded(canvas,x,365,145,36,CARD,8);item=canvas.create_text(x+72,383,text=label,fill=FG,font=('맑은 고딕',10))
+            feedback.add((x,365,145,36),shape,item,danger=label=='삭제',callback=lambda x=x:click(type('Click',(),{'x':x+10,'y':380})()))
             if label=='삭제':deleted_label[0]=item
+        def refresh_feedback():
+            for i,region in enumerate(feedback.regions):region['enabled']=pending[0] is None and (i!=1 or selected[0]!='default')
+            feedback.paint()
         def click(e):
             if pending[0] is not None:return
             if not 365<=e.y<=401:return
             action='apply' if 24<=e.x<=169 else 'delete' if 185<=e.x<=330 else 'restore' if 346<=e.x<=491 else None
             if action=='delete' and selected[0]=='default':return
+            if action=='delete':
+                key=selected[0];expected=(self.snapshot or {}).get('profiles',{}).get(key)
+                if expected is None:return
+                def confirm(values):
+                    if values['confirm']!='삭제':raise ValueError()
+                    if (self.snapshot or {}).get('profiles',{}).get(key)!=expected:raise ValueError()
+                    return self.controller.submit('profiles',action='delete',key=key)
+                self.form('저장한 캐릭터 삭제',[('confirm','삭제할 때만 삭제라고 입력','')],confirm,
+                    expected['name']+' 저장본을 지워요. 현재 적용한 캐릭터 설정과 다른 저장본은 유지해요.')
+                return
             if action:
                 future=self.controller.submit('profiles',action=action,key=selected[0])
                 from concurrent.futures import Future
                 from asyncio import Future as AsyncFuture
                 if isinstance(future,(Future,AsyncFuture)):
-                    pending[0]=future;canvas.itemconfigure(message,text='적용 결과를 확인하고 있어요 · 잠시 기다려 주세요')
+                    pending[0]=future;listing.configure(state='disabled');refresh_feedback();canvas.itemconfigure(message,text='저장 중 · 적용 결과를 확인하고 있어요 · 잠시 기다려 주세요')
                     completion_timer[0]=dialog.after_idle(complete)
                 else:dialog.destroy()
         def closed(event):
@@ -508,7 +547,7 @@ class DesktopApp(CompanionViews):
                         try:dialog.after_cancel(job)
                         except tk.TclError:pass
         dialog.protocol('WM_DELETE_WINDOW',close)
-        canvas.bind('<Button-1>',click);dialog.bind('<Escape>',lambda e:close());dialog.bind('<Destroy>',closed)
+        canvas.bind('<Button-1>',click);canvas.bind('<Button-1>',feedback.press,add='+');dialog.bind('<Escape>',lambda e:close());dialog.bind('<Destroy>',closed)
         refresh()
 
     def advanced_profile(self):
@@ -518,8 +557,15 @@ class DesktopApp(CompanionViews):
             for k in ('calmness','honesty','exclamation','emoji'):p[k]=int(v[k])
             p['length']={'상황에 맞게':'adaptive','짧게':'short'}[v['length']]
             p['swearing']={'끔':False,'가벼운 감탄만':True}[v['swearing']]
-            validate_profile(p);self.set_value('character_profile',p)
-        self.form('표현 고급 설정',[(k,label+' · 0~100',p[k]) for k,label in (('calmness','차분함'),('honesty','솔직함'),('exclamation','감탄 빈도'),('emoji','텍스트 이모지 빈도'))]+[('length','잡담 길이 · 상황에 맞게 / 짧게','상황에 맞게' if p['length']=='adaptive' else '짧게'),('swearing','가벼운 비속어 · 끔 / 가벼운 감탄만','가벼운 감탄만' if p['swearing'] else '끔')],save,'표현 강도는 5단계로 반영돼요. 사실·필수 설명·권한은 바꾸지 않아요.')
+            validate_profile(p);return self.set_value('character_profile',p)
+        self.form('표현 고급 설정',[(k,label,p[k]) for k,label in (('calmness','차분함'),('honesty','솔직함'),('exclamation','감탄 빈도'),('emoji','답변 속 이모지 빈도'))]+[('length','잡담 길이','상황에 맞게' if p['length']=='adaptive' else '짧게'),('swearing','가벼운 비속어','가벼운 감탄만' if p['swearing'] else '끔')],save,
+            '편집 중인 값이에요. 적용하면 저장하고, 닫으면 원래 값을 유지해요. 표현은 5단계 강도로 반영돼요. 필수 설명·사실·권한은 바뀌지 않아요.',controls={
+                'calmness':range_field('답변을 얼마나 차분하고 안정적인 톤으로 말할지 정해요.',anchors=('0 · 생동감 있게','50 · 균형 있게','100 · 차분하게')),
+                'honesty':range_field('돌려 말하기보다 결론과 한계를 직접 말하는 정도예요. 사실은 항상 지켜요.',anchors=('0 · 완곡하게','50 · 명료하게','100 · 직접적으로')),
+                'exclamation':range_field('“와”, “오” 같은 짧은 감탄을 얼마나 자주 쓸지 정해요.',anchors=('0 · 거의 안 함','50 · 보통','100 · 자주')),
+                'emoji':range_field('답변 글 안의 🙂 같은 이모지예요. 메시지에 누르는 반응과는 달라요. 반복 웃음 문자는 계속 억제해요.',anchors=('0 · 안 씀','50 · 드물게','100 · 상황에 맞게')),
+                'length':choice_field(['짧게','상황에 맞게'],'잡담을 짧게 끝내거나 상황에 맞는 길이로 이어가요. 필요한 설명은 생략하지 않아요.'),
+                'swearing':choice_field(['끔','가벼운 감탄만'],'상황을 향한 가벼운 표현만 허용해요. 사람을 모욕하거나 공격하는 표현은 허용하지 않아요.')})
 
     def profile_files(self):
         from tkinter import filedialog
@@ -530,30 +576,37 @@ class DesktopApp(CompanionViews):
             if path:
                 import secrets
                 self.controller.submit('profiles',action='export_current' if export else 'import',key='imported-'+secrets.token_hex(5),path=path)
-        self.form('프로필 파일',[('action','현재 캐릭터 내보내기 / 새 캐릭터 가져오기 · 내보내기 / 가져오기','내보내기')],act,
-            '내보내기는 현재 적용한 캐릭터예요. 가져오기는 기존 자료를 덮어쓰지 않고 새 프로필로 보관해요. 저장한 프로필에서 선택해 적용하세요. 토큰·대화·기억은 포함하지 않아요.')
+        self.form('프로필 파일',[('action','작업 선택','내보내기')],act,
+            '내보내기는 현재 적용한 캐릭터예요. 가져오기는 기존 자료를 덮어쓰지 않고 새 프로필로 보관해요. 저장한 프로필에서 선택해 적용하세요. 토큰·대화·기억은 포함하지 않아요.',controls={'action':choice_field(['내보내기','가져오기'])})
 
     def character_preview(self):
         import secrets
-        session=secrets.token_hex(12);pending=[False]
+        session=secrets.token_hex(12);pending=[False];input_error=['']
         dialog=tk.Toplevel(self.root);dialog.title('Discord 없이 캐릭터 미리보기');dialog.configure(bg=PANEL);dialog.geometry('690x510');dialog.minsize(560,420);dialog.transient(self.root)
         tk.Label(dialog,text='합성 질문으로 말투를 확인해요 · 대화·기억·관계·예약에 저장하지 않아요',bg=PANEL,fg=MUTED,font=('맑은 고딕',10),wraplength=630).pack(padx=22,pady=16,anchor='w')
-        entry=tk.Entry(dialog,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',11));entry.pack(padx=22,fill='x',ipady=8);entry.insert(0,'처음 만난 친구에게 짧게 인사해 줘')
+        entry=tk.Entry(dialog,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',11),highlightthickness=1,highlightbackground=LINE,highlightcolor=ACCENT);entry.pack(padx=22,fill='x',ipady=8);entry.insert(0,'처음 만난 친구에게 짧게 인사해 줘')
         actions=tk.Canvas(dialog,bg=PANEL,height=48,highlightthickness=0);actions.pack(fill='x',padx=22)
-        rounded(actions,0,8,145,32,CARD,8);actions.create_text(72,24,text='로컬 답변 생성',fill=FG,font=('맑은 고딕',10))
         output=tk.Text(dialog,bg=CARD,fg=FG,relief='flat',wrap='word',font=('맑은 고딕',11),state='disabled');output.pack(padx=22,pady=(0,22),fill='both',expand=True)
         def generate():
+            if not 1<=len(entry.get().strip())<=1000:
+                input_error[0]='질문은 공백을 제외하고 1~1000자로 입력해 주세요.';return
+            input_error[0]=''
             if not pending[0] and not (self.snapshot or {}).get('preview_busy') and not (self.snapshot or {}).get('preview_cleanup_failed') and 1<=len(entry.get())<=1000:
                 pending[0]=True;self.controller.submit('preview',text=entry.get(),session=session)
-        actions.bind('<Button-1>',lambda e:generate() if e.x<=145 and 8<=e.y<=40 else None);entry.bind('<Return>',lambda e:generate())
+        feedback=CanvasFeedback(actions,keyboard=True)
+        shape=rounded(actions,8,8,137,32,CARD,8);label=actions.create_text(76,24,text='미리보기',fill=FG,font=('맑은 고딕',10))
+        feedback.add((8,8,137,32),shape,label,primary=True,callback=generate)
+        actions.bind('<Button-1>',lambda e:generate() if 8<=e.x<=145 and 8<=e.y<=40 else None);actions.bind('<Button-1>',feedback.press,add='+');entry.bind('<Return>',lambda e:generate())
         old=[''];timer=[None]
         def poll():
             snap=self.snapshot or {};mine=snap.get('preview_session')==session
-            value=(snap.get('preview','') if mine else '') or ('요청을 준비하고 있어요' if pending[0] else '질문을 입력하고 답변을 생성해 보세요. 창을 닫으면 이 미리보기만 취소해요.')
+            value=input_error[0] or (snap.get('preview','') if mine else '') or ('요청을 준비하고 있어요' if pending[0] else '질문을 입력하고 답변을 생성해 보세요. 창을 닫으면 이 미리보기만 취소해요.')
             if pending[0] and snap.get('preview_rejection',{}).get('session')==session:
                 value='요청을 시작하지 못했어요 · '+snap['preview_rejection']['error'];pending[0]=False
             if mine and not snap.get('preview_busy'):pending[0]=False
             if value!=old[0]:output.configure(state='normal');output.delete('1.0','end');output.insert('1.0',value);output.configure(state='disabled');old[0]=value
+            busy=pending[0] or bool(snap.get('preview_busy') or snap.get('preview_cleanup_failed'))
+            feedback.regions[0]['enabled']=not busy;feedback.paint();actions.itemconfigure(label,text='처리 중…' if busy else '미리보기')
             timer[0]=dialog.after(400,poll)
         def closed(event):
             if event.widget is dialog and timer[0]:

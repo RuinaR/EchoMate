@@ -66,10 +66,9 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         return next(w for w in self.root.winfo_children() if isinstance(w,tk.Toplevel))
 
     def fill(self,dialog,values):
-        canvas=next(w for w in dialog.winfo_children() if isinstance(w,tk.Canvas))
-        entries=[w for w in canvas.winfo_children() if isinstance(w,tk.Entry)]
-        self.assertEqual(len(entries),len(values))
-        for entry,value in zip(entries,values):entry.delete(0,'end');entry.insert(0,value)
+        fields=dialog._form_values
+        self.assertEqual(len(fields),len(values))
+        for variable,value in zip(fields.values(),values):variable.set(str(value))
         invoke(dialog,'<Control-Return>')
 
     async def test_all_character_choices_numbers_and_output_toggles_reach_signed_settings(self):
@@ -118,6 +117,25 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         with patch('tkinter.filedialog.askopenfilename',return_value=''):
             app.profile_files();self.fill(self.dialog(),['가져오기']);await self.sync()
         self.assertEqual(set(self.c.profiles_view),keys)
+
+    async def test_advanced_typed_controls_persist_reopen_cancel_and_failed_write(self):
+        app=self.app;app.page='character';original=deepcopy(self.c.settings.get())
+        app.advanced_profile();d=self.dialog()
+        self.fill(d,['80','90','15','0','짧게','가벼운 감탄만']);await self.sync()
+        self.assertFalse(self.c.error);p=self.c.settings.get()['character_profile']
+        self.assertEqual((p['calmness'],p['honesty'],p['emoji'],p['length'],p['swearing']),(80,90,0,'short',True))
+        from echomate_bot.settings import Settings
+        restored=Settings(1,self.c.bootstrap['signing_key'],self.c.settings.path).get()
+        self.assertEqual(restored['character_profile'],p)
+        app.advanced_profile();d=self.dialog();self.assertEqual(d._form_controls['calmness'].value(),80)
+        d._form_controls['calmness'].set(0);invoke(d,'<Escape>');await self.sync()
+        self.assertEqual(self.c.settings.get()['character_profile'],p)
+        app.advanced_profile();d=self.dialog();d._form_controls['calmness'].set(20)
+        with patch('echomate_bot.settings.atomic_private_json',side_effect=OSError('Synthetic locked write')):
+            invoke(d,'<Control-Return>');await self.sync()
+        self.assertTrue(d.winfo_exists());self.assertEqual(d._form_controls['calmness'].value(),20)
+        self.assertEqual(self.c.settings.get()['character_profile'],p)
+        self.assertEqual(self.c.settings.get()['model'],original['model'])
 
     async def test_memory_form_crud_and_revoked_consent_reach_actual_sqlite(self):
         app=self.app;app.page='memories';app.record_user='4'
@@ -221,7 +239,11 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         click(80);await self.sync();self.assertEqual(self.c.settings.get()['character_profile']['name'],'Synthetic')
         app.profile_library();d=self.dialog();canvas=d.winfo_children()[0]
         listing=next(w for w in canvas.winfo_children() if isinstance(w,SelectionList));listing.callback({'custom'})
-        command=re.search(r'\[([^ ]+) ',canvas.bind('<Button-1>'))[1];click(220);await self.sync();self.assertNotIn('custom',self.c.profiles_view)
+        command=re.search(r'\[([^ ]+) ',canvas.bind('<Button-1>'))[1];click(220)
+        confirmation=next(w for w in self.root.winfo_children() if isinstance(w,tk.Toplevel) and w is not d)
+        self.fill(confirmation,['아니오']);await self.sync();self.assertIn('custom',self.c.profiles_view)
+        self.fill(confirmation,['삭제']);await self.sync();self.assertNotIn('custom',self.c.profiles_view)
+        invoke(d,'<Escape>');await self.sync()
         app.profile_library();d=self.dialog();canvas=d.winfo_children()[0]
         command=re.search(r'\[([^ ]+) ',canvas.bind('<Button-1>'))[1];click(400);await self.sync()
         self.assertEqual(self.c.settings.get()['character_profile'],DEFAULT_PROFILE)

@@ -1,5 +1,15 @@
 # 작업 로그
 
+## 2026-10-20 입력·인터랙션 정비 — 최신 UI / 전체 릴리즈 BLOCKED
+
+시작 d7490b1 clean. 표현 고급 설정의 4개 수치는 슬라이더/값/의미, 잡담 길이·비속어는 실제 정책에 맞는 2개 선택 그룹으로 바꿨다. 캐릭터/친밀도/기억·호칭/만료·알림/파일 작업의 유한 값도 명시적 컨트롤로 정리했다. hover·누름·포커스·선택·비활성·삭제·저장 중을 구분하고 실제 저장 실패 시 입력을 보존한다.
+
+전체584 OK72.338초, 동적209 PASS(하위 HTTP0·소스 일치), 숨긴 Tk420조합 PASS. 전체 렌더 p50/p95 3.902/59.706→5.219/65.578ms로 추가 비용을 기록했고 속도 향상을 주장하지 않는다. hover는 이전/현재 항목만 칠해500회에서 재렌더/항목 누적0, p50/p95 0.033/0.040ms였다. 새 GPU/실제 Discord·사용자 데스크톱 입력은 없다. 기존 사회적 판단의 누락·연결 오류와 사용자 화면 미검증은 남아 정식 릴리즈 BLOCKED다.
+
+Portable 번들 Python/실제 번들 UI에서도32검사 OK9.791초(자체 숨긴 Tk·임시 자료·모의 GPU/Gateway)를 확인했다. 실제 사용자 화면과 다른 Windows는 미검증이다.
+
+[입력·상태 규칙](UI-COMPONENT-GUIDELINES.md) · [검증·실패·한계](UI-INTERACTION-GUIDE.md). 이전 수치와 실패 기록은 아래에 보존한다.
+
 ## 2026-10-20 정밀 판단·UI 동작 후속 — 최신 / BLOCKED
 
 시작 `a7ae298`, 구현 `548d0c6`. 전체 **575검사 OK75.691초**, 숨긴 Tk 렌더420조합 및 엄격한 SDK HTTP mock 디스패치209건을 확인했다. 초기 검사 경계 누락은 성공 결과에서 폐기했다. [정밀 사회적 QA](PRECISION-SOCIAL-QA.md)와 [실제 UI 동작표](UI-ACTION-QA.md)를 현재 기준으로 삼으며, 아래 이전 차수의 수치는 당시 기록이다.
@@ -819,3 +829,5 @@ character_profiles.py·desktop.py·desktop_ui.py에서 ID 입력 없이 현재 �
 로딩 중 취소는26.063초 후 정리됐고 GPU allocated1KiB/reserved2MiB였다. 안전한 로딩 구간을 즉시 물리 중단하지 않는다. Tk 검사 펌프 최대 간격1.937초가 있어 완전 무정지 UI라고 인증하지 않는다. 같은 호스트의 격리 저장소 검증이며 다른 Windows/깨끗한 VM/native 사용자 조작은 NOT VERIFIED다.
 
 공개 Portable은24,767파일·4.590GiB이며 모델·개인 DB·토큰은 제외한다. 최종 source/docs 바이트 및 전체 파일 manifest는 별도 package audit로 대조한다. 소스와 Portable의 일반/오프라인 VBS 4진입점 /check는 앱/봇을 시작하지 않고 통과했다. 공개 다운로드 릴리즈는 만들지 않고 후보를 로컬에만 둔다.
+
+이번 변경 파일: ui_controls.py, desktop_ui.py, companion_ui.py, test_input_controls.py, test_ui_workflows.py, test_companion_ui.py, test_ui_record_selection.py 및 UI 문서. 명령: PYTHONPATH=src;tests;tools의 unittest discover -s tests -q, verify_ui_actions.py, verify_ui_functional_audit.py. 결과·경계·실패는 UI-INTERACTION-GUIDE를 따른다. 모델/추론/큐/DB 스키마 변경 없음.

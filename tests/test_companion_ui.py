@@ -35,8 +35,10 @@ class RecordLayout(unittest.TestCase):
                 app.record_key='alias:3:구름';app.render();root.update_idletasks()
                 self.assertTrue(all(y+height<=740 for x,y,width,height,callback in app.hits))
                 # Inspect the dialog contract without opening or operating a UI.
-                captured=[];app.form=lambda *args:captured.append(args)
+                captured=[];specs=[]
+                app.form=lambda *args,**kwargs:(captured.append(args),specs.append(kwargs))
                 app.member_alias_editor();self.assertEqual(captured[0][0],'이 사람의 호칭 관리')
+                self.assertEqual(specs[0]['controls']['status']['choices'],['확정','후보','삭제'])
                 captured[0][2](dict(channel='3',alias='구름',status='확정'))
                 self.assertEqual(controller.submit.call_args.kwargs['status'],'confirmed')
             finally:

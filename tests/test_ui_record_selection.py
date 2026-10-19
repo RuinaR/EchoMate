@@ -95,8 +95,13 @@ class RecordSelection(unittest.TestCase):
             self.assertEqual([r['id'] for r in listing.items],['default','saved'])
             listing.select_index(1,False)
             click();root.update()
+            controller.submit.assert_not_called()
+            confirmation=next(w for w in root.winfo_children() if isinstance(w,tk.Toplevel) and w is not dialog)
+            confirmation._form_values['confirm'].set('삭제')
+            from test_dialog_layout import invoke
+            invoke(confirmation,'<Control-Return>')
             self.assertEqual(controller.submit.call_args.kwargs,dict(action='delete',key='saved'))
-            self.assertFalse(dialog.winfo_exists())
+            self.assertFalse(confirmation.winfo_exists());self.assertTrue(dialog.winfo_exists())
         finally:
             app.destroy();app=None;root=None;gc.collect()
 
