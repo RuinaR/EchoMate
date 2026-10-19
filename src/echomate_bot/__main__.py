@@ -25,8 +25,8 @@ def setup():
         identity=subprocess.check_output(["whoami"],text=True,stderr=subprocess.PIPE,timeout=10,**background_options()).strip()
         subprocess.run(["icacls",str(ROOT),"/inheritance:r","/grant:r",identity+":(OI)(CI)F","SYSTEM:(OI)(CI)F"],
             check=True,capture_output=True,timeout=10,**background_options())
-    key=secrets.token_hex(32)
-    path.write_text(json.dumps(dict(owner_id=owner,token=token,admin_guilds=[guild],signing_key=key)),encoding="utf-8")
+    from .onboarding import create_installation
+    data=create_installation(path,owner,token,admin_guilds=[guild]);key=data['signing_key']
     settings=Settings(owner,key)
     settings.set_scope(owner,guild,channel,"mention")
     print("저장 완료. 기본은 정지 상태야. Windows 앱에서 허용 채널과 응답 방식을 고른 뒤 시작해 줘. 개인정보 설정은 본인의 /동의에서 관리해.")
@@ -44,14 +44,17 @@ async def _run_client():
     from .discord_app import EchoClient
     path=ROOT/"bootstrap.json"
     if not path.exists():raise SystemExit("먼저 tools/setup_discord_bot.ps1을 실행해 줘.")
-    bootstrap=json.loads(path.read_text(encoding="utf-8"))
+    from .onboarding import load_bootstrap
+    bootstrap=load_bootstrap(path)
     settings=Settings(bootstrap['owner_id'],bootstrap['signing_key'])
-    if not bootstrap['admin_guilds'] or any(type(g) is not int or g<=0 for g in bootstrap['admin_guilds']):raise ValueError("Invalid management guilds")
+    if any(type(g) is not int or g<=0 for g in bootstrap['admin_guilds']):raise ValueError("Invalid management guilds")
     # Library HTTP loggers can include request URLs. Keep only private minimal codes.
     logging.getLogger("discord").setLevel(logging.CRITICAL)
-    client=EchoClient(settings,LocalBackend(),bootstrap['admin_guilds'])
+    cfg=settings.get()
+    client=EchoClient(settings,LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None),bootstrap['admin_guilds'])
     try:
         await client.backend.ready()
+        if hasattr(client.backend,'probe'):await client.backend.probe()
         await client.start(bootstrap['token'],reconnect=True)
     finally:
         try:

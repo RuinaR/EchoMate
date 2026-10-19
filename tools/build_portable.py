@@ -1,0 +1,77 @@
+"""Build a self-contained Windows directory from the tested Python toolchain.
+
+Only explicit public sources and interpreter libraries are copied. No repo-wide
+copy, credentials, models, caches or operating data. Never overwrites a build.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import sys
+
+DENY={'__pycache__','tests','test','pip','setuptools','wheel','direct_url.json'}
+def ignore(directory,names):
+    return [n for n in names if n in DENY or n.endswith(('.pyc','.pth','.safetensors','.gguf','.jsonl','.token','.key')) or n.startswith('__editable__')]
+
+def build(destination):
+    if os.name!='nt':raise RuntimeError('Build on Windows with the verified interpreter')
+    root=Path(__file__).resolve().parents[1];dest=Path(destination).resolve()
+    if dest.exists():raise FileExistsError('Build output already exists; choose a new version directory')
+    if not dest.is_relative_to(root/'dist'):raise ValueError('Build output must be inside dist')
+    if shutil.disk_usage(root).free<12*1024**3:raise RuntimeError('At least 12 GiB free space required')
+    dest.mkdir(parents=True);runtime=dest/'runtime';runtime.mkdir();base=Path(sys.base_prefix)
+    for file in base.iterdir():
+        if file.is_file() and (file.suffix.lower() in ('.dll','.exe') and file.name.startswith(('python','vcruntime')) or file.name.startswith('LICENSE')):shutil.copy2(file,runtime/file.name)
+    for folder in ('DLLs','Lib','tcl'):
+        shutil.copytree(base/folder,runtime/folder,ignore=lambda d,n:ignore(d,n)+(['site-packages'] if Path(d)==base/'Lib' else []))
+    site=Path(sys.prefix)/'Lib/site-packages'
+    shutil.copytree(site,runtime/'Lib/site-packages',ignore=ignore)
+    shutil.copytree(root/'src',dest/'src',ignore=ignore)
+    shutil.copytree(root/'docs',dest/'docs')
+    for name in ('README.md','LICENSE'):
+        if (root/name).exists():shutil.copy2(root/name,dest/name)
+    (dest/'models').mkdir()
+    (dest/'profiles').mkdir()
+    if (root/'configs/character-default.json').exists():shutil.copy2(root/'configs/character-default.json',dest/'profiles/default.json')
+    launcher='''Option Explicit
+Dim fs, sh, home, env
+Set fs=CreateObject("Scripting.FileSystemObject")
+Set sh=CreateObject("WScript.Shell")
+home=fs.GetParentFolderName(WScript.ScriptFullName)
+If Not fs.FileExists(fs.BuildPath(home,"runtime\\pythonw.exe")) Then WScript.Quit 1
+If WScript.Arguments.Named.Exists("check") Then WScript.Quit 0
+sh.CurrentDirectory=home
+Set env=sh.Environment("Process")
+env("PYTHONHOME")=fs.BuildPath(home,"runtime")
+env("PYTHONPATH")=fs.BuildPath(home,"src")
+env("ECHOMATE_DISTRIBUTED")="1"
+env("HF_HUB_OFFLINE")="1"
+env("TRANSFORMERS_OFFLINE")="1"
+sh.Run Chr(34) & fs.BuildPath(home,"runtime\\pythonw.exe") & Chr(34) & " -m echomate_bot.desktop", 0, False
+'''
+    (dest/'EchoMate.vbs').write_text(launcher,encoding='ascii')
+    manifest_for(dest)
+
+def manifest_for(dest):
+    files=list(dest.rglob('*'));manifest={str(p.relative_to(dest)).replace('\\','/'):dict(bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in files if p.is_file() and p.name!='manifest.json'}
+    (dest/'manifest.json').write_text(json.dumps(dict(schema=1,python=sys.version.split()[0],files=manifest),indent=2),encoding='utf-8')
+    print(json.dumps(dict(files=len(manifest),gib=round(sum(v['bytes'] for v in manifest.values())/1024**3,3),weights_included=False,user_data_included=False)))
+
+def refresh(destination):
+    root=Path(__file__).resolve().parents[1];dest=Path(destination).resolve()
+    if not dest.is_relative_to(root/'dist') or not (dest/'manifest.json').is_file():raise ValueError('Not an existing EchoMate build')
+    for folder in ('src','docs'):shutil.copytree(root/folder,dest/folder,dirs_exist_ok=True,ignore=ignore)
+    shutil.copy2(root/'README.md',dest/'README.md')
+    launcher=dest/'EchoMate.vbs';text=launcher.read_text(encoding='ascii')
+    if 'Arguments.Named.Exists' not in text:
+        text=text.replace('sh.CurrentDirectory=home','If Not fs.FileExists(fs.BuildPath(home,"runtime\\pythonw.exe")) Then WScript.Quit 1\nIf WScript.Arguments.Named.Exists("check") Then WScript.Quit 0\nsh.CurrentDirectory=home')
+        launcher.write_text(text,encoding='ascii')
+    if (root/'LICENSE').exists():shutil.copy2(root/'LICENSE',dest/'LICENSE')
+    samples=dest/'profiles';samples.mkdir(exist_ok=True)
+    if (root/'configs/character-default.json').exists():shutil.copy2(root/'configs/character-default.json',samples/'default.json')
+    manifest_for(dest)
+
+if __name__=='__main__':
+    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--refresh-public',action='store_true');a=p.parse_args();(refresh if a.refresh_public else build)(a.output)

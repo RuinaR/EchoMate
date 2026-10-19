@@ -1,3 +1,4 @@
+from echomate_bot.character_profiles import DEFAULT_PROFILE
 """Policy/lifecycle regressions. Mocks do not certify model conversation quality."""
 import asyncio
 from dataclasses import replace
@@ -39,12 +40,12 @@ class GenderAndMigration(unittest.TestCase):
 
     def test_adult_profile_and_gender_are_independent_across_all_models(self):
         self.assertNotEqual(DEFAULTS['model'],'adult')
-        for model in ('base','persona','adult'):
+        for adult in (False,True):
             for gender in ('female','male','neutral'):
                 for age in (True,False,'true'):
-                    cfg=turn_profile(dict(DEFAULTS,model=model,gender=gender),age_restricted=age)
+                    cfg=turn_profile(dict(DEFAULTS,model='base',adult_humor=adult,gender=gender),age_restricted=age)
                     self.assertEqual(cfg['gender'],gender)
-                    self.assertEqual(cfg['_adult_active'],model=='adult' and age is True)
+                    self.assertEqual(cfg['_adult_active'],adult and age is True)
                     self.assertIn('성별 고정관념',instruction(cfg))
 
     def test_situation_profanity_is_distinguished_from_targeted_harassment(self):
@@ -64,7 +65,7 @@ class AdultRuntime(unittest.IsolatedAsyncioTestCase):
     settle=integration.BotIntegration.settle
 
     async def test_age_gate_fallback_then_channel_change_vetoes_inflight_adult_output(self):
-        self.settings.set(1,'model','adult');self.settings.set(1,'gender','female')
+        self.settings.set(1,'adult_humor',True);self.settings.set(1,'gender','female')
         observed=[];age=False
         original=self.backend.text
         async def text(context,cfg):observed.append(cfg);return await original(context,cfg)
@@ -87,12 +88,13 @@ class AdultRuntime(unittest.IsolatedAsyncioTestCase):
         self.backend.prepare_mode=AsyncMock()
         self.backend.wait=asyncio.Event()
         await self.runtime.ingest(self.event());await asyncio.sleep(.01)
-        await self.runtime.switch_model(1,'adult')
-        self.assertEqual(self.settings.get()['model'],'adult');self.assertFalse(self.transport.sent)
+        chosen='local:'+'a'*24
+        await self.runtime.switch_model(1,chosen)
+        self.assertEqual(self.settings.get()['model'],chosen);self.assertFalse(self.transport.sent)
         self.assertIn(3,self.runtime.states);self.assertFalse(self.runtime.changing_model)
         self.backend.prepare_mode=AsyncMock(side_effect=RuntimeError('synthetic load failure'))
         with self.assertRaises(RuntimeError):await self.runtime.switch_model(1,'base')
-        self.assertEqual(self.settings.get()['model'],'adult');self.assertFalse(self.runtime.changing_model)
+        self.assertEqual(self.settings.get()['model'],chosen);self.assertFalse(self.runtime.changing_model)
         with self.assertRaises(PermissionError):await self.runtime.switch_model(2,'persona')
 
     async def test_permission_await_cannot_return_true_after_settings_revision_changes(self):
@@ -118,10 +120,12 @@ class AdultRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.transport.sent[0][0].id,201)
         self.assertEqual(self.transport.sent[0][0].response_to,200)
 
-    async def test_all_three_modes_continue_without_entry_chance_across_people_topics_and_pause(self):
+    async def test_three_character_profiles_continue_without_entry_chance_across_people_topics_and_pause(self):
         from echomate_bot.dialogue_intent import DialogueIntent
         self.backend.prepare_mode=AsyncMock();self.settings.set(1,'activity','quiet')
-        for index,model in enumerate(('base','persona','adult')):
+        for index,energy in enumerate((15,50,85)):
+            model='base'
+            self.settings.set(1,'character_profile',dict(DEFAULT_PROFILE,energy=energy))
             channel=30+index;self.settings.set_scope(1,2,channel,'mention',inherit=True)
             self.settings.set(1,'model',model);before=len(self.transport.sent)
             await self.runtime.ingest(self.event(id=100+index*10,channel=channel));await self.settle()
@@ -139,7 +143,7 @@ class AdultRuntime(unittest.IsolatedAsyncioTestCase):
 
 
 class AdultWidgets(unittest.TestCase):
-    def test_three_equal_model_buttons_and_gender_labels_fit_at_two_dpi_scales(self):
+    def test_character_controls_replace_three_model_slots_at_two_dpi_scales(self):
         root=tk.Tk();root.withdraw()
         try:
             app=DesktopApp(root,SimpleNamespace(submit=lambda *a,**k:None))
@@ -148,7 +152,9 @@ class AdultWidgets(unittest.TestCase):
             for scale in (1.33,2.):
                 root.tk.call('tk','scaling',scale);app.render();root.update_idletasks()
                 models=[h for h in app.hits if h[1]==583]
-                self.assertEqual(len(models),3);self.assertEqual({h[2:4] for h in models},{(220,35)})
+                self.assertEqual(len(models),4)
+                labels=[app.canvas.itemcget(item,'text') for item in app.canvas.find_all() if app.canvas.type(item)=='text']
+                self.assertFalse(any(x in labels for x in ('個人','개인 말투 · 잠정','성인 유머 · 자유로운 표현')))
                 for item in app.canvas.find_all():
                     if app.canvas.type(item)=='text' and app.canvas.itemcget(item,'text') in {'개인 말투 · 잠정','기본 Gemma 4','성인 유머 · 자유로운 표현'}:
                         left,top,right,bottom=app.canvas.bbox(item)

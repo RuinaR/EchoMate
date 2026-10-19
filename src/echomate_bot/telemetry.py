@@ -7,7 +7,7 @@ import math
 import time
 
 active_trace = ContextVar('echomate_trace', default=None)
-STAGES = frozenset({'social','summary','assessment','continuity','visual','action','text','sending','memory_lookup','private_request','conversation_wait','research','output_check'})
+STAGES = frozenset({'scope_check','conversation_candidates','social','summary','assessment','continuity','visual','action','text','sending','memory_lookup','private_request','conversation_wait','research','output_check'})
 
 
 def process_ram_mib():
@@ -78,10 +78,13 @@ def summarize(records):
     sent=[r for r in records if r['outcome']=='sent']
     calls=[c for r in records for c in r['calls']]
     return dict(samples=len(records),outcomes=dict(Counter(r['outcome'] for r in records)),
+                mean_response_seconds=sum(r['seconds'] for r in sent)/len(sent) if sent else None,
                 response_seconds=distribution([r['seconds'] for r in sent]),
                 queue_seconds=distribution([c.get('queue_seconds') for c in calls]),
                 ttft_seconds=distribution([c.get('ttft_seconds') for c in calls]),
                 tokens_per_second=distribution([c.get('tokens_per_second') for c in calls]),
+                ram_mib=distribution([c.get('ram_mib') for c in calls]),
+                allocated_vram_mib=distribution([c.get('peak_allocated_mib') for c in calls]),
                 regenerations=sum(r['regenerations'] for r in records),
                 stages={s:distribution([r['stages'][s] for r in sent if s in r['stages']])
                         for s in sorted({s for r in sent for s in r['stages']})})

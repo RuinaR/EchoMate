@@ -96,7 +96,7 @@ async def run(root,repeats,concurrency_only=False):
         await backend.ready()
         import torch
         torch.manual_seed(2026)
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             for i in range(0 if concurrency_only else repeats+1):
                 for variant in (('baseline','candidate') if i%2==0 else ('candidate','baseline')):await case(variant,mode,'single',i)
             for i in range(1,4):
@@ -105,7 +105,7 @@ async def run(root,repeats,concurrency_only=False):
             if not concurrency_only:
                 for n in (5,10,20,50):await case('candidate',mode,'context',n,turns=n)
         summary=dict(real_gpu=True,real_discord=False,modes={})
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             r=[x for x in rows if x['mode']==mode];single={}
             for variant in ('baseline','candidate'):
                 q=[x for x in r if x['variant']==variant and x['label']=='single' and not x['warmup']]

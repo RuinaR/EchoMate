@@ -1,3 +1,4 @@
+from echomate_bot.character_profiles import DEFAULT_PROFILE
 """Release contracts: isolated SQLite, fake transport, no external network."""
 import asyncio
 from dataclasses import replace
@@ -97,9 +98,11 @@ class RuntimeRelease(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event(id=11));await self.settle();self.assertEqual(store.users(2)[0]['interactions'],1)
         store.set_consent(2,4,'relationships',False)
         await self.runtime.ingest(self.event(id=12));await self.settle();self.assertEqual(store.users(2)[0]['interactions'],1)
-    async def test_code_policy_final_boundary_all_modes_and_input_code_understood(self):
+    async def test_code_policy_final_boundary_all_profiles_and_input_code_understood(self):
         self.runtime.direct_cooldown=0;self.backend.text=AsyncMock(return_value='```python\nprint(1)\n```')
-        for i,mode in enumerate(('base','persona','adult')):
+        for i,energy in enumerate((15,50,85)):
+            mode='base'
+            self.settings.set(1,'character_profile',dict(DEFAULT_PROFILE,energy=energy))
             self.settings.set(1,'model',mode)
             await self.runtime.ingest(self.event(id=30+i,content='<@999> def add(a,b): return a+b 이 함수 설명해 줘'));await self.settle()
         self.assertEqual(len(self.transport.sent),3)
@@ -118,9 +121,11 @@ class RuntimeRelease(unittest.IsolatedAsyncioTestCase):
         self.transport.execute=original
         await self.runtime.ingest(self.event(id=11,content='<@999> 이 글에 👍 붙여줘'));await self.settle()
         self.assertEqual(len(self.transport.sent),1)
-    async def test_explicit_program_creation_is_explained_without_gpu_in_every_mode(self):
+    async def test_explicit_program_creation_is_explained_without_gpu_in_every_profile(self):
         self.runtime.direct_cooldown=0
-        for i,mode in enumerate(('base','persona','adult')):
+        for i,energy in enumerate((15,50,85)):
+            mode='base'
+            self.settings.set(1,'character_profile',dict(DEFAULT_PROFILE,energy=energy))
             self.settings.set(1,'model',mode)
             await self.runtime.ingest(self.event(id=60+i,content='<@999> Python으로 계산기 프로그램 만들어 줘'));await self.settle()
         self.assertEqual(len(self.transport.sent),3);self.assertFalse(self.backend.calls)

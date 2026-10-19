@@ -33,7 +33,7 @@ async def run(root):
     results=[];restore_checks=[];counter=1000
     atomic_private_json(root/'manifest.json',dict(synthetic=True,real_discord=False,seed=2026,
         source={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in Path('src/echomate_bot').glob('*.py')},
-        simulated_ledger_elapsed_seconds=[3,700],models=['base','persona','adult'],
+        simulated_ledger_elapsed_seconds=[3,700],models=['base'],
         preparation_failure_injected=True,age_restricted_channel_simulated=True))
     async def send(model,label,text,channel,*,author=4,reply_to=None,parent=None,cancel=None,gap_seconds=3):
         nonlocal counter
@@ -62,7 +62,7 @@ async def run(root):
         await backend.ready()
         import torch
         torch.manual_seed(2026)
-        for index,model in enumerate(('base','persona','adult')):
+        for index,model in enumerate(('base',)):
             channel=30+index;settings.set_scope(1,2,channel,'mention',inherit=True)
             await runtime.switch_model(1,model)
             await send(model,'mention','<@999> 합성 모임 장소는 별빛 도서관이고 시간은 16시야. 한 문장으로 확인해 줘.',channel)

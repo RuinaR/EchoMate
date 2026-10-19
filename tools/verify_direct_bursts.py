@@ -21,7 +21,7 @@ async def run(root):
     for source in Path('src').rglob('*.py'):
         target=root/'source'/source;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
     atomic_private_json(root/'manifest.json',dict(real_gpu=True,real_discord=False,synthetic=True,seed=2026,
-        intervals=[1,2,5],models=['base','persona','adult'],source_hashes={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in Path('src/echomate_bot').glob('*.py')}))
+        intervals=[1,2,5],models=['base'],source_hashes={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in Path('src/echomate_bot').glob('*.py')}))
     async def case(mode,interval,kind):
         directory=root/f'{mode}-{kind}-{interval}';directory.mkdir()
         settings=Settings(1,secrets.token_hex(32),directory/'settings.json')
@@ -57,11 +57,11 @@ async def run(root):
         await backend.ready()
         import torch
         torch.manual_seed(2026)
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             for interval in (1,2,5):await case(mode,interval,'independent')
             for kind in ('queued','supplement','duplicate'):await case(mode,1,kind)
         summary=dict(real_gpu=True,real_discord=False,cases=len(rows),passed=sum(r['passed'] for r in rows),
-            duplicate_sends=sum(r['duplicates'] for r in rows),modes={m:dict(cases=sum(r['mode']==m for r in rows),passed=sum(r['passed'] for r in rows if r['mode']==m)) for m in ('base','persona','adult')})
+            duplicate_sends=sum(r['duplicates'] for r in rows),modes={m:dict(cases=sum(r['mode']==m for r in rows),passed=sum(r['passed'] for r in rows if r['mode']==m)) for m in ('base',)})
         atomic_private_json(root/'summary.json',summary);print(json.dumps(summary),flush=True)
     finally:
         try:await backend.close()

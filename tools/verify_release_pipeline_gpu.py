@@ -40,7 +40,7 @@ async def run(root):
            ('autonomous_other','<@5> 내일 회의 시간은 너한테 따로 말할게','SILENCE',0)]
     try:
         await backend.ready()
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             for index,(kind,text,expected,calls) in enumerate(cases):
                 folder=root/f'{mode}-{kind}';folder.mkdir()
                 cfg=Settings(1,secrets.token_hex(32),folder/'settings.json')

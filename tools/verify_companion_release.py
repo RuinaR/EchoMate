@@ -48,7 +48,7 @@ async def run(root):
         await backend.ready()
         import torch
         torch.manual_seed(2026)
-        for mode_index,mode in enumerate(('base','persona','adult')):
+        for mode_index,mode in enumerate(('base',)):
             channel=80+mode_index;settings.set_scope(1,2,channel,'mention')
             def names(c):c['guilds']['2'].update(name='보람mk3',aliases=['두리'],timezone='Asia/Seoul')
             settings.change(1,names);await runtime.switch_model(1,mode)
@@ -74,7 +74,7 @@ async def run(root):
                     print(json.dumps(dict(phase='ab',mode=mode,repeat=repeat,fast=enabled,calls=len(calls),outputs=len(sent))),flush=True)
             runtime.followup_fast_path=True
         summary=dict(real_gpu=True,real_discord=False,fresh={},route_ab={})
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             entries=[r for r in rows if r['mode']==mode]
             summary['fresh'][mode]=dict(total=len(entries),matched=sum(r['passed'] for r in entries),false_positive_cases=[r['case'] for r in entries if not r['expected'] and r['outputs']],missed_call_cases=[r['case'] for r in entries if r['expected'] and not r['outputs']])
             b=[r for r in benchmark if r['mode']==mode and not r['warmup']]

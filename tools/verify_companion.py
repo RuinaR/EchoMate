@@ -62,7 +62,7 @@ async def run(root):
         await backend.ready()
         import torch
         torch.manual_seed(2026)
-        for n,mode in enumerate(('base','persona','adult')):
+        for n,mode in enumerate(('base',)):
             channel=30+n;cfg.set_scope(1,2,channel,'mention')
             def names(c):c['guilds']['2'].update(name='민랑mk2',aliases=['별빛'],timezone='Asia/Seoul')
             cfg.change(1,names);await runtime.switch_model(1,mode)
@@ -93,7 +93,7 @@ async def run(root):
         for _ in range(100):
             started=time.perf_counter();await asyncio.to_thread(store.memories,2,4,32,'게임');timings.append((time.perf_counter()-started)*1000)
         summary=dict(real_gpu=True,real_discord=False,turns=len(rows),modes={},memory_ab=[{k:v for k,v in r.items() if k not in ('response','metric')} for r in ab],lookup_ms=distribution(timings))
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             r=[x for x in rows if x['mode']==mode];checked=[x for x in r if x['expected']]
             summary['modes'][mode]=dict(outputs=sum(x['outputs'] for x in r),literal_checks=len(checked),literal_matches=sum(x['literal_match'] for x in checked),
                 silence_turns=[x['turn'] for x in r if not x['outputs']],latency=distribution([x['trace']['seconds'] for x in r if x.get('trace') and 'seconds' in x['trace']]))

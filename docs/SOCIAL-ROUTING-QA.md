@@ -1,5 +1,13 @@
 # 사회적 청자 엔진 QA — 2026-10-19
 
+## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
+
+시작 HEAD/원격5249fd2·clean을 확인했다. 공식 기본 Gemma4 12B 하나와 독립 캐릭터를 사용하며 기존 persona/adult 고정 UI·기본 LoRA 의존을 제거한다. 이전 서명 설정은 검증 후 base로 읽고 기존 가중치/자료는 삭제하지 않는다. 성인 유머는 별도 기본OFF 정책이다. 로컬 모델/HF 캐시 탐색·호환성 검사·전환/복구, 프로필 서명 저장·편집·미리보기, GUI 첫 설정/Windows DPAPI와 Portable 런타임을 구현했다. 기존 개인정보 동의/기억/관계/요약/알림/검색/공정 큐/Unicode 반응/원본 reply를 유지한다.
+
+청자 무공백 호격·2인칭/맞장구를 분리한 GPU 개발 재검45/46, 오개입1·누락0이었다. 추가 제외 근거를 검증기에 넣었지만 공식 no-LoRA 로더의 독립20문항은 Windows commit 부족1455로 실행을 마치지 못했다. 실제 캐릭터 생성/전체 지연 A/B·깨끗한 Windows VM·실제 Discord는 미검증이며 전체 릴리즈는 **BLOCKED**다. 이전 세 모델 QA와 숫자를 최신 구조의 성공으로 재사용하지 않는다. 사용자 데스크톱/실제 Discord 접속을 수행하지 않았다.
+
+[모델](MODEL-REGISTRY.md) · [캐릭터](CHARACTER-PROFILES.md) · [설치](USER-INSTALLATION.md) · [배포 QA·실패·마감](DISTRIBUTION-QA.md) · [전체 지연](PERFORMANCE-PIPELINE.md). 아래 이전 차수보다 이 절을 우선한다.
+
 시작 main/HEAD/원격 main `3cc53eb`, 초기 clean. README/AGENTS/정의/구조/인수인계/로그를 읽고 실제 원격과 비교했다. **운영 Discord 로그인·명령 동기화·송신과 사용자 데스크톱 조작은 없음.** 개발은 로컬 GPU·합성 이벤트·임시 SQLite·HTTP/SDK mock·숨긴 Tk로 한정했다. 운영 설정/bootstrap/companion/sent4파일은 작업 전후 해시로 보존한다. 모델/LoRA/학습 자료/서명 키를 바꾸지 않았다.
 
 판정은 **기능 구현과 제한된 로컬 QA를 마친 개발 후보**이며 전체 실사용 PASS가 아니다. 남는 실제 누락/미검증을 아래 최종 결과와 함께 읽는다. 단위 테스트 숫자나 같은 base 의미 가중치의 세 모드 반복을 일반화 품질로 과장하지 않는다.

@@ -1,5 +1,15 @@
 # 작업 로그
 
+## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
+
+시작 HEAD/원격5249fd2·clean을 확인했다. 공식 기본 Gemma4 12B 하나와 독립 캐릭터를 사용하며 기존 persona/adult 고정 UI·기본 LoRA 의존을 제거한다. 이전 서명 설정은 검증 후 base로 읽고 기존 가중치/자료는 삭제하지 않는다. 성인 유머는 별도 기본OFF 정책이다. 로컬 모델/HF 캐시 탐색·호환성 검사·전환/복구, 프로필 서명 저장·편집·미리보기, GUI 첫 설정/Windows DPAPI와 Portable 런타임을 구현했다. 기존 개인정보 동의/기억/관계/요약/알림/검색/공정 큐/Unicode 반응/원본 reply를 유지한다.
+
+청자 무공백 호격·2인칭/맞장구를 분리한 GPU 개발 재검45/46, 오개입1·누락0이었다. 추가 제외 근거를 검증기에 넣었지만 공식 no-LoRA 로더의 독립20문항은 Windows commit 부족1455로 실행을 마치지 못했다. 실제 캐릭터 생성/전체 지연 A/B·깨끗한 Windows VM·실제 Discord는 미검증이며 전체 릴리즈는 **BLOCKED**다. 이전 세 모델 QA와 숫자를 최신 구조의 성공으로 재사용하지 않는다. 사용자 데스크톱/실제 Discord 접속을 수행하지 않았다.
+
+[모델](MODEL-REGISTRY.md) · [캐릭터](CHARACTER-PROFILES.md) · [설치](USER-INSTALLATION.md) · [배포 QA·실패·마감](DISTRIBUTION-QA.md) · [전체 지연](PERFORMANCE-PIPELINE.md). 아래 이전 차수보다 이 절을 우선한다.
+
+변경 파일은 settings/inference/character/adult_policy/model_registry/character_profiles/paths/onboarding/desktop/UI/processes/runtime/social/members/telemetry와 공개 샘플·Portable 빌더·관련 회귀다. 최종 전체490 OK58.325초. GPU 개발46문항45/46 이후 별도20독립평가는 Windows1455로 시작 실패했다. resource commit 사전 차단을 추가하고 실행 중인 다른 앱을 종료하지 않았다. 세 고정 모델 회귀 행렬은 기본 모델+서로 다른 세 캐릭터로 바꿨고 구형 슬롯은 서명 마이그레이션 검사에만 남긴다. 캐릭터12/성능A/B9는 준비만 했다. Portable 라이브러리 폴더 누락은 수정 후 격리 import와 실제 Controller 최초 설정·저장·종료·복원 통과, 깨끗한 VM/실제 Discord는 미검증이다. MIT는 사용자 허가로 적용했고 제3자 라이선스는 유지한다. 운영4파일·가중치를 보존하고 릴리즈 차단을 유지한다.
+
 ## 2026-10-19 사회적 청자·대화 상대 — 현재 기준
 
 기준3cc53eb/main과 원격 일치/초기 clean을 확인했다. sessions/runtime의 최신 세션 선택·새 화자 단일 후보·bare-call 합류·verify_target group 재승격을 추적했다. social.py와 공통 assess_social, 후보 임시 상태/확정 상대/사람 간 순서·완료 sibling 정리, 실제 멘션의 청자/화제 분리, 보고된 호출 보류, 구조화 진단·UI를 구현했다. 변경 모듈은 runtime/sessions/inference/members/naming/telemetry/desktop/desktop_ui, 관련 테스트와 verify_social_gpu/SDK mock 프로토콜이다. 기존 기능과 운영4파일을 보존한다. 검사 명령/개발 실패/미사용 결과/실제 GPU/미검증/최종 커밋은 SOCIAL-ROUTING-QA에 누적한다.

@@ -1,5 +1,13 @@
 # Discord 개인정보 동의와 Windows 관리
 
+## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
+
+시작 HEAD/원격5249fd2·clean을 확인했다. 공식 기본 Gemma4 12B 하나와 독립 캐릭터를 사용하며 기존 persona/adult 고정 UI·기본 LoRA 의존을 제거한다. 이전 서명 설정은 검증 후 base로 읽고 기존 가중치/자료는 삭제하지 않는다. 성인 유머는 별도 기본OFF 정책이다. 로컬 모델/HF 캐시 탐색·호환성 검사·전환/복구, 프로필 서명 저장·편집·미리보기, GUI 첫 설정/Windows DPAPI와 Portable 런타임을 구현했다. 기존 개인정보 동의/기억/관계/요약/알림/검색/공정 큐/Unicode 반응/원본 reply를 유지한다.
+
+청자 무공백 호격·2인칭/맞장구를 분리한 GPU 개발 재검45/46, 오개입1·누락0이었다. 추가 제외 근거를 검증기에 넣었지만 공식 no-LoRA 로더의 독립20문항은 Windows commit 부족1455로 실행을 마치지 못했다. 실제 캐릭터 생성/전체 지연 A/B·깨끗한 Windows VM·실제 Discord는 미검증이며 전체 릴리즈는 **BLOCKED**다. 이전 세 모델 QA와 숫자를 최신 구조의 성공으로 재사용하지 않는다. 사용자 데스크톱/실제 Discord 접속을 수행하지 않았다.
+
+[모델](MODEL-REGISTRY.md) · [캐릭터](CHARACTER-PROFILES.md) · [설치](USER-INSTALLATION.md) · [배포 QA·실패·마감](DISTRIBUTION-QA.md) · [전체 지연](PERFORMANCE-PIPELINE.md). 아래 이전 차수보다 이 절을 우선한다.
+
 2026-10-19 최신 요구를 기준으로 한다. 이전 `/echo`, `/내기억` 및 관리자 패널 안내보다 이 문서가 우선한다. 실제 Discord 등록·삭제는 이번에 실행하지 않았다.
 
 ## `/동의` 하나만 제공

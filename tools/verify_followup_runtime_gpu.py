@@ -19,7 +19,7 @@ async def run(root,previous):
     root.mkdir(parents=True,exist_ok=False);lease=InstanceLease();backend=LocalBackend();rows=[]
     try:
         await backend.ready()
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             folder=root/mode;folder.mkdir();dbpath=folder/'companion.sqlite3'
             source=sqlite3.connect((previous/mode/'companion.sqlite3').resolve().as_uri()+'?mode=ro',uri=True);target=sqlite3.connect(dbpath)
             try:source.backup(target)

@@ -24,7 +24,7 @@ async def run(root,fixtures,skip_moods=False):
     old={};exec(subprocess.check_output(['git','show','66d0b02:src/echomate_bot/character.py']).decode('utf-8').replace('from .adult_policy import','from echomate_bot.adult_policy import'),old)
     try:
         await backend.ready()
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             if protocol.get('sequence'):
                 settings=Settings(1,secrets.token_hex(32),root/f'{mode}-sequence-settings.json')
                 settings.set_scope(1,2,3,'mention');settings.set(1,'enabled',True);settings.set(1,'model',mode)
@@ -101,7 +101,7 @@ async def run(root,fixtures,skip_moods=False):
                     except ValueError as exc:pair[label]=dict(error=type(exc).__name__,seconds=time.monotonic()-start)
                 moods.append(dict(mode=mode,mood=mood,**pair));atomic_private_json(root/'moods-private.json',moods)
             summary=dict(real_gpu=True,real_discord=False,source_commit='66d0b02 plus private source snapshot',
-                         modes=[dict(mode=m,cases=sum(r['mode']==m for r in rows),passed=sum(r['mode']==m and r['passed'] for r in rows)) for m in ('base','persona','adult')],
+                         modes=[dict(mode=m,cases=sum(r['mode']==m for r in rows),passed=sum(r['mode']==m and r['passed'] for r in rows)) for m in ('base',)],
                          sequence=sequence,mood_pairs=len(moods),technical_cases=len(technical),metrics=backend.metrics)
             atomic_private_json(root/'summary.json',summary)
     finally:

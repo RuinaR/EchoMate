@@ -20,6 +20,7 @@ from .settings import ROOT,Settings,MOODS,ACTIVITY
 STAGES={'social':'실제 청자·대화 흐름 판정','member_resolution':'호칭·답장 근거 확인','summary':'대화 요약 확인·압축', 'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
         'action':'행동 선택','text':'답변 작성','sending':'Discord 전송','research':'인터넷 원문·근거 확인','output_check':'출력 정책 검사'}
 NO_RESPONSE = {
+    'resource_stop_commit':'Windows 가상 메모리 여유가 부족해요. 다른 작업을 마친 뒤 다시 준비해 주세요',
     'social_human_exchange_pending':'다른 사람과 주고받는 순서라 끼어들지 않았어요', 'social_candidate_capacity':'여러 대화의 연결이 불명확해 기다려요',
     'social_other_addressee':'다른 사람에게 한 말이라 참여하지 않았어요', 'social_broadcast':'채널 전체를 향한 말이라 먼저 답하지 않았어요',
     'social_uncertain':'누구에게 한 말인지 확실하지 않아 기다려요', 'social_join_not_invited':'봇에게 합류를 요청한 근거가 부족해요',
@@ -63,8 +64,11 @@ class LocalController:
         try:
             from .instance import InstanceLease
             self.lease=InstanceLease()
-            self.bootstrap=json.loads((ROOT/'bootstrap.json').read_text(encoding='utf-8'))
+            from .onboarding import load_bootstrap
+            self.bootstrap=load_bootstrap(ROOT/'bootstrap.json')
             self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'],ROOT/'settings.json')
+            from .character_profiles import ProfileStore
+            self.profiles_view=ProfileStore(ROOT/'characters.json',self.bootstrap['owner_id'],self.bootstrap['signing_key']).list()
             from .companion_store import CompanionStore
             self.companion=CompanionStore(ROOT/'companion.sqlite3');self.companion_view={}
             self.record_guilds=await asyncio.to_thread(self.companion.guild_ids) if not self.companion.error else []
@@ -72,15 +76,16 @@ class LocalController:
             if cached.exists():
                 try:self.inventory=json.loads(cached.read_text(encoding='utf-8'))
                 except (OSError,ValueError):self.error='저장된 서버 목록을 읽지 못했어요'
-            if not self.bootstrap['admin_guilds']:raise ValueError('No approved guild')
             self.phase='서버와 채널 목록을 불러오고 있어요'
             self._publish()
             # Local records remain available without logging into Discord.
             if not self.job or self.job.done():self.phase='정지 — 시작 버튼으로 연결'
         except Exception as exc:
-            self.phase='다른 EchoMate 앱이 실행 중이야' if isinstance(exc,RuntimeError) else '로컬 설정 필요 — setup_discord_bot.ps1 확인'
+            self.phase='다른 EchoMate 앱이 실행 중이야' if isinstance(exc,RuntimeError) else '처음 사용 안내에서 봇 정보를 등록해 주세요'
             self.error=type(exc).__name__
             self.settings=None
+        from .model_registry import ModelRegistry
+        self.models=await asyncio.to_thread(ModelRegistry(self.settings.get()['model_roots'] or None if self.settings else None).scan)
         while True:
             self._publish()
             await asyncio.sleep(.4)
@@ -115,13 +120,16 @@ class LocalController:
             for cid,p in list(runtime.progress.items()):
                 channel=client.get_channel(p.get('channel',cid))
                 progress.append(dict(channel=channel.name if channel else '허용된 채널',stage=STAGES.get(p['stage'],p['stage']),seconds=round(time.time()-p['started'],1)))
-        preparing=bool(runtime and getattr(runtime,'changing_model',False))
+        preparing=bool(getattr(self,'starting_model',False) or getattr(self,'model_preparing',False) or runtime and getattr(runtime,'changing_model',False))
         try:
             from .ledger import Ledger
             statistics=runtime.ledger.statistics() if runtime else Ledger.read_statistics(self.settings.path.parent/'sent.sqlite3') if cfg else {}
         except (OSError,sqlite3.Error):statistics=dict(error=True);self.error='전송 통계를 읽지 못했어요'
         snapshot=dict(phase='AI 안전 보호로 정지 · 진단 확인 후 다시 시작' if runtime and runtime.stopped and getattr(client.backend,'failed',False) else '모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
                       model_preparing=preparing,
+                      model_load_seconds=getattr(client.backend,'load_seconds',None) if client else None,
+                      model_switch_seconds=getattr(client.backend,'switch_seconds',None) if client else None,
+                      models=[m.public() for m in getattr(self,'models',[])],profiles=getattr(self,'profiles_view',{}),preview=getattr(self,'preview_result',''),
                       recent_reason=next((NO_RESPONSE.get(r['code'],'') for r in reversed(runtime.diagnostics) if r['code'] in NO_RESPONSE or r['code']=='response_sent'),'') if runtime else '',
                       scheduler=client.backend.scheduler.snapshot() if client and hasattr(client.backend,'scheduler') else {},
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
@@ -179,7 +187,7 @@ class LocalController:
             await reader.close();self.refreshing=False
 
     async def command(self,operation,**kwargs):
-        if operation in {'start','stop','shutdown','name'} or (operation=='settings' and 'model' in kwargs.get('values',{})):
+        if operation in {'start','stop','shutdown','name','preview','setup','models','profiles'} or (operation=='settings' and 'model' in kwargs.get('values',{})):
             if not hasattr(self,'lifecycle_lock'):self.lifecycle_lock=asyncio.Lock()
             async with self.lifecycle_lock:return await self._command(operation,**kwargs)
         return await self._command(operation,**kwargs)
@@ -187,16 +195,72 @@ class LocalController:
     async def _command(self,operation,**kwargs):
         try:
             if operation=='shutdown':
+                preview=getattr(self,'preview_task',None)
+                if preview and not preview.done():preview.cancel();await asyncio.gather(preview,return_exceptions=True)
                 if getattr(self,'settings',None):
                     try:self.settings.set(self.bootstrap['owner_id'],'enabled',False)
                     except OSError:self.error='SettingsWriteError'
                 if self.job and not self.job.done():
                     self.job.cancel();await asyncio.gather(self.job,return_exceptions=True)
                 self.main_task.cancel();return
+            if operation=='setup':
+                if self.settings or (ROOT/'bootstrap.json').exists():raise PermissionError('Existing setup preserved')
+                if not self.lease:raise PermissionError('Another app owns setup')
+                from .onboarding import create_installation
+                self.bootstrap=await asyncio.to_thread(create_installation,ROOT/'bootstrap.json',int(kwargs['owner']),kwargs['token'])
+                self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'],ROOT/'settings.json')
+                from .companion_store import CompanionStore
+                self.companion=CompanionStore(ROOT/'companion.sqlite3');self.companion_view={};self.record_guilds=[]
+                self.phase='등록 완료 · AI 모델과 허용 채널을 선택해 주세요';return
             if not self.settings:raise ValueError('Setup required')
             owner=self.bootstrap['owner_id'];self.settings.authorize(owner)
             self.error=''
-            if operation=='refresh':await self.refresh_inventory()
+            if getattr(self,'starting_model',False) and (operation=='models' and 'roots' in kwargs or operation=='settings' and 'model' in kwargs.get('values',{})):
+                raise ValueError('최초 모델 준비가 끝난 뒤 변경해 주세요')
+            preview=getattr(self,'preview_task',None)
+            if preview and not preview.done() and (operation in ('start','stop','preview') or operation=='settings' and 'model' in kwargs.get('values',{})):
+                raise ValueError('미리보기가 끝난 뒤 모델을 변경하거나 시작해 주세요')
+            if operation=='models':
+                from .model_registry import ModelRegistry
+                roots=kwargs.get('roots',self.settings.get()['model_roots'])
+                active=self.settings.get()['model']
+                previous=next((m.path for m in getattr(self,'models',[]) if m.id==active and m.compatible),None)
+                if previous and previous not in roots and 'roots' in kwargs:roots=[*roots,previous]
+                from .settings import validate
+                validate(dict(self.settings.get(),model_roots=roots))
+                self.models=await asyncio.to_thread(ModelRegistry(roots or None).scan)
+                self.settings.set(owner,'model_roots',roots)
+                if self.client:self.client.backend.model_roots=roots or None
+                self.notice='모델 목록을 다시 확인했어요'
+            elif operation=='profiles':
+                from .character_profiles import ProfileStore,DEFAULT_PROFILE
+                store=ProfileStore(self.settings.path.parent/'characters.json',owner,self.bootstrap['signing_key']);action=kwargs.get('action','list');key=kwargs.get('key','default')
+                if action=='save':await asyncio.to_thread(store.save,owner,key,kwargs['value'])
+                elif action=='delete':await asyncio.to_thread(store.save,owner,key)
+                elif action=='import':await asyncio.to_thread(store.import_file,owner,key,kwargs['path'])
+                elif action=='export':await asyncio.to_thread(store.export_file,key,kwargs['path'])
+                elif action in ('apply','restore'):
+                    from .character_profiles import SHARED_FIELDS
+                    profile=store.list()[key] if action=='apply' else dict(DEFAULT_PROFILE)
+                    self.settings.change(owner,lambda cfg:cfg.update(character_profile=profile,**{k:profile[k] for k in SHARED_FIELDS}))
+                self.profiles_view=await asyncio.to_thread(store.list)
+                self.notice='캐릭터 설정을 확인했어요'
+            elif operation=='preview':
+                text=kwargs['text']
+                if not isinstance(text,str) or not 1<=len(text)<=1000:raise ValueError('Invalid preview input')
+                self.preview_result='로컬에서 답변을 준비하고 있어요';self._publish()
+                from .inference import LocalBackend
+                cfg=self.settings.get();backend=self.client.backend if self.client else LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None)
+                owns_backend=self.client is None
+                async def generate_preview():
+                    try:self.preview_result=await backend.text([dict(role='user',content=text)],cfg)
+                    except asyncio.CancelledError:self.preview_result='미리보기를 취소했어요';raise
+                    except Exception as exc:self.preview_result='미리보기 실패 · '+type(exc).__name__
+                    finally:
+                        if owns_backend:await backend.close()
+                self.preview_task=asyncio.create_task(generate_preview())
+                # No Runtime ingestion: consent, memory, affinity and reminders untouched.
+            elif operation=='refresh':await self.refresh_inventory()
             elif operation=='start':
                 self.settings.set(owner,'enabled',True)
                 if self.job and not self.job.done():return
@@ -210,15 +274,28 @@ class LocalController:
                 self.phase='정지'
             elif operation=='settings':
                 values=kwargs['values']
-                allowed={'enabled','text','reactions','vision','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','command_sync_pending','web_search','summaries_auto'}
+                allowed={'enabled','text','reactions','vision','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','adult_humor','character_profile','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','command_sync_pending','web_search','summaries_auto'}
                 if set(values)-allowed:raise ValueError('Unknown GUI setting')
                 from .settings import validate
+                from .character_profiles import SHARED_FIELDS
+                if 'character_profile' in values:
+                    values=dict(values,**{k:values['character_profile'][k] for k in SHARED_FIELDS})
+                elif set(values)&set(SHARED_FIELDS) and self.settings.get()['character_profile']:
+                    values=dict(values,character_profile=dict(self.settings.get()['character_profile'],**{k:v for k,v in values.items() if k in SHARED_FIELDS}))
                 validate(dict(self.settings.get(),**values))
                 if 'model' in values and self.client:
                     await self.client.runtime.switch_model(owner,values['model'])
                     values={k:v for k,v in values.items() if k!='model'}
+                elif 'model' in values:
+                    from .inference import LocalBackend
+                    cfg=self.settings.get();backend=LocalBackend(model_id=values['model'],model_roots=cfg['model_roots'] or None)
+                    self.model_preparing=True;self._publish()
+                    try:await backend.prepare_mode(values['model'])
+                    finally:
+                        try:await backend.close()
+                        finally:self.model_preparing=False
                 if values:self.settings.change(owner,lambda cfg:cfg.update(values))
-                if self.client:
+                if self.client and values:
                     self.client.runtime.cancel_pending()
             elif operation=='name':
                 from .naming import validate_name
@@ -365,7 +442,8 @@ class LocalController:
             if operation in {'settings','scope','guild'}:self.notice='설정 저장 완료'
         except Exception as exc:
             safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요'}
-            self.error=str(exc) if str(exc) in safe else type(exc).__name__
+            from .processes import ResourceLimitError
+            self.error=NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요') if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
         self._publish()
 
     async def refresh_companion(self,guild,user=None,query='',kind=None):
@@ -398,13 +476,18 @@ class LocalController:
         for person in self.companion_view['people']:person['label']=names.get((guild,int(person['user'])),f"사용자 {person['user']}")
 
     async def _run_bot(self):
+        self.starting_model=True
         try:
             self.phase='모델 준비 중 — 첫 연결은 약 40초'
             from .inference import LocalBackend
             from .discord_app import EchoClient
             logging.getLogger('discord').setLevel(logging.CRITICAL)
-            self.client=EchoClient(self.settings,LocalBackend(),self.bootstrap['admin_guilds'])
+            from .settings import DEFAULTS
+            cfg=self.settings.get() if self.settings else dict(DEFAULTS)
+            self.client=EchoClient(self.settings,LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None),self.bootstrap['admin_guilds'])
             await self.client.backend.ready()
+            if hasattr(self.client.backend,'probe'):await self.client.backend.probe()
+            self.starting_model=False
             self.phase='Discord 연결 중'
             task=asyncio.create_task(self.client.start(self.bootstrap['token'],reconnect=True))
             try:
@@ -415,8 +498,11 @@ class LocalController:
             finally:
                 task.cancel();await asyncio.gather(task,return_exceptions=True)
         except asyncio.CancelledError:raise
-        except Exception as exc:self.error=type(exc).__name__
+        except Exception as exc:
+            from .processes import ResourceLimitError
+            self.error=NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요') if isinstance(exc,ResourceLimitError) else type(exc).__name__
         finally:
+            self.starting_model=False
             if self.client:
                 from .settings import atomic_private_json
                 client=self.client

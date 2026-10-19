@@ -10,6 +10,21 @@ def background_options():
     # Capturing stdout alone does not suppress a console under pythonw on Windows.
     return {'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}
 
+def model_memory_budget(weight_bytes):
+    """Conservative Windows commit guard before opening large weight mappings.
+
+    Does not change page-file/system settings or terminate other processes.
+    """
+    if os.name!='nt':return
+    import ctypes
+    class Memory(ctypes.Structure):
+        _fields_=[('length',ctypes.c_ulong),('load',ctypes.c_ulong)]+[(k,ctypes.c_ulonglong) for k in
+            ('total','available','page_total','page_available','virtual_total','virtual_available','extended')]
+    status=Memory();status.length=ctypes.sizeof(status)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):raise ResourceLimitError('Memory query unavailable','ram')
+    if status.available<3*1024**3:raise ResourceLimitError('Insufficient RAM for model preparation','ram')
+    if status.page_available<weight_bytes+2*1024**3:raise ResourceLimitError('Insufficient Windows commit headroom for weight loading','commit')
+
 
 def check_resources():
     """Hardware bounds without importing a GPU inference framework."""

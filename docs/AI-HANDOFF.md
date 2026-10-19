@@ -1,5 +1,15 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
+
+시작 HEAD/원격5249fd2·clean을 확인했다. 공식 기본 Gemma4 12B 하나와 독립 캐릭터를 사용하며 기존 persona/adult 고정 UI·기본 LoRA 의존을 제거한다. 이전 서명 설정은 검증 후 base로 읽고 기존 가중치/자료는 삭제하지 않는다. 성인 유머는 별도 기본OFF 정책이다. 로컬 모델/HF 캐시 탐색·호환성 검사·전환/복구, 프로필 서명 저장·편집·미리보기, GUI 첫 설정/Windows DPAPI와 Portable 런타임을 구현했다. 기존 개인정보 동의/기억/관계/요약/알림/검색/공정 큐/Unicode 반응/원본 reply를 유지한다.
+
+청자 무공백 호격·2인칭/맞장구를 분리한 GPU 개발 재검45/46, 오개입1·누락0이었다. 추가 제외 근거를 검증기에 넣었지만 공식 no-LoRA 로더의 독립20문항은 Windows commit 부족1455로 실행을 마치지 못했다. 실제 캐릭터 생성/전체 지연 A/B·깨끗한 Windows VM·실제 Discord는 미검증이며 전체 릴리즈는 **BLOCKED**다. 이전 세 모델 QA와 숫자를 최신 구조의 성공으로 재사용하지 않는다. 사용자 데스크톱/실제 Discord 접속을 수행하지 않았다.
+
+[모델](MODEL-REGISTRY.md) · [캐릭터](CHARACTER-PROFILES.md) · [설치](USER-INSTALLATION.md) · [배포 QA·실패·마감](DISTRIBUTION-QA.md) · [전체 지연](PERFORMANCE-PIPELINE.md). 아래 이전 차수보다 이 절을 우선한다.
+
+최종 전체490 OK58.325초, 운영4파일 hash동일. Portable4.59GiB는 번들 런타임/PATH 격리 import·실제 Controller/숨긴 Tk·합성 DPAPI 최초 설정·프로필 저장/적용·안전 종료·서명 설정 재읽기까지 확인했다. 공식 기본 모델 새 로딩/독립20·캐릭터12·E2E A/B9는 자원 부족으로 미완료다. 다음 우선순위는 호스트 RAM/commit 여유가 확보된 상태에서 위 비공개 고정 protocol을 새 output에 실행, 실제 모델 전환/복구·사회적 부정 사례/캐릭터 효과 검증, 깨끗한 Windows VM/업데이트 확인이다. 사용자 프로그램 종료·page file 변경·실제 Discord를 임의 수행하지 않는다. 소스 라이선스는 명시 허가에 따라 MIT다. 구현 커밋은 마감 후 아래에 기록한다.
+
 ## 2026-10-19 사회적 청자·대화 상대 — 현재 기준
 
 시작 main/원격3cc53eb, 미커밋 없음. 최신 생산 경로는 social.py의 확정 근거→분리 후보→단일 청자/관계 의미 판정→결정적 참여 검증이다. 기존 last_at 우선 선택/유일 대화 bare-call 합류/이중 group 재판정은 앱 모델 경로에서 사용하지 않는다. participants와 direct_peers, 후보/확정과 active/idle/ended를 분리한다. 타인 대상·방송·불확실은 보류하며 실제 직접 호출과 기존 상대의 새 주제는 보존한다. 일일 상한 제거/기억·관계·동의·검색·요약·알림/공정 큐/원본 reply/모델은 유지했다. 실제 Discord 연결은 금지 상태다.

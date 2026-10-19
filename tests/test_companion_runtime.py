@@ -1,3 +1,4 @@
+from echomate_bot.character_profiles import DEFAULT_PROFILE
 """Shared runtime/Discord SDK mocks; never send to an actual guild."""
 import asyncio
 from dataclasses import replace
@@ -22,7 +23,9 @@ class CommonRuntime(unittest.IsolatedAsyncioTestCase):
     settle=integration.BotIntegration.settle
 
     async def test_three_modes_save_and_ack_without_text_generation(self):
-        for i,mode in enumerate(('base','persona','adult')):
+        for i,energy in enumerate((15,50,85)):
+            mode='base'
+            self.settings.set(1,'character_profile',dict(DEFAULT_PROFILE,energy=energy))
             self.settings.set(1,'model',mode)
             with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-3')
             await self.runtime.ingest(self.event(id=10+i,content='<@999> 20분 뒤에 물 마시라고 알려줘'))

@@ -53,12 +53,12 @@ async def run(args):
     inference_module.ADAPTER=settings_module.ROOT.parent/'experiments/style-v2/pilot-r8-qkvo/step-00060'
     root=private_path(args.output);root.mkdir(parents=True,exist_ok=False)
     protocol=json.loads(private_path(args.protocol).read_text(encoding='utf-8-sig'))
-    lease=InstanceLease();backend=LocalBackend(adapter=inference_module.ADAPTER);rows=[]
+    lease=InstanceLease();backend=LocalBackend(adapter=inference_module.ADAPTER if args.legacy_adapter else None,choice_cache=args.cache_choices);rows=[]
     source_root=Path(__import__('echomate_bot').__file__).parent.parent
     for p in source_root.rglob('*.py'):
         dest=root/'source'/p.relative_to(source_root);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,dest)
     atomic_private_json(root/'manifest.json',dict(real_gpu=True,real_discord=False,seed=2026,generation=args.generate,
-        code_head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),protocol_hash=hashlib.sha256(Path(args.protocol).read_bytes()).hexdigest(),
+        legacy_adapter=args.legacy_adapter,code_head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),protocol_hash=hashlib.sha256(Path(args.protocol).read_bytes()).hexdigest(),
         source_hashes={str(p.relative_to(source_root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in source_root.rglob('*.py')}))
     try:
         await backend.ready()
@@ -72,6 +72,7 @@ async def run(args):
                 settings.set_scope(1,2,3,'autonomous');settings.set(1,'enabled',True);settings.set(1,'model',mode)
                 settings.set(1,'activity',case.get('activity','very_active'))
                 settings.set(1,'reactions',case.get('reactions',False))
+                if 'profile' in case:settings.set(1,'character_profile',case['profile'])
                 settings.change(1,lambda c:c['guilds']['2'].update(name=case.get('bot_name',protocol['bot_name'])))
                 generated=case.get('generate',args.generate)
                 transport=SocialTransport(case.get('reactions',False));serving=Counting(backend) if generated else ClassificationOnly(backend)
@@ -134,5 +135,5 @@ async def run(args):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--protocol',required=True);parser.add_argument('--output',required=True)
-    parser.add_argument('--modes',default='base,persona,adult');parser.add_argument('--generate',action='store_true')
+    parser.add_argument('--modes',default='base');parser.add_argument('--generate',action='store_true');parser.add_argument('--official-base',action='store_true');parser.add_argument('--legacy-adapter',action='store_true');parser.add_argument('--cache-choices',action='store_true')
     asyncio.run(run(parser.parse_args()))

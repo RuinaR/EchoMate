@@ -14,9 +14,8 @@ ADULT_INSTRUCTION=(
 def turn_profile(cfg,*,age_restricted):
     result=dict(cfg)
     # Channel age gate is not proof of every participant's age or consent.
-    result['_adult_active']=cfg['model']=='adult' and age_restricted is True
-    result['_adult_unavailable']=cfg['model']=='adult' and age_restricted is not True
-    if cfg['model']=='adult':result['model']='base'
+    result['_adult_active']=cfg.get('adult_humor',False) and age_restricted is True
+    result['_adult_unavailable']=cfg.get('adult_humor',False) and age_restricted is not True
     return result
 
 

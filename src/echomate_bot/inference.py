@@ -51,12 +51,14 @@ def token_choices(sequences,prompt_length):
 
 class LocalBackend:
     fast_text_path=True
-    def __init__(self, adapter=ADAPTER, max_pending=12):
-        self.adapter=private_path(adapter)
+    def __init__(self, adapter=None, max_pending=12,model_id='base',model_roots=None,choice_cache=False):
+        # Explicit legacy evaluation only; normal app startup never loads LoRA.
+        self.adapter=private_path(adapter) if adapter is not None else None
+        self.model_id=model_id;self.model_roots=model_roots;self.load_seconds=None;self.switch_seconds=None
         self.executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="echomate-gpu")
         self._physical_pending=0;self.max_pending=max_pending;self.model=None;self.processor=None
         self.scheduler=GPUScheduler(limit=max_pending)
-        self.failed=False;self.metrics=[]
+        self.failed=False;self.metrics=[];self._choice_cache={};self.choice_cache=choice_cache
 
     @property
     def pending(self):return max(self.scheduler.pending,self._physical_pending)
@@ -66,24 +68,55 @@ class LocalBackend:
         await asyncio.shield(asyncio.get_running_loop().run_in_executor(self.executor,self.load))
 
     async def prepare_mode(self,mode):
-        from .settings import MODELS
-        if mode not in MODELS:raise ValueError('Unknown model')
+        if mode in ('persona','adult'):mode='base'
+        from .model_registry import ModelRegistry
+        target=await asyncio.to_thread(ModelRegistry(self.model_roots).resolve,mode)
         if self.failed:raise RuntimeError('Inference disabled; restart required')
-        # The adult slot deliberately uses the verified base-policy fallback until
-        # a GGUF passes independent quality review. No second 12B allocation.
-        await self.ready()
-        await asyncio.get_running_loop().run_in_executor(self.executor,self.health)
+        previous=self.model_id;started=time.monotonic()
+        if mode==previous or self.model is not None and target.path==getattr(self,'loaded_path',None):
+            await self.ready();await self.probe();self.model_id=mode;return
+        async def switch():
+            await asyncio.get_running_loop().run_in_executor(self.executor,self.unload)
+            self.model_id=mode;await self.ready();await self.probe()
+        try:await switch()
+        except BaseException:
+            await asyncio.get_running_loop().run_in_executor(self.executor,self.unload)
+            self.model_id=previous;self.failed=False
+            try:await self.ready();await self.probe()
+            except Exception:self.failed=True
+            raise
+        finally:self.switch_seconds=time.monotonic()-started
+
+    async def probe(self):
+        self.capabilities_verified=False
+        result=await self._job([dict(role='system',content='로컬 상태 검사야. ok만 출력해.'),dict(role='user',content='준비 확인')],budget=8,weight='base',choices=['ok'])
+        if result!='ok':raise RuntimeError('Model inference validation failed')
+        packet=dict(bot_id='999',current=dict(id='1',speaker='4',text='<@5> 네 의견은 어때',reply=None,roles=dict(addressee='5',mentioned_people=['5'],ambiguous=False)),frames=[],surrounding=[],current_peer_frames=[],pending_human_exchange=None,candidates_truncated=False,reaction_available=False)
+        decision=await self.assess_social(packet)
+        if decision.target!='human' or decision.respond:raise RuntimeError('Model recipient classification validation failed')
+        self.capabilities_verified=True
+
+    def unload(self):
+        self.model=None;self.processor=None
+        self._choice_cache.clear()
+        import gc,torch
+        gc.collect()
+        if torch.cuda.is_available():torch.cuda.empty_cache()
 
     def load(self):
         if self.model is not None:return
+        started=time.monotonic()
+        from .model_registry import ModelRegistry
+        entry=ModelRegistry(self.model_roots).resolve(self.model_id);model_path=entry.path
+        from .processes import model_memory_budget
+        model_memory_budget(entry.bytes)
         os.environ.update(HF_HUB_OFFLINE="1",TRANSFORMERS_OFFLINE="1",HF_HUB_DISABLE_TELEMETRY="1",WANDB_DISABLED="true")
         import torch
         from transformers import AutoModelForMultimodalLM, AutoProcessor, AutoConfig, AutoTokenizer, BitsAndBytesConfig
-        from peft import PeftModel
         try:self.health()
         except RuntimeError:self.failed=True;raise
         try:
-            self.processor=AutoProcessor.from_pretrained(MODEL,local_files_only=True)
+            self.processor=AutoProcessor.from_pretrained(model_path,local_files_only=True,trust_remote_code=False)
             self.processor_origin="cached model processor"
         except OSError:
             # Cache contains weights/tokenizer/config but lacks modality configs.
@@ -93,17 +126,23 @@ class LocalBackend:
             from transformers.models.gemma4_unified.image_processing_gemma4_unified import Gemma4UnifiedImageProcessor
             from transformers.models.gemma4_unified.feature_extraction_gemma4_unified import Gemma4UnifiedAudioFeatureExtractor
             from transformers.models.gemma4_unified.video_processing_gemma4_unified import Gemma4UnifiedVideoProcessor
-            cfg=AutoConfig.from_pretrained(MODEL,local_files_only=True).vision_config
-            tok=AutoTokenizer.from_pretrained(MODEL,local_files_only=True)
+            cfg=AutoConfig.from_pretrained(model_path,local_files_only=True,trust_remote_code=False).vision_config
+            tok=AutoTokenizer.from_pretrained(model_path,local_files_only=True,trust_remote_code=False)
             self.processor=Gemma4UnifiedProcessor(feature_extractor=Gemma4UnifiedAudioFeatureExtractor(),
                 image_processor=Gemma4UnifiedImageProcessor(patch_size=cfg.patch_size,pooling_kernel_size=cfg.pooling_kernel_size,
                     max_soft_tokens=cfg.num_soft_tokens),tokenizer=tok,video_processor=Gemma4UnifiedVideoProcessor(),chat_template=tok.chat_template)
             self.processor_origin="local implementation defaults plus cached vision config; image-only use; official processor equivalence unverified"
-        model=AutoModelForMultimodalLM.from_pretrained(MODEL,local_files_only=True,
+        model,loading=AutoModelForMultimodalLM.from_pretrained(model_path,local_files_only=True,trust_remote_code=False,output_loading_info=True,
             device_map={"":0},dtype=torch.bfloat16,attn_implementation="sdpa",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,bnb_4bit_compute_dtype=torch.bfloat16))
-        self.model=PeftModel.from_pretrained(model,str(self.adapter),is_trainable=False).eval()
+        if loading.get('missing_keys') or loading.get('mismatched_keys') or loading.get('error_msgs'):
+            del model
+            raise RuntimeError('Incomplete model weights; selection rejected')
+        if self.adapter is not None:
+            from peft import PeftModel
+            model=PeftModel.from_pretrained(model,str(self.adapter),is_trainable=False)
+        self.model=model.eval();self.loaded_path=model_path;self.load_seconds=time.monotonic()-started
 
     @staticmethod
     def health():
@@ -118,14 +157,14 @@ class LocalBackend:
             torch.cuda.empty_cache()
             result=check_resources();result['allocator_cache_reclaimed']=True;return result
 
-    async def _job(self, messages, images=None, budget=384, weight="persona",choices=None):
+    async def _job(self, messages, images=None, budget=384, weight="base",choices=None):
         metadata=request_context.get() or {}
         request=Request(**metadata)
         queued=time.monotonic()
         return await self.scheduler.submit(lambda:self._run_job(messages,images,budget,weight,choices,queued_at=queued),request,
                                           wait_for_capacity=bool(metadata))
 
-    async def _run_job(self, messages, images=None, budget=384, weight="persona",choices=None,queued_at=None):
+    async def _run_job(self, messages, images=None, budget=384, weight="base",choices=None,queued_at=None):
         if self.failed:raise RuntimeError("Inference disabled after device failure; restart required")
         self._physical_pending+=1;stop=threading.Event()
         loop=asyncio.get_running_loop()
@@ -196,11 +235,17 @@ class LocalBackend:
             end=proc.tokenizer.convert_tokens_to_ids("<turn|>")
             kwargs={}
             if choices:
-                sequences=[proc.tokenizer.encode(text,add_special_tokens=False)+[end] for text in choices]
+                key=tuple(choices)
+                sequences=self._choice_cache.get(key) if self.choice_cache else None
+                if sequences is None:
+                    sequences=[proc.tokenizer.encode(text,add_special_tokens=False)+[end] for text in choices]
+                    if self.choice_cache:
+                        if len(self._choice_cache)>=4:self._choice_cache.pop(next(iter(self._choice_cache)))
+                        self._choice_cache[key]=sequences
                 kwargs['prefix_allowed_tokens_fn']=token_choices(sequences,inputs['input_ids'].shape[-1])
             torch.cuda.reset_peak_memory_stats();started=time.monotonic()
             cancel=Cancel(self)
-            with (self.model.disable_adapter() if weight=="base" else nullcontext()),torch.inference_mode():
+            with (self.model.disable_adapter() if self.adapter is not None and weight=="base" else nullcontext()),torch.inference_mode():
                 output=self.model.generate(**inputs,max_new_tokens=budget,do_sample=False,use_cache=True,
                     eos_token_id=[proc.tokenizer.eos_token_id,end],pad_token_id=proc.tokenizer.eos_token_id,
                     stopping_criteria=StoppingCriteriaList([cancel]),max_time=90,**kwargs)

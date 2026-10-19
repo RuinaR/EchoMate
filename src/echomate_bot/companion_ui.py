@@ -56,6 +56,7 @@ class CompanionViews:
             y=58+index*62;canvas.create_text(22,y,text=label,anchor='nw',fill=MUTED,font=('맑은 고딕',9))
             var=tk.StringVar(dialog,value=str(value));values[key]=var
             entry=tk.Entry(dialog,textvariable=var,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',10))
+            if key=='token':entry.configure(show='●')
             entry.place(x=22,y=y+22,width=535,height=28);entries.append(entry)
         hint=canvas.create_text(22,height-83,text=help_text,anchor='nw',fill=MUTED,font=('맑은 고딕',9),width=535)
         def save():

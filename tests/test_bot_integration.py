@@ -255,7 +255,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
     async def test_unicode_quoted_code_url_are_not_destructively_stripped(self):
         self.assertFalse(needs_rewrite('`print("ㅋㅋ")`\n> ㅠㅠ\nhttps://example.org/ㅋㅋ',[]))
         self.assertTrue(needs_rewrite('맞아 ㅋㅋ',[]))
-        self.assertIn('75%',instruction(DEFAULTS))
+        self.assertIn('상대의 상황을 배려',instruction(DEFAULTS))
         with self.assertRaises(ValueError):visible('<|channel>thought\nprivate<channel|>final')
     async def test_ssrf_bytes_pixels_and_animation_samples(self):
         for url in ('http://cdn.discordapp.com/attachments/a','https://127.0.0.1/a','https://cdn.discordapp.com.evil/attachments/a','https://cdn.discordapp.com@evil/attachments/a','https://cdn.discordapp.com/../private'):

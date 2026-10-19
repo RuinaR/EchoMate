@@ -18,7 +18,7 @@ async def run(root,independent=False):
         target=root/'source'/p;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target)
     try:
         await backend.ready()
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             settings=Settings(1,secrets.token_hex(32),root/f'{mode}-settings.json')
             settings.set_scope(1,2,3,'mention');settings.set(1,'enabled',True);settings.set(1,'model',mode)
             transport=Transport();runtime=Runtime(settings,Borrowed(backend),transport,None,None,ledger_path=root/f'{mode}-sent.sqlite3',rng=random.Random(2026))

@@ -12,7 +12,7 @@ def validate_name(value):
 
 
 def guild_name(cfg,guild):
-    return cfg['guilds'].get(str(guild),{}).get('name','EchoMate')
+    return cfg['guilds'].get(str(guild),{}).get('name',(cfg.get('character_profile') or {}).get('name','EchoMate'))
 
 
 def address_forms(name,aliases=(),partial=True):

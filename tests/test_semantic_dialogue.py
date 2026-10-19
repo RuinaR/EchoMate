@@ -1,3 +1,4 @@
+from echomate_bot.character_profiles import DEFAULT_PROFILE
 """Synthetic contracts. Real natural-language quality requires the GPU probe."""
 import asyncio
 from dataclasses import replace
@@ -35,10 +36,12 @@ class SemanticRuntime(unittest.IsolatedAsyncioTestCase):
         self.backend.fast_text_path=True
         self.backend.assess_dialogue=AsyncMock(return_value=DialogueIntent('reaction','bot','continue',True))
 
-    async def test_clear_name_cannot_be_erased_by_negative_semantic_model_all_modes(self):
+    async def test_clear_name_cannot_be_erased_by_negative_semantic_model_all_profiles(self):
         self.configure()
         self.backend.assess_dialogue.return_value=DialogueIntent('other','uncertain','new',False)
-        for i,mode in enumerate(('base','persona','adult')):
+        for i,energy in enumerate((15,50,85)):
+            mode='base'
+            self.settings.set(1,'character_profile',dict(DEFAULT_PROFILE,energy=energy))
             self.settings.set(1,'model',mode)
             await self.runtime.ingest(self.event(id=20+i,content='다온아'));await self.settle()
         self.assertEqual([e.id for e,_ in self.transport.sent],[20,21,22])

@@ -1,6 +1,8 @@
+from echomate_bot.character_profiles import DEFAULT_PROFILE
 """Synthetic social contracts, not a substitute for local semantic GPU evaluation."""
 import asyncio
 from dataclasses import replace
+from datetime import datetime,timezone
 import json
 import unittest
 from unittest.mock import AsyncMock
@@ -131,9 +133,11 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.runtime.social.places.get((2,3)))
         self.runtime.invalidate_guild(2);self.assertFalse(self.runtime.social.places)
 
-    async def test_modes_activity_gap_matrix_preserves_recipient_and_reply(self):
+    async def test_profiles_activity_gap_matrix_preserves_recipient_and_reply(self):
         first=await self.start();identity=first.conversation_id;next_id=300
-        for mode in ('base','persona','adult'):
+        for energy in (15,50,85):
+            mode='base'
+            self.settings.set(1,'character_profile',dict(DEFAULT_PROFILE,energy=energy))
             self.settings.set(1,'model',mode)
             for activity in ('quiet','normal','active','very_active'):
                 self.settings.set(1,'activity',activity)
@@ -201,6 +205,20 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(frames);self.assertFalse(packet['current_peer_frames'])
 
 class SocialParser(unittest.TestCase):
+    def test_confirmed_listener_exclusion_is_evidence_but_quoted_words_are_not(self):
+        from types import SimpleNamespace
+        from echomate_bot.social import validate_social
+        from echomate_bot.runtime import Event
+        frame=SimpleNamespace(direct_peers={4})
+        vote=SocialDecision('bot','continue','0','request',True)
+        for text in ('이번 결정은 너 빼고 우리끼리 할게','봇은 제외하고 정하자'):
+            e=Event(1,2,3,4,text,datetime.now(timezone.utc))
+            self.assertEqual(validate_social(vote,e,[(frame,0)],bot_id=999)[1],'social_other_addressee')
+        e=Event(1,2,3,4,'"너 빼고"라는 표현이 무슨 뜻이야',datetime.now(timezone.utc))
+        self.assertEqual(validate_social(vote,e,[(frame,0)],bot_id=999)[1],'social_continuation')
+    def test_acknowledgement_never_forces_reply_or_ends_a_flow(self):
+        decision=parse_social('bot continue 0 acknowledgement yes')
+        self.assertFalse(decision.respond);self.assertEqual(decision.relation,'continue')
     def test_finite_schema_and_registered_reported_call(self):
         from echomate_bot.naming import name_address
         for text in ('다온아 뭐하냐고 물었어','아까 나래가 다온아 뭐하냐고 물었어'):

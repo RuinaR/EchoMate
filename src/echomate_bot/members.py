@@ -87,10 +87,16 @@ class MemberDirectory:
                 elif a['status']=='candidate':forms.setdefault(a['alias'],('observed',a['confidence']))
             for form,(kind,score) in forms.items():
                 if form not in folded:continue
-                match=re.search(r'(?<![가-힣A-Za-z0-9_])'+re.escape(form)+r'(?P<suffix>아|야|님|이|은|는|가|을|를|에게|한테)?(?=$|[\s,!.?~…:])',clean,re.I)
+                match=re.search(r'(?<![가-힣A-Za-z0-9_])'+re.escape(form)+r'(?P<suffix>아|야|님|이|은|는|가|을|를|에게|한테)?(?=$|[\s,!.?~…:]|(?<=[아야])[가-힣])',clean,re.I)
                 if not match:continue
                 vocative=match['suffix'] in ('아','야','님') and (match.start()==0 or not clean[match.end():].strip(' ,!.?~…:'))
-                direct=bool(vocative or kind=='owner' and name_address(clean,form,partial=False)=='direct')
+                # Korean vocatives delimit a known name even without a space.
+                # A bare name needs independent second-person syntax; a noun or
+                # third-person report alone never establishes an addressee.
+                tail=clean[match.end():].lstrip(' ,!.?~…:')
+                second_person=match.start()==0 and match['suffix'] is None and bool(re.match(r'(?:너(?:는|도|가|의)?|네가|당신(?:은|도|이)?)\s',tail))
+                reported=bool(re.search(r'(?:냐고|라고|다고|자고)\s*(?:물|말|전|했|하더|부르)',tail))
+                direct=bool((vocative or second_person or kind=='owner' and name_address(clean,form,partial=False)=='direct') and not reported)
                 signature=(uid,form)
                 if signature not in seen:
                     role='address' if direct else 'reference' if match['suffix'] in ('이','은','는','가','을','를','에게','한테') or match.start()>0 else 'uncertain'

@@ -8,16 +8,17 @@ from pathlib import Path
 import secrets
 import time
 
-ROOT = Path(__file__).resolve().parents[2] / "local_data" / "bot"
+from .paths import DATA_HOME
+ROOT = DATA_HOME / 'bot'
 MODES = {"silent", "mention", "autonomous", "reaction"}
 MOODS = {"평온", "기쁨", "신남", "우울", "화남", "피곤함", "부끄러움"}
 ACTIVITY = {"quiet": .05, "normal": .2, "active": .45, "very_active": .7}
 GENDERS={'female','male','neutral'}
-MODELS={'base','persona','adult'}
+MODELS={'base'}
 DEFAULTS = dict(enabled=False, text=True, reactions=False, stickers=False, media=False,
                 vision=False, mood="평온", warmth=75, cuteness=40, playfulness=20,
                 auto_mood=False, activity="normal", cooldown=60, engagement_seconds=600,
-                media_probability=0., model="persona", guilds={},asset_policy=3,gender='neutral',
+                media_probability=0., model="base", model_roots=[], character_profile={}, adult_humor=False, guilds={},asset_policy=3,gender='neutral',
                 memory_auto=False,relations_auto=True,context_excerpts=True,reminders_enabled=True,reminder_grace=900,
                 memory_plan_grace=3600,memory_date_grace=86400,memory_state_hours=6,
                 command_sync_pending=False,web_search=False,summaries_auto=False)
@@ -58,11 +59,16 @@ def validate(cfg):
     if set(cfg) != set(DEFAULTS):
         raise ValueError("Unknown settings; owner identity cannot be configured here")
     if cfg['asset_policy']!=3 or cfg['media'] or cfg['media_probability']!=0 or cfg['stickers']:raise ValueError('Media and sticker output removed')
-    for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood",'memory_auto','relations_auto','context_excerpts','reminders_enabled','command_sync_pending','web_search','summaries_auto'):
+    for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood",'memory_auto','relations_auto','context_excerpts','reminders_enabled','command_sync_pending','web_search','summaries_auto','adult_humor'):
         if type(cfg[key]) is not bool:
             raise ValueError("Boolean required")
-    if cfg["mood"] not in MOODS or cfg["activity"] not in ACTIVITY or cfg["model"] not in MODELS or cfg['gender'] not in GENDERS:
+    import re
+    if cfg["mood"] not in MOODS or cfg["activity"] not in ACTIVITY or not isinstance(cfg['model'],str) or not (cfg['model']=='base' or re.fullmatch(r'local:[0-9a-f]{24}',cfg['model'])) or cfg['gender'] not in GENDERS:
         raise ValueError("Unknown mood, activity or trusted model")
+    if not isinstance(cfg['model_roots'],list) or len(cfg['model_roots'])>8 or any(not isinstance(p,str) or len(p)>1000 or not Path(p).is_absolute() for p in cfg['model_roots']):raise ValueError('Invalid model folders')
+    from .character_profiles import validate_profile
+    if cfg['character_profile']:validate_profile(cfg['character_profile'])
+    elif cfg['character_profile']!={}:raise ValueError('Invalid character profile')
     for key, lo, hi in (("warmth", 0, 100), ("cuteness", 0, 100), ("playfulness", 0, 100),
                         ("cooldown", 2, 3600), ("engagement_seconds", 10, 86400),('reminder_grace',0,86400),('memory_plan_grace',0,86400),('memory_date_grace',0,86400),('memory_state_hours',1,72)):
         if type(cfg[key]) is not int or not lo <= cfg[key] <= hi:
@@ -149,6 +155,10 @@ class Settings:
             if 'gender' not in verified:verified=dict(verified,gender='neutral')
             for key in ('memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','command_sync_pending','web_search','summaries_auto'):
                 if key not in verified:verified=dict(verified,**{key:deepcopy(DEFAULTS[key])})
+            for key in ('model_roots','character_profile','adult_humor'):
+                verified.setdefault(key,deepcopy(DEFAULTS[key]))
+            # Legacy slots are identifiers, not permission to enable adult banter.
+            if verified.get('model') in ('persona','adult'):verified['model']='base'
             self._cfg = validate(verified)
 
     def authorize(self, user_id):
@@ -170,6 +180,7 @@ class Settings:
         self.revision += 1
 
     def set(self, user_id, key, value):
+        if key=='model' and value in ('persona','adult'):value='base'
         if key in {"guilds","asset_policy","media","media_probability"} or key not in DEFAULTS:
             raise ValueError("Use scope commands")
         self.change(user_id, lambda cfg: cfg.update({key: value}))

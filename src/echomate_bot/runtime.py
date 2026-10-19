@@ -53,6 +53,8 @@ class Event:
     reply_author:int|None=None
     member_roles:object=None
     member_seconds:float=0.
+    scope_seconds:float=0.
+    candidate_seconds:float=0.
     name_result:str='none'
     reaction_target:int|None=None
     reaction_target_hash:str|None=None
@@ -376,9 +378,10 @@ class Runtime:
         except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_update_failed')
 
     async def switch_model(self,owner,mode):
-        from .settings import MODELS
         self.settings.authorize(owner)
-        if mode not in MODELS:raise ValueError('Unknown model')
+        if mode in ('persona','adult'):mode='base'
+        import re
+        if mode!='base' and not re.fullmatch(r'local:[0-9a-f]{24}',mode):raise ValueError('Unknown model')
         async with self.model_lock:
             self.changing_model=True;self.note('model_preparing')
             try:
@@ -456,6 +459,7 @@ class Runtime:
         async with lock:await self._ingest(event)
 
     async def _ingest(self,event):
+        scope_started=time.monotonic()
         # New user work preempts optional background compression only.
         for task in self.summary_tasks:task.cancel()
         cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
@@ -463,6 +467,7 @@ class Runtime:
         if not (await self.transport.permissions(event)).get("view",False):self.note('permission_denied');return
         if self.stopped or scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':return
         if event.id in self.seen:return
+        event=replace(event,scope_seconds=time.monotonic()-scope_started)
         member_started=time.monotonic();event=await self.member_evidence(event)
         if scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':
             self.members.clear(event.guild,channel=event.channel);self.note('scope_denied');return
@@ -475,6 +480,7 @@ class Runtime:
                                    self.members.names(event.guild,event.channel,self.transport.bot_id))
         if name_evidence=='direct' and event.member_roles.bot_collision:name_evidence='ambiguous'
         event=replace(event,member_seconds=time.monotonic()-member_started,name_result=name_evidence)
+        candidate_started=time.monotonic()
         social=hasattr(self.backend,'assess_social')
         if social:self.social.observe(event)
         self.note('name_direct_accepted' if name_evidence=='direct' else 'name_ambiguous' if name_evidence=='ambiguous' else 'name_not_recognized')
@@ -518,6 +524,7 @@ class Runtime:
             flow,relation=self.conversations.choose(event,direct=explicit,pending=pending_routes,intent_text=intent,semantic=social,
                 bot_reply=verified_reply or event.reply_author==self.transport.bot_id)
         if flow is None:self.note('ambiguous_request_cancel');return
+        event=replace(event,candidate_seconds=time.monotonic()-candidate_started)
         if relation=='cancel':
             pending=self.requests.get(flow.key) or self.deferred_events.get(flow.key)
             if pending and pending[0].author!=event.author:self.note('other_request_cancel_veto');return
@@ -639,6 +646,8 @@ class Runtime:
     async def process(self,event,state,request_content=None):
         trace=Trace(event.received_at);token=active_trace.set(trace)
         trace.stages['member_resolution']=event.member_seconds
+        trace.stages['scope_check']=event.scope_seconds
+        trace.stages['conversation_candidates']=event.candidate_seconds
         self.job_records[str(event.id)]=dict(id=str(event.id),source=event.response_to or event.id,guild=event.guild,channel=event.channel,
             created=event.received_at,stage='conversation_wait',status='running',flow=event.conversation_id or '',source_attached=True,name_result=event.name_result)
         while len(self.job_records)>100:self.job_records.pop(next(iter(self.job_records)))

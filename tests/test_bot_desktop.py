@@ -27,7 +27,7 @@ class DesktopControls(unittest.IsolatedAsyncioTestCase):
             await controller.command('scope',guild=9,channel=3,text_mode='autonomous',reaction_mode='autonomous',thread=False,inherit=False,enabled=True)
             self.assertEqual(controller.error,'PermissionError');self.assertEqual(controller.settings.revision,revision)
             await controller.command('settings',values=dict(owner_id=2))
-            self.assertEqual(controller.error,'ValueError');self.assertEqual(controller.settings.revision,revision)
+            self.assertEqual(controller.error,'설정값이나 설치 파일을 확인해 주세요');self.assertEqual(controller.settings.revision,revision)
             # Resume an existing process without loading a second model; stop persists off.
             pending=asyncio.create_task(asyncio.Event().wait());controller.job=pending
             await controller.command('start')

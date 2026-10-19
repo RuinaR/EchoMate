@@ -1,3 +1,4 @@
+from echomate_bot.character_profiles import DEFAULT_PROFILE
 """Synthetic guild identities; no external Discord access."""
 import asyncio
 from dataclasses import replace
@@ -41,6 +42,12 @@ class MemberRecognition(unittest.TestCase):
         self.directory.observe(2,3,9,('하늘소리',))
         r=self.resolve('하늘소라야');self.assertIsNone(r.addressee);self.assertTrue(any(c.evidence=='typo' for c in r.candidates))
         self.assertFalse(one_edit('가온','노을'));self.assertTrue(one_edit('abcd','abdc'))
+
+    def test_known_vocative_without_space_and_second_person_are_not_third_person(self):
+        for text in ('노을아너한테물어본거야','도윤아뭐라고생각해','가온 너는 어떻게 봐','노을beta 네가 말해 줘'):
+            self.assertIsNotNone(self.resolve(text).addressee,text)
+        for text in ('노을이는 그게 좋대','아까 노을아 뭐냐고 물었어','가온 너는 어떠냐고 말했어','"도윤아너한테물어본거야"'):
+            self.assertIsNone(self.resolve(text).addressee,text)
     def test_speaker_audience_subject_and_actual_reply_are_separate(self):
         r=self.resolve('노을이는 어때',member_mentions=(5,),reply_to=80,reply_author=6)
         self.assertEqual((r.speaker,r.addressee,r.mentioned_people,r.reply_target,r.reply_author),(4,6,(5,),80,6))
@@ -121,9 +128,11 @@ class MemberRuntime(unittest.IsolatedAsyncioTestCase):
         self.settings.change(1,lambda c:c['guilds']['2'].update(name='다온봇'))
         self.backend.assess_dialogue=AsyncMock(return_value=DialogueIntent('reaction','bot','continue',True))
         self.runtime.members.observe(2,3,5,('가온mk2',))
-    async def test_other_human_call_does_not_reach_gpu_all_modes_but_bot_call_survives(self):
+    async def test_other_human_call_does_not_reach_gpu_all_profiles_but_bot_call_survives(self):
         self.configure()
-        for i,mode in enumerate(('base','persona','adult')):
+        for i,energy in enumerate((15,50,85)):
+            mode='base'
+            self.settings.set(1,'character_profile',dict(DEFAULT_PROFILE,energy=energy))
             self.settings.set(1,'model',mode)
             await self.runtime.ingest(self.event(id=20+3*i,content='다온아 이야기 해줘'));await self.settle()
             await self.runtime.ingest(self.event(id=21+3*i,content='가온아 이거 어때'));await self.settle()
@@ -191,7 +200,7 @@ class AliasOwnerControls(unittest.IsolatedAsyncioTestCase):
             await c.command('companion',action='member_alias',guild=2,user='5',channel='3',alias='반짝',status='confirmed')
             self.assertFalse(c.error);self.assertEqual(c.companion.aliases(2,3)[0]['status'],'confirmed')
             await c.command('companion',action='member_alias',guild=2,user='5',channel='8',alias='새별',status='confirmed')
-            self.assertEqual(c.error,'ValueError');self.assertEqual(len(c.companion.aliases(2)),1)
+            self.assertEqual(c.error,'설정값이나 설치 파일을 확인해 주세요');self.assertEqual(len(c.companion.aliases(2)),1)
             c.bootstrap['owner_id']=9
             await c.command('companion',action='member_alias',guild=2,user='5',channel='3',alias='반짝',status='deleted')
             self.assertEqual(c.error,'PermissionError');self.assertEqual(c.companion.aliases(2,3)[0]['status'],'confirmed')

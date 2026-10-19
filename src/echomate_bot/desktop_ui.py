@@ -112,6 +112,7 @@ class DesktopApp(CompanionViews):
         self.channel_list=SelectionList(self.canvas,self.select_channels,True)
         self.setup_records()
         self.job_id=None;self.job_list=SelectionList(self.canvas,self.select_job)
+        self.model_id=None;self.model_list=SelectionList(self.canvas,self.select_model)
         root.title('EchoMate');root.geometry('1180x820');root.minsize(1040,740);root.configure(bg=BG)
         try:
             import ctypes
@@ -264,18 +265,20 @@ class DesktopApp(CompanionViews):
         self.canvas.create_rectangle(0,0,196,h,fill='#0e1521',outline='')
         self.canvas.create_oval(24,27,44,47,fill=ACCENT,outline='');self.canvas.create_oval(30,33,38,41,fill=BG,outline='')
         self.text(56,25,'EchoMate',16,bold=True);self.text(26,63,'내 PC에서 동작하는 봇',8,MUTED)
-        for index,(page,label) in enumerate([('spaces','대화할 곳'),('outputs','응답 방식'),('character','성격과 기분'),*PAGES.items(),('status','진행 상황'),('labs','실험 기능')]):
-            self.button(16,116+index*52,164,42,label,lambda p=page:self.set_page(p),self.page==page)
+        nav=[('setup','처음 사용 안내'),('models','AI 모델'),('spaces','대화할 곳'),('outputs','응답 방식'),('character','성격과 기분'),*PAGES.items(),('status','진행 상황'),('labs','실험 기능')]
+        spacing=min(48,(h-220)//len(nav))
+        for index,(page,label) in enumerate(nav):
+            self.button(16,108+index*spacing,164,spacing-5,label,lambda p=page:self.set_page(p),self.page==page)
         self.text(24,h-90,'모델은 내 PC에서 실행',9,MUTED);self.text(24,h-65,'Gemma 4 12B',10)
         s=self.snapshot;cfg=s['cfg'] if s and s.get('cfg') else None
-        title={'spaces':'대화할 곳','outputs':'응답 방식','character':'성격과 기분','status':'지금 무엇을 하고 있나요?','labs':'실험 기능',**PAGES}[self.page]
+        title={'setup':'처음 사용 안내','models':'내 PC의 AI 모델','spaces':'대화할 곳','outputs':'응답 방식','character':'성격과 기분','status':'지금 무엇을 하고 있나요?','labs':'실험 기능',**PAGES}[self.page]
         self.text(226,28,title,21,bold=True)
         connected=bool(s and s['connected'])
         running=bool(s and s.get('running'))
         self.canvas.create_oval(w-350,39,w-342,47,fill=MINT if connected else MUTED,outline='')
         self.text(w-333,31,'Discord에 연결됨' if connected else '연결을 준비하고 있어요' if running else '봇이 꺼져 있어요',10,MUTED)
         label='응답 재개' if connected and cfg and not cfg['enabled'] else '실행 중' if connected else '준비 중' if running else '봇 켜기'
-        self.button(w-190,23,78,36,label,lambda:self.controller.submit('start'),primary=True,enabled=not running or bool(connected and cfg and not cfg['enabled']))
+        self.button(w-190,23,78,36,label,lambda:self.controller.submit('start'),primary=True,enabled=bool(cfg) and (not running or bool(connected and not cfg['enabled'])))
         self.button(w-102,23,78,36,'봇 끄기',lambda:self.controller.submit('stop'),enabled=running)
         error=' · '+s['error'] if s and s['error'] else ''
         phase=s['phase'] if s else '저장된 설정을 읽고 있어요'
@@ -283,8 +286,10 @@ class DesktopApp(CompanionViews):
         self.text(226,76,phase+error,10,MUTED)
         if cfg and connected:self.toggle(w-200,78,'응답 허용',cfg['enabled'],lambda:self.set_value('enabled',not cfg['enabled']))
         self.server_list.place_forget();self.channel_list.place_forget()
-        self.people_list.place_forget();self.record_list.place_forget();self.job_list.place_forget()
-        if self.page=='spaces':self.draw_spaces(w,h,cfg)
+        self.people_list.place_forget();self.record_list.place_forget();self.job_list.place_forget();self.model_list.place_forget()
+        if self.page=='setup':self.draw_setup(w,h,cfg)
+        elif self.page=='models':self.draw_models(w,h,cfg)
+        elif self.page=='spaces':self.draw_spaces(w,h,cfg)
         elif self.page=='outputs':self.draw_outputs(w,h,cfg)
         elif self.page=='character':self.draw_character(w,h,cfg)
         elif self.page=='status':self.draw_status(w,h,s)
@@ -347,10 +352,132 @@ class DesktopApp(CompanionViews):
         for index,(label,key,step,lo,hi) in enumerate([('다정함','warmth',5,0,100),('귀여움','cuteness',5,0,100),('장난기','playfulness',5,0,100),
              ('먼저 말할 때 최소 간격','cooldown',10,2,3600),('대화 지속 판단의 유휴 기준','engagement_seconds',60,10,86400)]):
             self.number(250,382+index*34,label,key,max(lo,cfg[key]),step,lo,hi)
-        self.text(250,559,'답변 모델',10,MUTED)
-        self.choices(250,583,[('개인 말투 · 잠정','persona'),('기본 Gemma 4','base'),('성인 유머 · 자유로운 표현','adult')],cfg['model'],lambda v:self.set_value('model',v),220,
-                     enabled=not bool(self.snapshot and self.snapshot.get('model_preparing')))
-        self.text(250,635,'성인 유머: 기존 Gemma 4 + 전용 정책 · 연령 제한 채널에서만 사용',9,ACCENT if cfg['model']=='adult' else MUTED,width=w-290)
+        p=cfg.get('character_profile') or {'name':'EchoMate'}
+        self.text(250,559,'캐릭터 · '+p['name'],10,MUTED)
+        self.button(250,583,150,34,'프로필 편집·복제',self.edit_profile)
+        self.button(410,583,128,34,'저장한 프로필',self.profile_library)
+        self.button(548,583,128,34,'로컬 미리보기',self.character_preview)
+        self.button(686,583,128,34,'가져오기·내보내기',self.profile_files)
+        self.toggle(250,638,'성인 유머 · 연령 제한 채널에서만',cfg['adult_humor'],lambda:self.set_value('adult_humor',not cfg['adult_humor']))
+        self.button(686,634,128,30,'표현 고급 설정',self.advanced_profile)
+        self.text(250,671,'모델은 AI 모델 화면에서 관리해요. 캐릭터 변경에는 모델 재로딩이 필요 없어요.',9,MUTED,width=w-290)
+
+    def draw_setup(self,w,h,cfg):
+        from .onboarding import GUIDE
+        rounded(self.canvas,226,143,w-252,h-210,PANEL)
+        self.text(250,166,'나만의 Discord 봇을 준비해요',14,bold=True)
+        self.text(250,212,GUIDE,11,width=w-300)
+        self.button(250,h-190,190,36,'봇 정보 등록' if not cfg else '봇 정보는 안전하게 저장됨',self.setup_credentials,enabled=not bool(cfg))
+        self.button(450,h-190,150,36,'모델 확인하기',lambda:self.set_page('models'))
+        self.text(250,h-130,'연결·서버 조회는 자동 실행하지 않아요. 준비 후 ‘대화할 곳’에서 직접 새로고침하세요.',9,MUTED,width=w-290)
+
+    def setup_credentials(self):
+        self.form('내 봇 정보 등록',[('owner','본인 Discord 사용자 ID',''),('token','Developer Portal의 공식 Bot Token','')],
+                  lambda v:self.controller.submit('setup',owner=v['owner'],token=v['token']),
+                  '현재 Windows 계정으로 암호화해 보관해요. 기존 정보는 덮어쓰지 않아요.')
+
+    def draw_models(self,w,h,cfg):
+        if not cfg:return
+        rounded(self.canvas,226,143,w-252,h-210,PANEL)
+        self.text(250,163,'공식 기본: Gemma 4 12B · Transformers / NF4',13,bold=True)
+        self.text(250,199,'폴더의 파일 구조와 템플릿을 검사해요. 실제 준비 검증이 끝나야 적용돼요.',10,MUTED,width=w-290)
+        self.button(250,233,140,34,'모델 폴더 선택',self.choose_model_folder,enabled=not self.snapshot.get('model_preparing'))
+        self.button(400,233,110,34,'다시 검색',lambda:self.controller.submit('models'))
+        official=any(m['compatible'] and 'models--google--gemma-4-12B-it' in m['path'] for m in self.snapshot.get('models',[]))
+        self.button(520,233,130,34,'기본 모델 사용',lambda:self.set_value('model','base'),enabled=official and not self.snapshot.get('model_preparing'))
+        entries=self.snapshot.get('models',[])
+        if not entries:self.text(250,295,'설치된 모델을 찾지 못했어요. 모델을 models 폴더에 넣거나 설치한 폴더를 선택하세요.',10,MUTED,width=w-290)
+        self.model_list.set_items([dict(id=m['id'],label=m['name'],hint=m['format']+' · '+('파일 검사 통과' if m['compatible'] else '사용 불가')) for m in entries])
+        self.model_list.selected={self.model_id} if self.model_id else set();self.model_list.redraw()
+        self.model_list.place(x=250,y=290,width=280,height=max(90,h-435))
+        selected=next((m for m in entries if m['id']==self.model_id),None)
+        if selected:
+            self.text(550,295,selected['format']+f" · {selected['bytes']/1024**3:.1f}GB",11,bold=True)
+            self.text(550,332,selected['reason'],10,MUTED,width=w-590)
+            self.text(550,390,selected['path'],9,MUTED,width=w-590)
+            current=cfg['model']==selected['id'] or cfg['model']=='base' and 'models--google--gemma-4-12B-it' in selected['path']
+            self.text(550,474,'현재 설정된 모델이에요' if current else '목록 선택만으로는 모델이 바뀌지 않아요',8,MUTED,width=w-590)
+            self.button(550,520,150,34,'검증 후 적용',lambda:self.set_value('model',selected['id']),enabled=selected['compatible'] and not self.snapshot.get('model_preparing'))
+        self.text(250,h-107,'예상 VRAM 약 10GB + 시스템 여유 · 실제 지원 검증은 RTX 4070 Ti SUPER 16GB에 한정돼요.',9,MUTED,width=w-290)
+
+    def choose_model_folder(self):
+        from tkinter import filedialog
+        folder=filedialog.askdirectory(parent=self.root,title='모델 또는 모델을 모아둔 폴더')
+        if folder:self.controller.submit('models',roots=[folder])
+
+    def select_model(self,ids):self.model_id=next(iter(ids),None);self.render()
+
+    def edit_profile(self):
+        from .character_profiles import DEFAULT_PROFILE,validate_profile
+        p=dict(self.snapshot['cfg'].get('character_profile') or DEFAULT_PROFILE)
+        from .character_profiles import SHARED_FIELDS
+        p.update({k:self.snapshot['cfg'][k] for k in SHARED_FIELDS})
+        def save(v):
+            p.update(name=v['name'],introduction=v['intro'],speech={'반말':'casual','존댓말':'polite'}[v['speech']],energy=int(v['energy']),humor=int(v['humor']),detail={'간단히':'brief','균형':'balanced','자세히':'detailed'}[v['detail']])
+            validate_profile(p)
+            self.controller.submit('profiles',action='save',key=v['key'],value=p)
+            self.set_value('character_profile',p)
+        import secrets
+        def submit(v):v['key']='character-'+secrets.token_hex(5);save(v)
+        self.form('캐릭터 편집 · 복제해서 저장',[('name','캐릭터 이름',p['name']),('intro','소개 · 지시문이 아닌 표시 자료',p['introduction']),('speech','기본 말투 · 반말 / 존댓말','반말' if p['speech']=='casual' else '존댓말'),('energy','반응 에너지 · 0~100',p['energy']),('humor','농담 참여 성향 · 0~100',p['humor']),('detail','설명 · 간단히 / 균형 / 자세히',{'brief':'간단히','balanced':'균형','detailed':'자세히'}[p['detail']])],submit,'권한·개인정보·사실성·코드 출력 제한은 프로필로 바꿀 수 없어요.')
+
+    def profile_library(self):
+        self.controller.submit('profiles')
+        from .character_profiles import DEFAULT_PROFILE
+        values=(self.snapshot or {}).get('profiles',{}) or {'default':DEFAULT_PROFILE}
+        dialog=tk.Toplevel(self.root);dialog.title('저장한 캐릭터');dialog.configure(bg=PANEL);dialog.geometry('540x440');dialog.transient(self.root)
+        canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
+        canvas.create_text(24,22,text='프로필을 고르고 적용하세요',anchor='nw',fill=FG,font=('맑은 고딕',13,'bold'))
+        selected=['default'];listing=SelectionList(canvas,lambda ids:selected.__setitem__(0,next(iter(ids),'default')))
+        listing.place(x=24,y=64,width=490,height=280)
+        listing.set_items([dict(id=k,label=v['name'],hint=v['introduction']) for k,v in values.items()]);listing.selected={'default'};listing.redraw()
+        for x,label in ((24,'적용'),(185,'삭제'),(346,'기본값 복원')):
+            rounded(canvas,x,365,145,36,CARD,8);canvas.create_text(x+72,383,text=label,fill=FG,font=('맑은 고딕',10))
+        def click(e):
+            if not 365<=e.y<=401:return
+            action='apply' if 24<=e.x<=169 else 'delete' if 185<=e.x<=330 else 'restore' if 346<=e.x<=491 else None
+            if action:self.controller.submit('profiles',action=action,key=selected[0]);dialog.destroy()
+        canvas.bind('<Button-1>',click);dialog.bind('<Escape>',lambda e:dialog.destroy())
+
+    def advanced_profile(self):
+        from .character_profiles import DEFAULT_PROFILE,validate_profile
+        p=dict(self.snapshot['cfg'].get('character_profile') or DEFAULT_PROFILE)
+        def save(v):
+            for k in ('calmness','honesty','exclamation','emoji'):p[k]=int(v[k])
+            p['length']={'상황에 맞게':'adaptive','짧게':'short'}[v['length']]
+            p['swearing']={'끔':False,'가벼운 감탄만':True}[v['swearing']]
+            validate_profile(p);self.set_value('character_profile',p)
+        self.form('표현 고급 설정',[(k,label+' · 0~100',p[k]) for k,label in (('calmness','차분함'),('honesty','솔직함'),('exclamation','감탄 빈도'),('emoji','텍스트 이모지 빈도'))]+[('length','잡담 길이 · 상황에 맞게 / 짧게','상황에 맞게' if p['length']=='adaptive' else '짧게'),('swearing','가벼운 비속어 · 끔 / 가벼운 감탄만','가벼운 감탄만' if p['swearing'] else '끔')],save,'반복 자모는 현재 정책에서 제한해요. 충분한 기술 설명과 개인정보·참여 정책이 우선해요.')
+
+    def profile_files(self):
+        from tkinter import filedialog
+        def act(v):
+            export=v['action']=='내보내기'
+            if v['action'] not in ('가져오기','내보내기'):raise ValueError()
+            path=filedialog.asksaveasfilename(parent=self.root,defaultextension='.json') if export else filedialog.askopenfilename(parent=self.root,filetypes=[('캐릭터 JSON','*.json')])
+            if path:self.controller.submit('profiles',action='export' if export else 'import',key=v['key'],path=path)
+        self.form('프로필 파일',[('action','가져오기 / 내보내기','가져오기'),('key','프로필 ID','my-character')],act,'캐릭터 자료만 담아요. 토큰·대화·기억은 포함하지 않아요.')
+
+    def character_preview(self):
+        dialog=tk.Toplevel(self.root);dialog.title('Discord 없이 캐릭터 미리보기');dialog.configure(bg=PANEL);dialog.geometry('690x510');dialog.minsize(560,420)
+        tk.Label(dialog,text='합성 질문으로 말투를 확인해요 · 대화·기억·관계·예약에 저장하지 않아요',bg=PANEL,fg=MUTED,font=('맑은 고딕',10),wraplength=630).pack(padx=22,pady=16,anchor='w')
+        entry=tk.Entry(dialog,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',11));entry.pack(padx=22,fill='x',ipady=8);entry.insert(0,'처음 만난 친구에게 짧게 인사해 줘')
+        actions=tk.Canvas(dialog,bg=PANEL,height=48,highlightthickness=0);actions.pack(fill='x',padx=22)
+        rounded(actions,0,8,145,32,CARD,8);actions.create_text(72,24,text='로컬 답변 생성',fill=FG,font=('맑은 고딕',10))
+        output=tk.Text(dialog,bg=CARD,fg=FG,relief='flat',wrap='word',font=('맑은 고딕',11),state='disabled');output.pack(padx=22,pady=(0,22),fill='both',expand=True)
+        def generate():
+            if 1<=len(entry.get())<=1000:self.controller.submit('preview',text=entry.get())
+        actions.bind('<Button-1>',lambda e:generate() if e.x<=145 and 8<=e.y<=40 else None);entry.bind('<Return>',lambda e:generate())
+        old=[''];timer=[None]
+        def poll():
+            value=(self.snapshot or {}).get('preview','') or '질문을 입력하고 답변을 생성해 보세요.'
+            if value!=old[0]:output.configure(state='normal');output.delete('1.0','end');output.insert('1.0',value);output.configure(state='disabled');old[0]=value
+            timer[0]=dialog.after(400,poll)
+        def closed(event):
+            if event.widget is dialog and timer[0]:
+                try:dialog.after_cancel(timer[0])
+                except tk.TclError:pass
+        dialog.bind('<Destroy>',closed);poll();entry.focus_set()
     def select_job(self,ids):self.job_id=next(iter(ids),None);self.render()
     def approve_commands(self):
         def save(v):
@@ -387,17 +514,18 @@ class DesktopApp(CompanionViews):
                 self.text(535,365,'청자: '+targets.get(social.get('target'),'미확정')+' · '+links.get(social.get('relation'),'미확정')+' · '+('명시적 호출' if social.get('explicit_call') else '문맥 판정'),9,MUTED,width=w-575)
                 peers=social.get('current_peers',[]);peer_text=', '.join(peers[:3])+(' 외 '+str(len(peers)-3)+'명' if len(peers)>3 else '')
                 self.text(535,390,'현재 상대 ID: '+(peer_text or '없음')+' · 확인 참여자 '+str(social.get('confirmed_participants',0))+'명',8,MUTED,width=w-575)
-            phases=('member_resolution','conversation_wait','social','assessment','memory_lookup','summary','research','action','text','output_check','sending')
+            phases=('scope_check','member_resolution','conversation_candidates','conversation_wait','social','assessment','memory_lookup','summary','research','action','text','output_check','sending')
             for n,phase in enumerate(phases):
                 seconds=selected.get('stages',{}).get(phase)
                 value=f'{seconds:.3f}초' if seconds is not None else '진행 중' if selected['status']=='running' and selected['stage']==phase else '대기·생략'
-                col=n//6;row=n%6;column_width=max(110,(w-575)/2)
+                col=n//7;row=n%7;column_width=max(110,(w-575)/2)
                 short={'member_resolution':'호칭·답장','conversation_wait':'요청 순서','social':'청자·관계','assessment':'참여 확인','memory_lookup':'기억 조회','summary':'요약','research':'근거 검색','action':'행동 선택','text':'답변 생성','output_check':'출력 검사','sending':'전송'}
+                short.update(scope_check='범위·수신 권한',conversation_candidates='대화 후보 검색')
                 self.text(535+col*column_width,424+row*21,short[phase]+' · '+value,8,MUTED,width=column_width-10)
-            if selected.get('tokens') is not None:self.text(535,565,f"첫 토큰 {round(selected['ttft'],2) if selected.get('ttft') is not None else '-'}초 · 생성 {selected['tokens']}토큰 · {selected.get('tokens_per_second','-')}토큰/초",8,MUTED,width=w-575)
+            if selected.get('tokens') is not None:self.text(535,580,f"첫 토큰 {round(selected['ttft'],2) if selected.get('ttft') is not None else '-'}초 · 생성 {selected['tokens']}토큰 · {selected.get('tokens_per_second','-')}토큰/초",8,MUTED,width=w-575)
             from .desktop import NO_RESPONSE
             reason=next((NO_RESPONSE[c] for c in reversed(selected.get('codes',[])) if c in NO_RESPONSE),'전송 완료' if selected['status']=='sent' else '실행 중 / 상세 진단 파일 참고')
-            self.text(535,h-150,'판단: '+reason,8,MUTED,width=w-575)
+            self.text(535,h-105,'판단: '+reason,8,MUTED,width=w-575)
         else:
             flow=next((f for f in flows if f['id']==self.job_id),None)
             if flow:
@@ -434,11 +562,13 @@ class DesktopApp(CompanionViews):
         try:
             while True:self.snapshot=self.controller.updates.get_nowait()
         except queue.Empty:pass
+        if self.snapshot and not self.snapshot.get('cfg') and not getattr(self,'_setup_shown',False):
+            self.page='setup';self._setup_shown=True
         self.refresh_lists()
         if self.page in PAGES:
             import time
             if time.monotonic()-getattr(self,'_records_refreshed_at',0)>5:self.refresh_records()
-        self.refresh_lists();self.render();self.poll_id=self.root.after(400,self.poll)
+        self.render();self.poll_id=self.root.after(400,self.poll)
     def destroy(self):
         if self.disposed:return
         self.disposed=True

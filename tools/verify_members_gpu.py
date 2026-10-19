@@ -48,7 +48,7 @@ async def run(root,fixtures,ref):
         await backend.ready()
         # Exclude a warm-up pair from quality/performance aggregates.
         for _ in range(2):await backend.assess_dialogue([dict(role='user',content='안녕')])
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             for index,case in enumerate(protocol['cases']):
                 for variant in (('baseline','current') if index%2==0 else ('current','baseline')):
                     folder=root/f'{mode}-{index}-{variant}';folder.mkdir()
@@ -76,7 +76,7 @@ async def run(root,fixtures,ref):
                         print(json.dumps(dict(mode=mode,index=index,variant=variant,passed=result['passed'],seconds=round(result['seconds'],3))),flush=True)
                     finally:await runtime.close()
         summaries=[]
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             for variant in ('baseline','current'):
                 rows=[r for r in results if r['mode']==mode and r['variant']==variant]
                 summaries.append(dict(mode=mode,variant=variant,count=len(rows),passed=sum(r['passed'] for r in rows),false_response=sum(r['responded'] and not r['expected'] for r in rows),miss=sum(not r['responded'] and r['expected'] for r in rows),latency=distribution([r['seconds'] for r in rows]),

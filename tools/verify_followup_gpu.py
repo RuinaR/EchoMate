@@ -34,7 +34,7 @@ async def run(root,evidence,independent=False):
     sources=json.loads(evidence.read_text(encoding='utf8'))[0]['sources']
     try:
         await backend.ready()
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             folder=root/mode;folder.mkdir();store=CompanionStore(folder/'companion.sqlite3');store.set_consent(2,4,'summaries',True)
             if independent:store.set_consent(2,5,'summaries',True)
             now=datetime.now(timezone.utc)

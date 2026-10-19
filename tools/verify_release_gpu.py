@@ -28,7 +28,7 @@ async def run(root,fixtures):
     try:
         await backend.ready()
         for _ in range(2):await backend.text([dict(role='user',content='안녕')],dict(DEFAULTS,model='base'))
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             cfg=turn_profile(dict(DEFAULTS,model=mode),age_restricted=True)
             for i,case in enumerate(protocol['cases']):
                 for variant in (('old','new') if i%2==0 else ('new','old')):
@@ -42,7 +42,7 @@ async def run(root,fixtures):
                     rows.append(row);atomic_private_json(root/'responses-private.json',rows)
                     print(json.dumps({k:v for k,v in row.items() if k not in ('text','metrics')}),flush=True)
         summary=[]
-        for mode in ('base','persona','adult'):
+        for mode in ('base',):
             for variant in ('old','new'):
                 xs=[r for r in rows if (r['mode'],r['variant'])==(mode,variant)]
                 calls=[m for x in xs for m in x['metrics']]

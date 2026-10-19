@@ -42,6 +42,12 @@ messages*.json
 *test-corpus*.jsonl
 *.safetensors
 *.gguf
+*.pt
+*.pth
+*.ckpt
+*.onnx
+pytorch_model*.bin
+adapter_model*.bin
 
 # Dedicated persona training interpreter
 .venv-train/
