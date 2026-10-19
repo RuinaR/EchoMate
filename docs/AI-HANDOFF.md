@@ -16,7 +16,7 @@
 
 다음: EchoMate.vbs → 사람과 관계 별칭/시간대 확인 → 기억 관리 자동 저장 선택 → 본인 약속/취향 저장·만료·삭제 → 예약 목록/수정·취소를 직접 확인. 기억만 삭제와 전체 본인 자료 삭제는 다르다. `/내기억`은 본인 자료용이며 소유자 설정 권한을 부여하지 않는다. 이전 성인 모델 블라인드 평가는 여전히 대기다.
 
-기준 커밋 f2539f9, 선행 구현 ad7b903. 새 구현 커밋은 `git log -1 --oneline`로 확인한다. private는 `local_data/companion-qa-20261019/`(gpu-1~4, release-probe, live-1/2, tests-final-2.log). 실행: `$env:PYTHONPATH='src'`; `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`; `-m compileall -q src/echomate_bot`; GUI는 EchoMate.vbs. GPU QA 중 앱을 같이 시작하지 않는다.
+공통 기능 구현 커밋 **61dc458**, 기준 f2539f9, 선행 성인 모드 구현 ad7b903. 최종 문서 커밋은 `git log -1 --oneline`로 확인한다. private는 `local_data/companion-qa-20261019/`(gpu-1~4, release-probe, live-1/2, tests-final-2.log). 실행: `$env:PYTHONPATH='src'`; `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`; `-m compileall -q src/echomate_bot`; GUI는 EchoMate.vbs. GPU QA 중 앱을 같이 시작하지 않는다.
 
 ## 최신 — 성인 유머·공통 성별·지속 대화 (2026-10-19)
 
