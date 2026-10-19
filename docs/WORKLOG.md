@@ -2,6 +2,8 @@
 
 ## 2026-10-19 — 후속 릴리즈 안정화·무상한·공개 검색·다중 턴 요약
 
+구현 커밋 ab22ec3, 기준0ddb4df. 공개50파일/민감정보 검토0건, 최종452 OK46.601초. 후속 인수인계 문서 커밋은 git log로 확인한다.
+
 기준0ddb4df/main과 원격 일치/초기 clean을 확인했다. 최신 사용자 지시로 AGENTS의 과거 일일 상한 요구보다 무상한을 우선하고 Ledger/설정/Runtime/UI/도구/테스트에서 차단 조건을 제거했다. 이전 운영 기록은 지우지 않았다.
 
 주요 변경 파일: ledger/settings/runtime/telemetry, safe_web/web_research/inference/structured, summary_store/summarization/companion_store/privacy/consent_ui, reaction_requests/discord_app/output_policy/processes, desktop/desktop_ui/companion_ui. 테스트는 test_followup_release 및 기존 개인정보/SDK/병렬/UI/자원 회귀를 갱신했다. 실제 GPU 재현 도구 verify_followup_gpu/verify_followup_runtime_gpu를 추가했다. 마지막 감사에서 자동 요약의 동일 버전 반복·봇 OFF 생성·백그라운드 자원 실패 안전 정지 누락을 수정했고 해당14검사 OK8.673초였다. 구체 원인·실패·비교 수치와 전체 수정 범위는 [후속 QA](FOLLOWUP-RELEASE-QA.md)에 기록한다.
