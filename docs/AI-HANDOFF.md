@@ -16,7 +16,7 @@
 
 다음 우선순위: (1) 키를 열지 않고 로컬 blind-review.md/json에 사람 평가 (2) Windows 앱 재실행 후 세 버튼/성별 유지/창 크기 직접 확인 (3) 성인 동의와 테스트 채널이 확보된 때만 실제 Discord QA (4) 핵심 능력 저하가 없다는 근거가 생긴 후 GGUF 생산 통합 검토. holdout을 보며 프롬프트를 튜닝하지 않는다. 새 학습/멀티모달/등록 미디어 확장은 없다.
 
-코드 작업 기준 커밋7abcb74, 이번 완료 커밋은 `git log -1 --oneline`로 확인한다. 검증: `$env:PYTHONPATH='src'`; `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`; `-m compileall -q src/echomate_bot`; GUI 시작은 `EchoMate.vbs`. 모델 재평가 명령/프로토콜은 ADULT-MODE-QA를 따른다. GPU 평가 중 앱을 동시에 시작하지 않는다.
+기능 구현·GPU 검증 커밋은 `ad7b903`(작업 전 기준 `7abcb74`)이다. 최신 인수인계 문서 커밋은 `git log -1 --oneline`로 확인한다. 검증: `$env:PYTHONPATH='src'`; `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`; `-m compileall -q src/echomate_bot`; GUI 시작은 `EchoMate.vbs`. 모델 재평가 명령/프로토콜은 ADULT-MODE-QA를 따른다. GPU 평가 중 앱을 동시에 시작하지 않는다.
 
 ## 最新 — 일시적 콘솔 창 수정 (2026-10-19)
 
