@@ -45,33 +45,65 @@ class CompanionViews:
             ('status','처리 · 확정 / 후보 / 삭제','확정')],save,
             '이 채널에서만 사용해요. 후보는 반복되어도 자동 확정하지 않아요. 같은 호칭을 가진 사람이 여럿이면 보류해요. 기억·알림 대상 권한은 바뀌지 않아요.')
 
-    def form(self,title,fields,submit,help_text=''):
+    def form(self,title,fields,submit,help_text='',read_only=False):
         from .desktop_ui import PANEL,CARD,FG,MUTED,ACCENT,BG,rounded
+        from tkinter import font as tkfont
         dialog=tk.Toplevel(self.root);dialog.title(title);dialog.configure(bg=PANEL);dialog.transient(self.root)
-        width=580;height=150+len(fields)*62;dialog.geometry(f'{width}x{height}');dialog.resizable(False,False);dialog.grab_set()
+        width=580;dialog.resizable(False,False);dialog.grab_set()
         canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
-        canvas.create_text(22,18,text=title,anchor='nw',fill=FG,font=('맑은 고딕',14,'bold'))
+        fonts=[tkfont.Font(dialog,family='맑은 고딕',size=14,weight='bold'),tkfont.Font(dialog,family='맑은 고딕',size=9),tkfont.Font(dialog,family='맑은 고딕',size=10)]
+        dialog._form_fonts=fonts
+        heading=canvas.create_text(22,18,text=title,anchor='nw',fill=FG,font=fonts[0],width=535)
+        y=canvas.bbox(heading)[3]+18;input_height=max(28,fonts[2].metrics('linespace')+8)
         values={};entries=[]
-        for index,(key,label,value) in enumerate(fields):
-            y=58+index*62;canvas.create_text(22,y,text=label,anchor='nw',fill=MUTED,font=('맑은 고딕',9))
+        for key,label,value in fields:
+            label_item=canvas.create_text(22,y,text=label,anchor='nw',fill=MUTED,font=fonts[1],width=535)
+            label_box=canvas.bbox(label_item);entry_y=(label_box[3] if label_box else y+fonts[1].metrics('linespace'))+6
             var=tk.StringVar(dialog,value=str(value));values[key]=var
-            entry=tk.Entry(dialog,textvariable=var,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',10))
+            entry=tk.Entry(canvas,textvariable=var,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=fonts[2],readonlybackground=CARD)
             if key=='token':entry.configure(show='●')
-            entry.place(x=22,y=y+22,width=535,height=28);entries.append(entry)
-        hint=canvas.create_text(22,height-83,text=help_text,anchor='nw',fill=MUTED,font=('맑은 고딕',9),width=535)
+            if read_only:entry.configure(state='readonly')
+            canvas.create_window(22,entry_y,anchor='nw',window=entry,width=535,height=input_height);entries.append(entry)
+            def reveal(event,top=entry_y):
+                current=canvas.canvasy(0);visible=max(1,canvas.winfo_height())
+                if top<current+12 or top+input_height>current+visible-12:canvas.yview_moveto(max(0,(top-20)/height));thumb()
+            entry.bind('<FocusIn>',reveal)
+            y=entry_y+input_height+14
+        help_text+=(('\n' if help_text else '')+('Esc로 닫기 · 선택한 텍스트를 복사할 수 있어요' if read_only else 'Ctrl+Enter로 적용 · Esc로 닫기'))
+        hint=canvas.create_text(22,y+8,text=help_text,anchor='nw',fill=MUTED,font=fonts[1],width=535)
+        hint_box=canvas.bbox(hint);footer=(hint_box[3] if hint_box else y+8+fonts[1].metrics('linespace'))+18
+        height=footer+55;viewport=min(height,max(320,self.root.winfo_screenheight()-140))
+        dialog.geometry(f'{width}x{viewport}');canvas.configure(scrollregion=(0,0,width,height))
         def save():
+            if read_only:dialog.destroy();return
             try:submit({k:v.get().strip() for k,v in values.items()})
             except (ValueError,KeyError):canvas.itemconfigure(hint,text='입력 형식과 선택값을 다시 확인해 주세요.');return
             dialog.destroy()
-        rounded(canvas,352,height-43,92,30,CARD,8);rounded(canvas,456,height-43,100,30,ACCENT,8)
-        canvas.create_text(398,height-28,text='닫기',fill=FG,font=('맑은 고딕',10))
-        canvas.create_text(506,height-28,text='적용',fill=BG,font=('맑은 고딕',10,'bold'))
+        if not read_only:
+            rounded(canvas,352,footer,92,30,CARD,8);canvas.create_text(398,footer+15,text='닫기',fill=FG,font=fonts[2])
+        rounded(canvas,456,footer,100,30,ACCENT,8)
+        canvas.create_text(506,footer+15,text='닫기' if read_only else '적용',fill=BG,font=fonts[2])
+        dragging=[False]
+        def thumb():
+            canvas.delete('scroll_thumb');visible=max(1,canvas.winfo_height())
+            if height>visible:
+                fraction=canvas.yview()[0];size=max(25,visible*visible/height)
+                item=rounded(canvas,568,canvas.canvasy(0)+fraction*visible,4,min(size,visible),MUTED,2);canvas.addtag_withtag('scroll_thumb',item)
+        def scroll(event):canvas.yview_scroll(-int(event.delta/120),'units');thumb();return 'break'
         def click(event):
-            if height-43<=event.y<=height-13:
-                if 352<=event.x<=444:dialog.destroy()
+            dragging[0]=event.x>=565
+            if dragging[0]:canvas.yview_moveto(event.y/max(1,canvas.winfo_height()));thumb();return
+            if footer<=canvas.canvasy(event.y)<=footer+30:
+                if 352<=event.x<=444 and not read_only:dialog.destroy()
                 elif 456<=event.x<=556:save()
-        canvas.bind('<Button-1>',click);dialog.bind('<Escape>',lambda e:dialog.destroy());dialog.bind('<Control-Return>',lambda e:save())
+        def drag(event):
+            if dragging[0]:canvas.yview_moveto(event.y/max(1,canvas.winfo_height()));thumb()
+        def closed(event):
+            if event.widget is dialog:values.clear();entries.clear();dialog._form_fonts.clear()
+        canvas.bind('<Button-1>',click);canvas.bind('<B1-Motion>',drag);canvas.bind('<Configure>',lambda e:thumb())
+        dialog.bind('<MouseWheel>',scroll);dialog.bind('<Escape>',lambda e:dialog.destroy());dialog.bind('<Control-Return>',lambda e:save());dialog.bind('<Destroy>',closed)
         if entries:entries[0].focus_set();entries[0].select_range(0,'end')
+        return dialog
 
     def server_options(self):
         if not self.guild_id or not self.snapshot:return
@@ -239,11 +271,11 @@ class CompanionViews:
         labels={'topic':'주제','question':'질문','answer':'당시 답변','correction':'정정','decision':'결정','plan':'계획','open_question':'미해결','ending':'종료'}
         fields=[(str(i),labels.get(item['kind'],'요약')+' · 출처 '+item['source'],item['text']) for i,item in enumerate(row['body']['items'])]
         self.form('대화 요약 · 출처가 있는 압축 기록',fields,lambda v:None,
-                  '수정되지 않는 조회 창이에요. 정정은 실제 대화의 새 요약으로 반영해요. 채널 '+row['channel']+' · '+display_time(row['updated'],tz)+' 갱신 / '+display_time(row['expires'],tz)+' 만료')
+                  '읽기 전용이에요. 정정은 실제 대화의 새 요약으로 반영해요. 채널 '+row['channel']+' · '+display_time(row['updated'],tz)+' 갱신 / '+display_time(row['expires'],tz)+' 만료',read_only=True)
 
     def show_legacy_summaries(self):
         rows=(self.snapshot or {}).get('companion',{}).get('summaries',[])[:4]
-        self.form('선택한 사람의 발언 요약 · 로컬 조회',[(str(i),'출처 '+r['source']+' · 채널 '+r['channel'],r['summary']) for i,r in enumerate(rows)] or [('empty','조회 결과','저장된 요약 자료가 없어요')],lambda v:None,'본인 발언만 선별 발췌해 30일 보관해요. 동의는 본인의 /동의에서만 바꿀 수 있어요. 이 창은 읽기용이에요.')
+        self.form('선택한 사람의 발언 요약 · 로컬 조회',[(str(i),'출처 '+r['source']+' · 채널 '+r['channel'],r['summary']) for i,r in enumerate(rows)] or [('empty','조회 결과','저장된 요약 자료가 없어요')],lambda v:None,'본인 발언만 선별 발췌해 30일 보관해요. 동의는 본인의 /동의에서만 바꿀 수 있어요.',read_only=True)
 
     def cycle_record_status(self):
         values=['전체','사용 중','곧 만료','잠시 끔','확인 필요','만료'] if self.page=='memories' else ['전체','예약 중','실패']

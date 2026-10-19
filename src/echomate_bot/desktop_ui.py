@@ -27,12 +27,21 @@ class SelectionList(tk.Canvas):
         super().__init__(parent,bg=PANEL,highlightthickness=0,takefocus=True)
         self.callback=callback;self.multiple=multiple;self.items=[];self.selected=set();self.offset=0;self.index=0
         self.label_font=tkfont.Font(family='맑은 고딕',size=10)
+        self.selected_font=tkfont.Font(family='맑은 고딕',size=10,weight='bold')
+        self.hint_font=tkfont.Font(family='맑은 고딕',size=8)
         self.bind('<Configure>',lambda e:self.redraw());self.bind('<Button-1>',self.click)
         self.bind('<B1-Motion>',self.drag)
         self.bind('<MouseWheel>',self.wheel)
         self.bind('<Up>',lambda e:self.move(-1));self.bind('<Down>',lambda e:self.move(1))
         self.bind('<space>',lambda e:self.select_index(self.index,bool(e.state&4)));self.bind('<Return>',lambda e:self.select_index(self.index,False))
         self.bind('<FocusIn>',lambda e:self.redraw());self.bind('<FocusOut>',lambda e:self.redraw())
+    def place(self,*args,**kwargs):
+        result=super().place(*args,**kwargs)
+        self.redraw()
+        return result
+    @property
+    def row_height(self):
+        return max(52,max(self.label_font.metrics('linespace'),self.selected_font.metrics('linespace'))+self.hint_font.metrics('linespace')+16)
     def set_items(self,items):
         if items==self.items:return
         anchor=self.items[self.offset]['id'] if self.items and self.offset<len(self.items) and self.offset>0 else None
@@ -41,7 +50,7 @@ class SelectionList(tk.Canvas):
         positions={item['id']:i for i,item in enumerate(items)}
         if anchor in positions:self.offset=positions[anchor]
         if focused in positions:self.index=positions[focused]
-        visible=max(1,self.winfo_height()//52)
+        visible=max(1,self.winfo_height()//self.row_height)
         self.offset=min(self.offset,max(0,len(items)-visible))
         self.index=min(self.index,max(0,len(items)-1));self.redraw()
     def destroy(self):
@@ -49,16 +58,18 @@ class SelectionList(tk.Canvas):
         self.callback=None
         super().destroy()
         self.label_font=None
+        self.selected_font=None;self.hint_font=None
     def click(self,event):
         self.focus_set()
         self.dragging=event.x>self.winfo_width()-12
         if event.x>self.winfo_width()-12:
             self.drag(event);return
-        index=self.offset+event.y//52
+        if not 0<=event.y<self.winfo_height()//self.row_height*self.row_height:return
+        index=self.offset+event.y//self.row_height
         if index<len(self.items):self.select_index(index,bool(event.state&4))
     def drag(self,event):
         if not getattr(self,'dragging',False):return
-        visible=max(1,self.winfo_height()//52)
+        visible=max(1,self.winfo_height()//self.row_height)
         self.offset=max(0,min(max(0,len(self.items)-visible),round(event.y/max(1,self.winfo_height())*len(self.items))))
         self.redraw()
     def select_index(self,index,add):
@@ -71,33 +82,43 @@ class SelectionList(tk.Canvas):
         self.redraw();self.callback(self.selected.copy())
     def move(self,direction):
         self.index=max(0,min(len(self.items)-1,self.index+direction))
-        visible=max(1,self.winfo_height()//52)
+        visible=max(1,self.winfo_height()//self.row_height)
         if self.index<self.offset:self.offset=self.index
         if self.index>=self.offset+visible:self.offset=self.index-visible+1
         self.select_index(self.index,False);return 'break'
     def wheel(self,event):
-        visible=max(1,self.winfo_height()//52)
+        visible=max(1,self.winfo_height()//self.row_height)
         self.offset=max(0,min(max(0,len(self.items)-visible),self.offset-int(event.delta/120)*2));self.redraw();return 'break'
     def redraw(self):
         self.delete('all');w=self.winfo_width();h=self.winfo_height()
+        # place geometry is known before Tcl delivers Configure. Use it for
+        # the first paint too; a hidden/new widget may still report 1x1.
+        if self.winfo_manager()=='place':
+            geometry=self.place_info()
+            if geometry.get('width'):w=max(1,int(float(geometry['width'])))
+            if geometry.get('height'):h=max(1,int(float(geometry['height'])))
+        row_height=self.row_height
+        label_height=max(self.label_font.metrics('linespace'),self.selected_font.metrics('linespace'))
+        self.offset=min(self.offset,max(0,len(self.items)-max(1,h//row_height)))
         for index,item in enumerate(self.items[self.offset:]):
-            y=index*52
-            if y+50>h:break
+            y=index*row_height
+            if y+row_height>h:break
             selected=item['id'] in self.selected
-            if selected:rounded(self,0,y,w-14,48,'#2c2b50',8)
+            if selected:rounded(self,0,y,w-14,row_height-4,'#2c2b50',8)
+            font=self.selected_font if selected else self.label_font
             label=item['label']
-            if self.label_font.measure(label)>w-35:
-                while label and self.label_font.measure(label+'…')>w-35:label=label[:-1]
+            if font.measure(label)>w-35:
+                while label and font.measure(label+'…')>w-35:label=label[:-1]
                 label+='…'
-            self.create_text(13,y+15,text=label,anchor='w',fill=FG if selected else '#c2cddd',font=('맑은 고딕',10,'bold' if selected else 'normal'))
+            self.create_text(13,y+6+label_height/2,text=label,anchor='w',fill=FG if selected else '#c2cddd',font=font)
             hint=item.get('hint','')
-            if self.label_font.measure(hint)>w-35:
-                while hint and self.label_font.measure(hint+'…')>w-35:hint=hint[:-1]
+            if self.hint_font.measure(hint)>w-35:
+                while hint and self.hint_font.measure(hint+'…')>w-35:hint=hint[:-1]
                 hint+='…'
-            self.create_text(13,y+35,text=hint,anchor='w',fill=ACCENT if selected else MUTED,font=('맑은 고딕',8))
-        if not self.items:self.create_text(14,26,text=getattr(self,'empty_hint','연결 후 목록이 표시돼'),anchor='w',fill=MUTED,font=('맑은 고딕',10))
-        if len(self.items)*52>h and h>1:
-            thumb=max(25,h*h/(len(self.items)*52));top=self.offset/max(1,len(self.items))*h
+            self.create_text(13,y+10+label_height+self.hint_font.metrics('linespace')/2,text=hint,anchor='w',fill=ACCENT if selected else MUTED,font=self.hint_font)
+        if not self.items:self.create_text(14,12,text=getattr(self,'empty_hint','연결 후 목록이 표시돼'),anchor='nw',fill=MUTED,font=self.label_font,width=max(1,w-30))
+        if len(self.items)*row_height>h and h>1:
+            thumb=max(25,h*h/(len(self.items)*row_height));top=self.offset/max(1,len(self.items))*h
             rounded(self,w-8,top,4,min(thumb,h-top),LINE,2)
         if self.focus_get() is self:self.create_rectangle(1,1,w-2,h-2,outline=ACCENT)
 
@@ -164,6 +185,22 @@ class DesktopApp(CompanionViews):
         if page in PAGES:
             self.record_key=None;self.record_status='전체';self.refresh_records()
     def set_value(self,key,value):self.controller.submit('settings',values={key:value})
+    def ellipsize(self,value,width,size=10,middle=False):
+        value=str(value).replace('\n',' ');font=self.button_font(size)
+        if font.measure(value)<=width:return value
+        def shortened(n):return value[:(n+1)//2]+'…'+(value[-(n//2):] if n//2 else '') if middle else value[:n]+'…'
+        low=0;high=len(value)
+        while low<high:
+            mid=(low+high+1)//2
+            if font.measure(shortened(mid))<=width:low=mid
+            else:high=mid-1
+        return shortened(low)
+    def show_status_detail(self):
+        s=self.snapshot or {}
+        last=s.get('last_management_error',{})
+        self.form('현재 상태와 오류',[('phase','현재 상태',s.get('phase','준비 중')),('error','현재 오류',s.get('error') or '현재 오류 없음'),
+                  ('last_error','이 실행에서 마지막으로 확인한 관리 오류',last.get('message','기록된 관리 오류 없음'))],lambda values:None,
+                  '긴 자원 안내와 오류 유형을 전체 길이로 확인할 수 있어요.',read_only=True)
     def remember_scope(self):
         if self.guild_id and self.channel_ids:
             self.drafts[(self.guild_id,frozenset(self.channel_ids))]=(self.text_mode,self.react_mode,self.inherit)
@@ -272,11 +309,14 @@ class DesktopApp(CompanionViews):
         self.text(24,h-90,'모델은 내 PC에서 실행',9,MUTED);self.text(24,h-65,'Gemma 4 12B',10)
         s=self.snapshot;cfg=s['cfg'] if s and s.get('cfg') else None
         title={'setup':'처음 사용 안내','models':'내 PC의 AI 모델','spaces':'대화할 곳','outputs':'응답 방식','character':'성격과 기분','status':'지금 무엇을 하고 있나요?','labs':'실험 기능',**PAGES}[self.page]
-        self.text(226,28,title,21,bold=True)
+        title_size=21
+        while title_size>12 and self.button_font(title_size).measure(title)>w-610:title_size-=1
+        title_item=self.text(226,28,title,title_size,bold=True)
+        phase_y=max(76,self.canvas.bbox(title_item)[3]+8)
         connected=bool(s and s['connected'])
         running=bool(s and s.get('running'))
         self.canvas.create_oval(w-350,39,w-342,47,fill=MINT if connected else MUTED,outline='')
-        self.text(w-333,31,'Discord에 연결됨' if connected else '연결을 준비하고 있어요' if running else '봇이 꺼져 있어요',10,MUTED)
+        self.text(w-333,31,'연결됨' if connected else '연결 준비' if running else '봇 꺼짐',10,MUTED)
         preview_busy=bool(s and s.get('preview_busy'))
         cleanup_failed=bool(s and s.get('preview_cleanup_failed'))
         label='다시 열기 필요' if cleanup_failed else '미리보기 중' if preview_busy else '응답 재개' if connected and cfg and not cfg['enabled'] else '실행 중' if connected else '준비 중' if running else '봇 켜기'
@@ -285,7 +325,8 @@ class DesktopApp(CompanionViews):
         error=' · '+s['error'] if s and s['error'] else ''
         phase=s['phase'] if s else '저장된 설정을 읽고 있어요'
         if phase.startswith('정지'):phase='채널을 고른 뒤 ‘봇 켜기’를 누르면 대화를 시작해요'
-        self.text(226,76,phase+error,10,MUTED)
+        self.text(226,phase_y,self.ellipsize(phase+error,max(100,w-660)),10,MUTED)
+        self.button(w-400,phase_y-4,130,28,'상태·오류',self.show_status_detail)
         if cfg and connected:self.toggle(w-200,78,'응답 허용',cfg['enabled'],lambda:self.set_value('enabled',not cfg['enabled']))
         self.server_list.place_forget();self.channel_list.place_forget()
         self.people_list.place_forget();self.record_list.place_forget();self.job_list.place_forget();self.model_list.place_forget()
@@ -397,12 +438,15 @@ class DesktopApp(CompanionViews):
         if selected:
             sharded=bool(selected.get('largest_shard_bytes',0) and selected['largest_shard_bytes']<selected['bytes'])
             self.text(550,295,selected['format']+f" · {selected['bytes']/1024**3:.1f}GiB"+(' · 분할 가중치' if sharded else ''),11,bold=True)
-            self.text(550,332,selected['reason'],10,MUTED,width=w-590)
-            self.text(550,390,selected['path'],9,MUTED,width=w-590)
-            self.text(550,434,'파일 검사 통과 · GPU 준비는 적용할 때 확인해요' if selected['compatible'] else '지원하지 않는 모델은 적용할 수 없어요',9,MUTED,width=w-590)
+            self.text(550,332,self.ellipsize(selected['reason'],w-590),10,MUTED)
+            self.text(550,390,self.ellipsize(selected['path'],w-590,9,middle=True),9,MUTED)
+            self.button(550,420,150,30,'모델 상세 보기',lambda:self.form('선택한 모델 정보',[
+                ('name','모델 이름',selected['name']),('path','폴더 위치',selected['path']),('format','형식과 백엔드',selected['format']+' · '+selected.get('backend','Transformers / NF4')),
+                ('reason','파일 검사 결과',selected['reason'])],lambda values:None,'파일 검사와 실제 GPU 준비 검증은 별개예요.',read_only=True))
+            self.text(550,458,self.ellipsize('파일 검사 통과 · GPU 준비는 적용할 때 확인해요' if selected['compatible'] else '지원하지 않는 모델은 적용할 수 없어요',w-590,9),9,MUTED)
             current=cfg['model']==selected['id'] or cfg['model']=='base' and 'models--google--gemma-4-12B-it' in selected['path']
-            self.text(550,474,'현재 설정된 모델이에요' if current else '목록 선택만으로는 모델이 바뀌지 않아요',8,MUTED,width=w-590)
-            self.button(550,520,150,34,'검증 후 적용',lambda:self.set_value('model',selected['id']),enabled=selected['compatible'] and not busy)
+            self.text(550,494,'현재 설정된 모델이에요' if current else '목록 선택만으로는 모델이 바뀌지 않아요',8,MUTED,width=w-590)
+            self.button(550,540,150,34,'검증 후 적용',lambda:self.set_value('model',selected['id']),enabled=selected['compatible'] and not busy)
         if self.snapshot.get('preview_busy'):self.text(250,h-138,'미리보기 창을 닫아 취소하거나 완료된 뒤 모델을 변경해 주세요.',9,MUTED,width=w-290)
         self.text(250,h-107,'예상 VRAM 약 10GB + 시스템 여유 · 실제 지원 검증은 RTX 4070 Ti SUPER 16GB에 한정돼요.',9,MUTED,width=w-290)
 

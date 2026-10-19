@@ -134,6 +134,7 @@ class LocalController:
                       preview_busy=preview_busy,preview_session=getattr(self,'preview_session',None),
                       preview_cleanup_failed=getattr(self,'preview_cleanup_failed',False),
                       preview_rejection=getattr(self,'preview_rejection',{}),
+                      last_management_error=getattr(self,'last_management_error',{}),
                       model_load_seconds=getattr(serving,'load_seconds',None),
                       model_switch_seconds=getattr(client.backend,'switch_seconds',None) if client else None,
                       models=[m.public() for m in getattr(self,'models',[])],profiles=getattr(self,'profiles_view',{}),preview=getattr(self,'preview_result',''),
@@ -305,7 +306,9 @@ class LocalController:
                         else:self.preview_backend=None
                 self.preview_task=asyncio.create_task(generate_preview())
                 def completed(task):
-                    if not task.cancelled() and task.exception():self.error=('PreviewCleanup' if getattr(self,'preview_cleanup_failed',False) else 'Preview')+type(task.exception()).__name__
+                    if not task.cancelled() and task.exception():
+                        self.error=('PreviewCleanup' if getattr(self,'preview_cleanup_failed',False) else 'Preview')+type(task.exception()).__name__
+                        self.last_management_error=dict(operation='preview',kind=type(task.exception()).__name__,message=self.error,at=time.time())
                     self._publish()
                 self.preview_task.add_done_callback(completed)
                 # No Runtime ingestion: consent, memory, affinity and reminders untouched.
@@ -493,6 +496,7 @@ class LocalController:
             safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요','미리보기 정리에 실패했어요. 앱을 닫고 다시 열어 주세요.'}
             from .processes import ResourceLimitError,resource_message
             self.error=resource_message(exc,NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요')) if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
+            self.last_management_error=dict(operation=operation,kind=type(exc).__name__,message=self.error,at=time.time())
             if operation=='preview':self.preview_rejection=dict(session=kwargs.get('session'),error=self.error)
         self._publish()
 

@@ -13,14 +13,37 @@ from echomate_bot.character_profiles import DEFAULT_PROFILE
 
 
 class RecordSelection(unittest.TestCase):
+    def test_list_text_lines_and_partial_row_hit_area_follow_actual_dpi(self):
+        from echomate_bot.desktop_ui import SelectionList
+        for scale in (4/3,5/3,2):
+            root=tk.Tk();root.withdraw();root.tk.call('tk','scaling',scale)
+            callback=Mock();listing=SelectionList(root,callback)
+            try:
+                height=listing.row_height*2+10
+                listing.place(x=0,y=0,width=300,height=height);root.update_idletasks()
+                listing.set_items([dict(id=str(i),label='합성 목록 제목',hint='두 번째 설명 줄') for i in range(3)])
+                boxes=[listing.bbox(item) for item in listing.find_all() if listing.type(item)=='text']
+                self.assertEqual(len(boxes),4)
+                for a,b in zip(boxes,boxes[1:]):self.assertLessEqual(a[3],b[1])
+                listing.click(SimpleNamespace(x=20,y=height-1,state=0));callback.assert_not_called()
+                listing.click(SimpleNamespace(x=20,y=listing.row_height+1,state=0))
+                self.assertEqual(listing.selected,{'1'})
+                listing.empty_hint='두 줄 안내\n목록을 확인해 주세요';listing.set_items([])
+                box=next(listing.bbox(item) for item in listing.find_all() if listing.type(item)=='text')
+                self.assertGreaterEqual(box[1],0);self.assertLessEqual(box[3],height)
+            finally:
+                listing.destroy();root.destroy();listing=None;root=None;gc.collect()
+
     def test_loaded_preview_still_disables_model_change_controls(self):
         root=tk.Tk();root.withdraw();controller=SimpleNamespace(updates=queue.Queue(),submit=Mock());app=DesktopApp(root,controller)
         try:
             app.snapshot=dict(cfg=deepcopy(DEFAULTS),servers=[],phase='미리보기',error='',connected=False,running=False,
                 preview_busy=True,model_preparing=False,models=[dict(id='demo',name='합성 모델',path='models--google--gemma-4-12B-it/demo',format='Transformers',bytes=22*1024**3,compatible=True,reason='합성 파일 검사')])
             app.page='models';app.model_id='demo';app.render()
-            self.assertFalse(any((x,y) in ((250,233),(520,233),(550,520)) for x,y,w,h,fn in app.hits))
+            self.assertFalse(any((x,y) in ((250,233),(520,233),(550,540)) for x,y,w,h,fn in app.hits))
             self.assertTrue(any((x,y)==(400,233) for x,y,w,h,fn in app.hits))
+            app.snapshot['preview_busy']=False;app.render()
+            self.assertTrue(any((x,y)==(550,540) for x,y,w,h,fn in app.hits))
         finally:
             app.destroy();app=None;root=None;gc.collect()
 

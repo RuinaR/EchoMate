@@ -18,9 +18,10 @@ def run(output):
     target=Path(output).resolve()
     target.relative_to((Path.cwd()/'local_data').resolve())
     if target.exists():raise ValueError('Use a fresh output file')
-    rows=[]
+    rows=[];callback_errors=[]
     for dpi,scaling in ((100,4/3),(125,5/3),(150,2)):
         root=tk.Tk();root.withdraw();root.tk.call('tk','scaling',scaling)
+        root.report_callback_exception=lambda kind,value,tb:callback_errors.append(kind.__name__)
         controller=SimpleNamespace(updates=queue.Queue(),submit=Mock())
         app=DesktopApp(root,controller)
         try:
@@ -60,13 +61,20 @@ def run(output):
                         for item in app.canvas.find_withtag('button_label'):
                             box=app.canvas.bbox(item)
                             if box and (box[0]<0 or box[1]<0 or box[2]>width or box[3]>height):clipped.append(box)
+                        list_text_outside=[]
+                        for listing in (app.server_list,app.channel_list,app.people_list,app.record_list,app.job_list,app.model_list):
+                            if listing.winfo_manager()!='place':continue
+                            for item in listing.find_all():
+                                if listing.type(item)!='text':continue
+                                box=listing.bbox(item)
+                                if box and (box[0]<0 or box[1]<0 or box[2]>listing.winfo_width() or box[3]>listing.winfo_height()):list_text_outside.append(box)
                         rows.append(dict(dpi=dpi,size=size,actual_canvas=[width,height],page=page,scenario=scenario,render_ms=round((time.perf_counter()-started)*1000,3),
-                            enabled_hit_targets=len(app.hits),outside=outside,clipped_button_labels=clipped))
+                            enabled_hit_targets=len(app.hits),outside=outside,clipped_button_labels=clipped,list_text_outside=list_text_outside))
         finally:
             app.destroy();app=None;root=None;gc.collect()
     result=dict(real_tk=True,desktop_input=False,discord=False,gpu=False,backend_mutations_verified=False,
         scope='screen render, enabled hit bounds and timing only; dialog flows and all control effects not certified',rows=rows,
-        passed=not any(row['outside'] or row['clipped_button_labels'] for row in rows))
+        callback_errors=callback_errors,passed=not callback_errors and not any(row['outside'] or row['clipped_button_labels'] or row['list_text_outside'] for row in rows))
     target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(dict(screens=len(rows),passed=result['passed'],max_render_ms=max(r['render_ms'] for r in rows))))
 

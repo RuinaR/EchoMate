@@ -28,6 +28,15 @@ class OfflineRecords(unittest.IsolatedAsyncioTestCase):
         c.client=None;c.job=None;c.phase='정지';c.error='';c.updates=queue.Queue(maxsize=8);c.inventory=[];c.record_guilds=[2]
         c.companion=CompanionStore(self.root/'companion.sqlite3');c.companion_view={}
     def tearDown(self):self.temp.cleanup()
+    async def test_background_refresh_cannot_erase_last_management_failure(self):
+        from echomate_bot.character_profiles import DEFAULT_PROFILE
+        with patch('echomate_bot.character_profiles.ProfileStore.save',side_effect=OSError('synthetic write failure')):
+            await self.c.command('profiles',action='save_apply',key='synthetic',value=dict(DEFAULT_PROFILE))
+        failure=dict(self.c.last_management_error)
+        await self.c.command('companion',action='refresh',guild=2,user=None)
+        self.assertFalse(self.c.error)
+        self.assertEqual(self.c.updates.queue[-1]['last_management_error'],failure)
+        self.assertEqual(failure['operation'],'profiles');self.assertEqual(failure['kind'],'OSError')
     async def test_preview_close_before_coroutine_start_releases_owned_backend(self):
         backend=SimpleNamespace(model=None,text=AsyncMock(),close=AsyncMock())
         with patch('echomate_bot.inference.LocalBackend',return_value=backend):
