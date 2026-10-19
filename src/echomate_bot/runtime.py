@@ -761,7 +761,8 @@ class Runtime:
             source_terms=lambda text:terms(MENTION.sub('',text))-name_terms
             query_terms=source_terms(event.content)
             related_source=any(query_terms&source_terms(f.topic) for f,v in frames)
-            if not bot_reply and not flow.last_bot and related_source and len(event.content.split())>1 and not INDEPENDENT.search(event.content):
+            known_peer=any(event.author in f.direct_peers for f,v in frames)
+            if not bot_reply and not flow.last_bot and (known_peer or related_source) and (known_peer or len(event.content.split())>1) and not INDEPENDENT.search(event.content):
                 # A fresh explicit caller is guaranteed an answer. One bounded
                 # semantic pass may link a real reference, never a bare call.
                 self.stage(event,'social',time.time())
@@ -773,7 +774,8 @@ class Runtime:
                     # A fresh caller can always get a separate answer. Merging
                     # a guessed reference additionally needs source relevance;
                     # a miss here never suppresses the explicit request.
-                    if index<len(frames) and query_terms&source_terms(frames[index][0].topic):decision=SocialDecision('bot','join',proposed.anchor,proposed.act,True)
+                    if index<len(frames) and (event.author in frames[index][0].direct_peers or query_terms&source_terms(frames[index][0].topic)):
+                        decision=SocialDecision('bot','continue' if event.author in frames[index][0].direct_peers else 'join',proposed.anchor,proposed.act,True)
             self.note('social_metadata_direct')
         else:
             self.stage(event,'social',time.time())

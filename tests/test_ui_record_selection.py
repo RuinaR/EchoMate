@@ -9,9 +9,43 @@ from unittest.mock import Mock
 
 from echomate_bot.desktop_ui import DesktopApp
 from echomate_bot.settings import DEFAULTS
+from echomate_bot.character_profiles import DEFAULT_PROFILE
 
 
 class RecordSelection(unittest.TestCase):
+    def test_profile_dialog_receives_async_snapshot_and_preserves_valid_selection(self):
+        import time
+        import re
+        from echomate_bot.desktop_ui import SelectionList
+        root=tk.Tk();root.withdraw()
+        controller=SimpleNamespace(updates=queue.Queue(),submit=Mock());app=DesktopApp(root,controller)
+        try:
+            app.snapshot=dict(cfg=deepcopy(DEFAULTS),servers=[],phase='정지',error='',connected=False,running=False,profiles={})
+            app.profile_library();root.update_idletasks()
+            dialog=next(w for w in root.winfo_children() if isinstance(w,tk.Toplevel))
+            canvas=next(w for w in dialog.winfo_children() if isinstance(w,tk.Canvas))
+            listing=next(w for w in canvas.winfo_children() if isinstance(w,SelectionList))
+            self.assertEqual([r['id'] for r in listing.items],['default'])
+            controller.submit.reset_mock()
+            def click():
+                # Unmapped windows do not receive generated pointer events.
+                # Invoke Tk's registered event binding with an actual Tcl event
+                # substitution, without mapping a window or sending OS input.
+                command=re.search(r'\[([^ ]+) ',canvas.bind('<Button-1>'))[1]
+                root.tk.call(command,'0','1','0','0','0','0','0','0','200','380','','0','','0',str(canvas),'4','0','0','0')
+            click();root.update()
+            controller.submit.assert_not_called()  # default is visibly nondeletable
+            app.snapshot['profiles']={'default':dict(DEFAULT_PROFILE),'saved':dict(DEFAULT_PROFILE,name='합성 새 프로필')}
+            deadline=time.monotonic()+1
+            while len(listing.items)<2 and time.monotonic()<deadline:root.update();time.sleep(.02)
+            self.assertEqual([r['id'] for r in listing.items],['default','saved'])
+            listing.select_index(1,False)
+            click();root.update()
+            self.assertEqual(controller.submit.call_args.kwargs,dict(action='delete',key='saved'))
+            self.assertFalse(dialog.winfo_exists())
+        finally:
+            app.destroy();app=None;root=None;gc.collect()
+
     def test_deleted_or_filtered_record_cannot_remain_an_action_target(self):
         for scale in (4/3,5/3,2):
             root=tk.Tk();root.withdraw();root.tk.call('tk','scaling',scale)

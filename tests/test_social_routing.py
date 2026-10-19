@@ -56,6 +56,30 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         await self.settle()
         self.assertEqual([e.id for e,_ in self.transport.sent],[10,42])
 
+    async def test_activity_never_changes_confirmed_direct_or_human_recipient(self):
+        self.configure()
+        for index,activity in enumerate(('quiet','normal','active','very_active')):
+            self.settings.set(1,'activity',activity)
+            author=20+index
+            await self.runtime.ingest(replace(self.event(id=100+index*2,content='<@999> 설명을 부탁해'),author=author,member_mentions=(999,)))
+            await self.settle()
+            before=len(self.transport.sent)
+            await self.runtime.ingest(replace(self.event(id=101+index*2,content='<@4> 네 생각은 어떤데'),author=author,member_mentions=(4,)))
+            await self.settle()
+            self.assertEqual(len(self.transport.sent),before)
+        self.assertEqual([e.id for e,_ in self.transport.sent],[100,102,104,106])
+        self.assertTrue(all(call.args[0]['current']['id'] in ('100','102','104','106')
+                            for call in self.backend.assess_social.await_args_list))
+
+    async def test_current_peer_explicit_new_topic_is_not_forced_into_only_flow(self):
+        first=await self.start()
+        self.backend.assess_social.return_value=SocialDecision('bot','new','none','request',True)
+        await self.runtime.ingest(self.event(id=110,content='다온아 실내 조명의 색부터 정하자'))
+        await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],[10,110])
+        self.assertNotEqual(self.transport.sent[-1][0].conversation_id,first.conversation_id)
+        self.backend.assess_social.assert_awaited_once()
+
     async def test_confirmed_peer_followup_is_semantic_and_has_original_reply(self):
         first=await self.start()
         for i,text in enumerate(('뭐하고있었어','그 이야기는 결말이 의외네','그건 왜 그렇게 된 건데')):
@@ -99,7 +123,10 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         for i,text in enumerate(('다온아 잠깐 쉬자고 말해 줘','다온아 먼저 시작하라고 전해 줘')):
             await self.runtime.ingest(self.event(id=40+i,content=text));await self.settle()
         self.assertEqual([e.id for e,_ in self.transport.sent],[40,41])
-        self.backend.assess_social.assert_not_awaited()
+        # Only the second request has a prior peer frame to link. Even an
+        # uncertain optional relation vote cannot erase the confirmed call.
+        self.backend.assess_social.assert_awaited_once()
+        self.assertNotEqual(self.transport.sent[0][0].conversation_id,self.transport.sent[1][0].conversation_id)
 
     async def test_nominalized_report_stays_semantic_and_does_not_end_peer_flow(self):
         from echomate_bot.naming import name_address

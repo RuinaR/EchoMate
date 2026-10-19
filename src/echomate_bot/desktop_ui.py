@@ -425,20 +425,33 @@ class DesktopApp(CompanionViews):
     def profile_library(self):
         self.controller.submit('profiles')
         from .character_profiles import DEFAULT_PROFILE
-        values=(self.snapshot or {}).get('profiles',{}) or {'default':DEFAULT_PROFILE}
         dialog=tk.Toplevel(self.root);dialog.title('저장한 캐릭터');dialog.configure(bg=PANEL);dialog.geometry('540x440');dialog.transient(self.root)
         canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
         canvas.create_text(24,22,text='프로필을 고르고 적용하세요',anchor='nw',fill=FG,font=('맑은 고딕',13,'bold'))
         selected=['default'];listing=SelectionList(canvas,lambda ids:selected.__setitem__(0,next(iter(ids),'default')))
         listing.place(x=24,y=64,width=490,height=280)
-        listing.set_items([dict(id=k,label=v['name'],hint=v['introduction']) for k,v in values.items()]);listing.selected={'default'};listing.redraw()
+        timer=[None];deleted_label=[None]
+        def refresh():
+            values=(self.snapshot or {}).get('profiles',{}) or {'default':DEFAULT_PROFILE}
+            listing.set_items([dict(id=k,label=v['name'],hint=v['introduction']) for k,v in values.items()])
+            if selected[0] not in values:selected[0]=next(iter(values))
+            listing.selected={selected[0]};listing.redraw()
+            if deleted_label[0]:canvas.itemconfigure(deleted_label[0],fill=MUTED if selected[0]=='default' else FG)
+            timer[0]=dialog.after(400,refresh)
         for x,label in ((24,'적용'),(185,'삭제'),(346,'기본값 복원')):
-            rounded(canvas,x,365,145,36,CARD,8);canvas.create_text(x+72,383,text=label,fill=FG,font=('맑은 고딕',10))
+            rounded(canvas,x,365,145,36,CARD,8);item=canvas.create_text(x+72,383,text=label,fill=FG,font=('맑은 고딕',10))
+            if label=='삭제':deleted_label[0]=item
         def click(e):
             if not 365<=e.y<=401:return
             action='apply' if 24<=e.x<=169 else 'delete' if 185<=e.x<=330 else 'restore' if 346<=e.x<=491 else None
+            if action=='delete' and selected[0]=='default':return
             if action:self.controller.submit('profiles',action=action,key=selected[0]);dialog.destroy()
-        canvas.bind('<Button-1>',click);dialog.bind('<Escape>',lambda e:dialog.destroy())
+        def closed(event):
+            if event.widget is dialog and timer[0]:
+                try:dialog.after_cancel(timer[0])
+                except tk.TclError:pass
+        canvas.bind('<Button-1>',click);dialog.bind('<Escape>',lambda e:dialog.destroy());dialog.bind('<Destroy>',closed)
+        refresh()
 
     def advanced_profile(self):
         from .character_profiles import DEFAULT_PROFILE,validate_profile

@@ -74,9 +74,11 @@ class Conversations:
         if CANCEL.fullmatch(text):return (busy[0],'cancel') if len(busy)==1 else (None,'ambiguous_cancel')
         if END.fullmatch(text) and len(own)==1:return own[0],'end'
         if len(busy)==1 and SUPPLEMENT.search(text) and not INDEPENDENT.search(text):return busy[0],'supplement'
-        # A confirmed current peer plus an explicit fresh invitation is evidence;
-        # membership alone or the existence of only one session is not.
-        if direct and len(own)==1 and not busy and not INDEPENDENT.search(text):return own[0],'continue'
+        # A bare attention call can retain its confirmed counterpart. A call
+        # with content still needs relation evidence: one own flow does not
+        # prove that a new topic belongs to it. Runtime may link the candidate
+        # after semantic validation without ever suppressing the direct call.
+        if direct and len(own)==1 and not busy and not text:return own[0],'continue'
         key=event.channel if not any(f.channel==event.channel for f in self.flows.values()) else (event.guild,event.channel,secrets.token_hex(8))
         flow=Conversation(key,event.guild,event.channel,event.parent,candidate_keys=tuple(f.key for f in own))
         if len(own)==1:flow.candidate_key=own[0].key
