@@ -4,7 +4,7 @@
 
 ## 최신 — 다중 흐름·공정한 GPU 큐·릴리즈 감사 (2026-10-19)
 
-먼저 [PARALLEL-CONVERSATIONS](PARALLEL-CONVERSATIONS.md)와 [RELEASE-QA 최신 절](RELEASE-QA.md)을 읽는다. 기준 eaf1d1e, 최종 구현 커밋은 git log -1로 확인한다. 이전의 개인 LoRA 잠정/성인 정책 fallback/GGUF 승격 보류는 그대로다.
+먼저 [PARALLEL-CONVERSATIONS](PARALLEL-CONVERSATIONS.md)와 [RELEASE-QA 최신 절](RELEASE-QA.md)을 읽는다. 기준 eaf1d1e, 최종 구현·검증 커밋은 **6b369e6**이다. 후속 인수인계 문서 커밋은 git log -1로 확인한다. 이전의 개인 LoRA 잠정/성인 정책 fallback/GGUF 승격 보류는 그대로다.
 
 최신 사용자 지시: 활성 대화 때문에 다른 채널·스레드 자율 참여를 전역 차단하지 않는다. 실제 상호작용·종료·대기 요청·휴지 상태로 활성 수를 계산하고 자율 진입만 부하·활동·쿨타임으로 보정한다. 초기 전역 차단 지시는 대체됐다. 같은 사용자의 1·2·5초 호출도 별개 질문 보존/FIFO/고정 reply, 명시 호출 보충 병합, 원문 완전 중복만 억제한다. 코드·URL 대소문자/공백은 중복 판정에서 보존한다.
 
