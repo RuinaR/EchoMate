@@ -1,5 +1,17 @@
 # 작업 로그
 
+## 2026-10-20 최종 후속 QA — GPU 허용 후 / BLOCKED
+
+시작 HEAD `3829408`, 최종 앱 소스 `868f156`. 최종 문서 커밋은 Git 기록을 확인한다. 아래 초기 감사·GPU 보류 기록은 당시 경과이며 현재 결과는 이 절과 [상세 QA](SOCIAL-UI-QA.md)를 우선한다.
+
+- 전체 회귀 **547개 OK63.119초**. 실제 숨긴 Tk 10화면·두 Canvas 크기·배율3종·7상태의420조합에서 활성 클릭/버튼/목록 텍스트 이탈0·callback 오류0. 렌더 p50/p95 **4.609/66.888ms**. 모든 팝업·파일 선택·사람의 시각 검토를 전수 PASS한 것은 아니다.
+- 실제 GPU의 새16문항 최초 평가 **12/16**(누락3·연결오류1), 이전24·76문항은 개발 자료이며 **19/24·66/76**. 직접 호출 관계 전용의 별도 좁은8문항은 기존6/8→8/8, 오개입0. 이를 일반 청자 성능으로 확대하지 않는다. 비질문형 후속 누락과 개발 자료의 타인 대상 오개입이 남아 **정식 릴리즈 BLOCKED**다.
+- 같은 입력·상주 가중치의 직접 연결 분류32회/조건에서 p50/p95 **1.4187/1.6264→0.6179/0.8195초**. 전체 수신→mock 송신9건은 **3.719/4.291초**, TTFT 근사0.609/0.635초, 중앙 생성속도7.724tokens/s. 큐 대기0·재생성0이며 긴 설명/검색/포화 경로 전체를 대표하지 않는다.
+- 혼합 운용183.859초 실패를 보존하고 반응만 완료된 세션의 회수 누락을 수정했다. 수정 후 **600.188초·497반복·mock 답변994·반응99·GPU probe5/5**, 오류/잔류 Task0. commit 증분2.898MiB, GPU allocated/reserved 일정, 종료 후 worker0. 10분 대표 검사이며24시간 인증이 아니다.
+- 최종868f156 Portable 실제 GPU에서 암호화 최초 설정·모델 선택/probe·미리보기·재시작 복원 PASS. 로딩 중 숨긴 미리보기 창 닫기 후24.813초에 안전 정리, allocated1KiB/reserved2MiB·worker0·관계/기억/예약 쓰기0. [배포 검사](DISTRIBUTION-QA.md)의 동일 호스트/샌드박스 제약을 따른다.
+- 운영 설정·토큰·관계/기억/예약 DB·가중치·LoRA는 보존한다. 실제 Discord 접속/송신, 다른 Windows/GPU, 메이플 병행, 사람의 캐릭터 평가,24시간 실사용은 **NOT VERIFIED**다. 비공개 근거는 `local_data/social-ui-qa-20261020/`에만 둔다.
+
+
 ## 2026-10-20 사회적 대화·UI 후속 감사 — 진행 범위 / BLOCKED
 
 시작/원격 `3829408` clean을 확인했다. 기준선523검사 OK60.304초, 수정 뒤 **527검사 OK59.774초**다. 명확한 실제 봇 멘션과 타인 멘션이 함께 있을 때 선택적인 그룹 연결 분류가 실패해도 독립 요청을 보존한다. 불확실한 이름 언급에 응답 권한을 새로 부여하거나 추측으로 그룹을 병합하지 않는다. 청자 PROMPT·활동/시간 정책·GPU 안전 기준은 변경하지 않았다.
@@ -776,3 +788,11 @@ naming/routing/sessions/runtime/dialogue_intent/inference/character/telemetry, D
 추가 증거: 동일한 부정적 대상 판단을 주입한 기준66d0b02 Runtime은 등록 호칭에0응답/0생성, 현재 Runtime은1응답/1생성이었다(injected-baseline-summary.json). 이는 결정적 재현이며 당시 실제 모델이 똑같은 판단을 냈다는 증거는 아니다. 현재 로컬 서명 설정에서도 보고된 호칭의 유효 형태를 확인했고 settings/bootstrap 해시는 변하지 않았다.
 
 초기 기분 도구의 성인 슬롯 weight를 직접 지정한 경로는 생산 turn_profile과 달라 수정했다. 기분 비교표는 수정된 GPU3의 기본/개인/성인 정책 경로만 사용한다. 초기 sequence 도구의 모드 간 원문 파일 덮어쓰기도 수정하고 gpu-sequence-confirmed에서3모드별 원문/trace를 각각 재보존했다. 실제 사용자 자료나 weights를 덮어쓴 것이 아니다.
+
+### 변경 파일·실행 근거
+
+- `inference.py/runtime.py/sessions.py`: 확정 직접 호출 관계 전용 분류, 유일 세션 자동 연결 제거, 완료 반응 이력 회수. 후보 A/B의 실패 원인과 최초 독립 평가를 보존했다.
+- `desktop.py/desktop_ui.py/companion_ui.py`: stale 선택/필터, 서명 프로필 저장 후 적용, popup 갱신, ticket 취소·GPU 소유권 정리, DPI/긴 설정 양식·읽기 전용 상세·최근 관리 오류.
+- tests의 Controller·세션·실제 숨긴 Tk 회귀 및 `tools/verify_ui_functional_audit.py`, `tools/inventory_ui_controls.py`. 새 조작은 자신의 Tk/Tcl binding에 한정한다.
+- 명령: `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests` →547개 OK63.119초. `tools/verify_ui_functional_audit.py --output local_data/social-ui-qa-20261020/ui-final-audit-v2.json` →420 PASS. `tools/inventory_ui_controls.py --output docs/UI-CONTROL-INVENTORY.md` →79정적 호출, 실행 coverage는 아님.
+- 실제 GPU 코어 `6f81b9e`와 최종 소스의5모듈 바이트 해시 일치. 4프로필12응답 생성은 완료했으나 사람의 자연스러움 평가는 미완료다.
