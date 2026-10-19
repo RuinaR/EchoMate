@@ -1,5 +1,14 @@
 # 작업 로그
 
+## 2026-10-19 f1c0ec6 후속 — Windows1455 원인·메모리 안전성
+
+- 시작/원격 main f1c0ec6 clean0/0, 기존490 전체 OK61.101초. 기존 성공 소스와 실패 traceback/설치 라이브러리·공식 소스를 비교했다.
+- 변경: `loader_memory.py`, `processes.py`, `inference.py`, `desktop.py`, `verify_loader_memory.py`, `test_loader_memory.py` 및 최신 인수인계/상태/배포·성능/LOADER-MEMORY-QA 문서. Windows system commit과 process private/peak·RAM을 분리, import/processor 후 admission 재검사, 실패 frame 참조·processor/cache 해제, 사전 차단 cleanup에서 Torch 미import 유지, GUI 숫자 안내.
+- Safetensors0.8.0 pread도 선행 전체 COW 매핑. 실제 CPU 합성64/256MiB 각2회·512MiB1회 순간 commit64.13/256.50/513.01MiB; mmap256MiB513.01MiB. import private no-LoRA1432.73MiB vs PEFT 포함1546.89MiB. NF4/전체 모델 피크와 구분했다.
+- 실제 원본22.28GiB / guard24.28GiB / 당시 여유13.37GiB로 차단, GPU 모델 load 시도0회. 기존 +2GiB를 보장값으로 쓰지 않고 유지했다. 사용자 프로그램 종료/page file 변경/모델 변경·삭제/Discord 접속 없음.
+- 테스트: PYTHONPATH=src;tests에서 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`, 최종 **500 OK60.204초**. 새10검사는 counter·admission·재검사·실패 수명·안전 UI를 검증한다. CPU 계측은 `tools/verify_loader_memory.py`, 비공개 `local_data/loader-qa-20261019/`에 원본 보존.
+- 미확인: 새 기본 GPU 로딩·실제 초기화/NF4/해제 피크·독립 청자/캐릭터/전체 E2E/실GPU 공정 큐·Portable 실모델·다른 Windows·실제 Discord. 릴리즈 BLOCKED 유지. 최종 패키지/보존/공개 감사 결과는 마감 절에 이어 기록한다.
+
 ## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
 
 시작 HEAD/원격5249fd2·clean을 확인했다. 공식 기본 Gemma4 12B 하나와 독립 캐릭터를 사용하며 기존 persona/adult 고정 UI·기본 LoRA 의존을 제거한다. 이전 서명 설정은 검증 후 base로 읽고 기존 가중치/자료는 삭제하지 않는다. 성인 유머는 별도 기본OFF 정책이다. 로컬 모델/HF 캐시 탐색·호환성 검사·전환/복구, 프로필 서명 저장·편집·미리보기, GUI 첫 설정/Windows DPAPI와 Portable 런타임을 구현했다. 기존 개인정보 동의/기억/관계/요약/알림/검색/공정 큐/Unicode 반응/원본 reply를 유지한다.

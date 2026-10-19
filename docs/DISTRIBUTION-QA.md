@@ -1,5 +1,17 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## f1c0ec6 후속 — Windows 1455 메모리 감사 (최신)
+
+시작 main/HEAD/원격 `f1c0ec6`, clean·fetch 차이0/0. 기존490검사 OK61.101초, 최종 **500검사 OK60.204초**. 추가10검사는 실제 Windows counter 단위·admission/재검사·실패 traceback 정리·Torch 미import cleanup·안전한 UI 오류 숫자를 검증한다. 기존 사회적 라우팅/공정 큐/동의·DB·UI 전체 모의 회귀를 포함한다.
+
+1455는 PEFT 이전 native Safetensors 열기였다. **pread도 헤더 처리 전 전체 COW 매핑**하는 버전 동작과 일치한다. 실제 Windows 합성64/256MiB 각2회·512MiB1회에서 순간 process commit 증가64.13/256.50/513.01MiB를 확인했다. mmap256MiB는 피크513.01MiB로 더 컸다. no-LoRA import private1432.73MiB, 기존 PEFT import 포함1546.89MiB. LoRA 제거가 base 로딩 메모리를 늘렸다는 증거는 없다. [원인·측정·안전 기준·재현](LOADER-MEMORY-QA.md).
+
+실제 단일 원본22.28GiB / guard24.28GiB / 여유 commit13.37GiB로 **사전 차단**, GPU 모델 로딩 시도0회. +2GiB를 보장된 전체 피크로 인정하지 않고 기존 기준을 유지한 채 import/processor 이후 재검사한다. 로딩 실패 시 frame locals/processor/부분 모델 참조 정리, cleanup의 불필요한 Torch import 방지, 소유자 UI의 안전한 실제 여유/기준 표시를 구현했다.
+
+NF4/실제 모델 초기화 피크, 기본 no-LoRA 최소 추론, 독립 청자20, 캐릭터12, E2E A/B9, 최신 실제 GPU 전환/공정 큐, Portable 실모델·미리보기는 **BLOCKED 또는 NOT VERIFIED**다. 깨끗한 다른 Windows/장시간 운영/실제 Discord도 NOT VERIFIED. 아래 과거 성공 수치를 이번 GPU 검증으로 재사용하지 않는다. 전체 릴리즈 **BLOCKED**를 유지한다.
+
+패키지 최종 소스 일치·격리 실행과 운영 파일 보존의 마감 결과는 본 절 아래에 누적한다. 공개 소스 외 가중치/데이터/로그는 배포 및 Git에서 제외한다.
+
 시작 main/HEAD5249fd2, 원격 main fetch0/0, 초기 clean. 운영 설정/bootstrap/companion/sent 네 파일 hash와 소스 기준선을 비공개 local_data/distribution-qa-20261019에 보존했다. 실제 Discord 로그인·조회·동기화·송신/사용자 데스크톱 마우스·키보드 조작은 하지 않는다.
 
 ## 구현

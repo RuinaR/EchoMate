@@ -1,5 +1,17 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-19 f1c0ec6 후속 — 최우선 최신 기준
+
+시작/원격 main `f1c0ec6` clean·차이0/0. 기존490검사 OK61.101초 → 최종 **500 OK60.204초**. [Windows1455 상세 감사](LOADER-MEMORY-QA.md), [배포 QA](DISTRIBUTION-QA.md), [전체 지연](PERFORMANCE-PIPELINE.md)를 우선 읽는다. 정식 릴리즈 **BLOCKED**.
+
+실패 원인은 PEFT 이전 native safe_open 단계이며, Safetensors0.8.0의 pread도 header 파싱 전 전체 COW 매핑하는 구현을 확인했다. 작은 합성파일의 실제 Windows 순간 commit 피크가 파일 크기에 비례했다. no-LoRA import는 기존 PEFT import보다 약114MiB 작았다. 실제22.28GiB 단일 모델 / 기존24.28GiB admission 기준에 비해 여유13.37GiB로 차단, 이번 GPU 모델 load 시도0회. +2GiB는 전체 피크 보장이 아니므로 기준을 낮추지 않고 import/processor 후 재검사를 추가했다.
+
+실패 frame의 부분 모델 참조·processor 정리, 불필요한 cleanup Torch import 방지, GUI 실제 여유/기준 숫자 표시, bounded Windows commit/RAM 프로파일러를 구현했다. 원래 모델/LoRA·DB·토큰·운영 설정은 보존한다. 사회적 로직과 캐릭터를 이번에 임의 재튜닝하지 않았다. 실제 Discord/사용자 데스크톱 조작 없음.
+
+다음 우선순위: 사용자가 직접 다른 작업을 마쳐 여유를 확보한 뒤 **재검사**. 처음 guard 부족10.90GiB, import까지 고려한 시작 여유 계획값 약25.68GiB이며 전체 성공 보장은 아니다. page file 자동 변경/다른 앱 종료/동일 조건 GPU 재시도 금지. full 성공 후 기존 미사용 청자20 → 캐릭터12 → 모델 전환/복구 → 같은 조건 E2E9/공정 큐 → Portable 실모델/미리보기 순으로 검증한다. NF4/실모델 초기화 피크·새 생성품질·새 p50/p95·다른 Windows는 계속 미검증이다.
+
+검증: PYTHONPATH=src;tests 후 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`. 메모리 도구와 새 output 사용법은 LOADER-MEMORY-QA를 따른다. 비공개 원본은 `local_data/loader-qa-20261019/`, 이전 고정 protocol/seal은 `local_data/distribution-qa-20261019/` 보존. 시작 커밋과 최종 변경은 `git log`로 확인하며 최종 소스 커밋은 마감 절에 기록한다. 아래 이전490/826a816 기준은 과거 기록이다.
+
 ## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
 
 시작 HEAD/원격5249fd2·clean을 확인했다. 공식 기본 Gemma4 12B 하나와 독립 캐릭터를 사용하며 기존 persona/adult 고정 UI·기본 LoRA 의존을 제거한다. 이전 서명 설정은 검증 후 base로 읽고 기존 가중치/자료는 삭제하지 않는다. 성인 유머는 별도 기본OFF 정책이다. 로컬 모델/HF 캐시 탐색·호환성 검사·전환/복구, 프로필 서명 저장·편집·미리보기, GUI 첫 설정/Windows DPAPI와 Portable 런타임을 구현했다. 기존 개인정보 동의/기억/관계/요약/알림/검색/공정 큐/Unicode 반응/원본 reply를 유지한다.

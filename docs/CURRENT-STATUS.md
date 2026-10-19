@@ -1,5 +1,13 @@
 # 현재 상태
 
+## 2026-10-19 f1c0ec6 후속 — 최신 / BLOCKED
+
+시작 main/원격 `f1c0ec6` clean0/0. 기존490 OK61.101초, 최종 **500 OK60.204초**. [Windows1455 감사](LOADER-MEMORY-QA.md)에서 파일 크기 비례 COW 예약을 실제 CPU 프로파일로 확인했다. pread도 전체 매핑을 선행하며 오류는 NF4/PEFT 이전 단계다. no-LoRA import가 PEFT 포함보다 약114MiB 작았다.
+
+단일 모델22.28GiB / 검사 기준24.28GiB / 당시 commit 여유13.37GiB로 사전 중단, GPU 모델 로딩0회. import/processor 후 동일 검사, 실패 참조 해제, 불필요한 Torch import 방지, 앱의 안전한 메모리 수치 안내를 추가했다. +2GiB margin은 전체 피크 검증이 끝난 값이 아니다. 기준을 낮추거나 page file/사용자 프로그램/개인 모델을 변경하지 않았다.
+
+공식 no-LoRA 최소 추론, 독립 청자/캐릭터 생성, 실제 GPU 전환·공정 큐, E2E p50/p95, Portable 실모델·미리보기는 **BLOCKED/NOT VERIFIED**. 다른 Windows·실제 Discord도 미검증이다. 정식 릴리즈 승인 없음. 패키지·보존 마감은 DISTRIBUTION-QA 최신 절을 확인한다.
+
 ## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
 
 시작 HEAD/원격5249fd2·clean을 확인했다. 공식 기본 Gemma4 12B 하나와 독립 캐릭터를 사용하며 기존 persona/adult 고정 UI·기본 LoRA 의존을 제거한다. 이전 서명 설정은 검증 후 base로 읽고 기존 가중치/자료는 삭제하지 않는다. 성인 유머는 별도 기본OFF 정책이다. 로컬 모델/HF 캐시 탐색·호환성 검사·전환/복구, 프로필 서명 저장·편집·미리보기, GUI 첫 설정/Windows DPAPI와 Portable 런타임을 구현했다. 기존 개인정보 동의/기억/관계/요약/알림/검색/공정 큐/Unicode 반응/원본 reply를 유지한다.

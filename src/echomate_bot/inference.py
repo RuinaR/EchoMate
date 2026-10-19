@@ -99,20 +99,39 @@ class LocalBackend:
     def unload(self):
         self.model=None;self.processor=None
         self._choice_cache.clear()
-        import gc,torch
+        self.capabilities_verified=False
+        self.loaded_path=None
+        import gc,sys
         gc.collect()
-        if torch.cuda.is_available():torch.cuda.empty_cache()
+        torch=sys.modules.get('torch')
+        if torch is not None and torch.cuda.is_available():torch.cuda.empty_cache()
 
     def load(self):
         if self.model is not None:return
+        try:self._load_impl()
+        except Exception as exc:
+            # Failed from_pretrained frames can own partially quantized tensors.
+            # Drop those references before cleanup; retain the exception/stack.
+            import traceback
+            traceback.clear_frames(exc.__traceback__)
+            self.unload()
+            raise
+
+    def _load_impl(self):
         started=time.monotonic()
+        observe=getattr(self,'load_observer',lambda phase:None)
+        observe('registry_preflight')
         from .model_registry import ModelRegistry
         entry=ModelRegistry(self.model_roots).resolve(self.model_id);model_path=entry.path
         from .processes import model_memory_budget
         model_memory_budget(entry.bytes)
+        observe('framework_imports')
         os.environ.update(HF_HUB_OFFLINE="1",TRANSFORMERS_OFFLINE="1",HF_HUB_DISABLE_TELEMETRY="1",WANDB_DISABLED="true")
         import torch
         from transformers import AutoModelForMultimodalLM, AutoProcessor, AutoConfig, AutoTokenizer, BitsAndBytesConfig
+        # Imports consume Windows commit too. Recheck at the actual load stage.
+        model_memory_budget(entry.bytes)
+        observe('processor')
         try:self.health()
         except RuntimeError:self.failed=True;raise
         try:
@@ -132,6 +151,8 @@ class LocalBackend:
                 image_processor=Gemma4UnifiedImageProcessor(patch_size=cfg.patch_size,pooling_kernel_size=cfg.pooling_kernel_size,
                     max_soft_tokens=cfg.num_soft_tokens),tokenizer=tok,video_processor=Gemma4UnifiedVideoProcessor(),chat_template=tok.chat_template)
             self.processor_origin="local implementation defaults plus cached vision config; image-only use; official processor equivalence unverified"
+        model_memory_budget(entry.bytes)
+        observe('model_init_weights_nf4')
         model,loading=AutoModelForMultimodalLM.from_pretrained(model_path,local_files_only=True,trust_remote_code=False,output_loading_info=True,
             device_map={"":0},dtype=torch.bfloat16,attn_implementation="sdpa",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type="nf4",
@@ -143,6 +164,7 @@ class LocalBackend:
             from peft import PeftModel
             model=PeftModel.from_pretrained(model,str(self.adapter),is_trainable=False)
         self.model=model.eval();self.loaded_path=model_path;self.load_seconds=time.monotonic()-started
+        observe('loaded')
 
     @staticmethod
     def health():
@@ -436,8 +458,4 @@ class LocalBackend:
     async def close(self):
         await self.scheduler.close()
         await asyncio.to_thread(self.executor.shutdown,wait=True,cancel_futures=True)
-        self.model=None;self.processor=None
-        import gc
-        gc.collect()
-        import torch
-        if torch.cuda.is_available():torch.cuda.empty_cache()
+        self.unload()

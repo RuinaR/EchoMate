@@ -442,8 +442,8 @@ class LocalController:
             if operation in {'settings','scope','guild'}:self.notice='설정 저장 완료'
         except Exception as exc:
             safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요'}
-            from .processes import ResourceLimitError
-            self.error=NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요') if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
+            from .processes import ResourceLimitError,resource_message
+            self.error=resource_message(exc,NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요')) if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
         self._publish()
 
     async def refresh_companion(self,guild,user=None,query='',kind=None):
@@ -499,8 +499,8 @@ class LocalController:
                 task.cancel();await asyncio.gather(task,return_exceptions=True)
         except asyncio.CancelledError:raise
         except Exception as exc:
-            from .processes import ResourceLimitError
-            self.error=NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요') if isinstance(exc,ResourceLimitError) else type(exc).__name__
+            from .processes import ResourceLimitError,resource_message
+            self.error=resource_message(exc,NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요')) if isinstance(exc,ResourceLimitError) else type(exc).__name__
         finally:
             self.starting_model=False
             if self.client:

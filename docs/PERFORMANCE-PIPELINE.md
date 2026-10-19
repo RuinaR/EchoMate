@@ -1,5 +1,13 @@
 # 전체 응답 파이프라인 계측
 
+## 2026-10-19 f1c0ec6 후속 — 로딩 병목과 측정 경계
+
+Windows1455를 native pread의 선행 전체 COW 매핑까지 추적했다. 합성파일64/256MiB 각2회와512MiB1회에서 거의 파일 크기만큼 순간 commit 예약을 확인했다. 50ms system commit 표본과 OS process peak/private·working set을 함께 기록한다. 순간 매핑은 open 반환 후 사라져 current RAM만 보면 놓칠 수 있다. [상세 원인·수치·재현](LOADER-MEMORY-QA.md).
+
+no-LoRA import private1432.73MiB, PEFT import 포함1546.89MiB; 이는 import 비용이며 실제 모델 load peak가 아니다. 실제 모델22.28GiB, 사전 guard24.28GiB에 비해 여유13.37GiB로 GPU 시작 전에 차단했다. 같은 조건의 GPU 재시도는 하지 않았다. +2GiB는 provisional admission margin이며 전체 NF4 피크 보장은 아니다. 같은 guard를 import와 processor 준비 후 재검사한다. 개발용 full profiler는 registry/import/processor/model init·native safe_open/NF4 convert/최소 추론/unload 단계와 이미 초기화된 CUDA allocator를 관찰하도록 준비했지만 후반부는 실행하지 못했다.
+
+**이번 새 기본 모델의 E2E p50/p95, TTFT, tokens/sec, queue 지연, 로딩/전환 시간, VRAM 피크, 취소·재생성률, 실제 GPU 다중 사용자 처리량은 N/A**다. 모델이 준비되지 않아 응답을 생성하지 못한 admission 시간을 정상 응답 지연으로 혼합하지 않는다. 사회적 판정/캐릭터/전체 파이프라인 GPU A/B도 미완료다. 최종500개 단위·모의 회귀 OK60.204초는 정확한 GPU 지연 측정이나 실사용 품질 검증을 대체하지 않는다.
+
 Trace는 실제 Discord on_message에서 넘기는 monotonic 수신 시점부터 모의/실제 전송 완료까지 기록한다. scope_check, member_resolution, conversation_candidates, conversation_wait, social, assessment, memory_lookup, summary, research, action, text, output_check, sending을 분리한다. permissions/catalog/discord_send 하위 span과 전처리 총계는 겹칠 수 있으므로 더해서 E2E를 만들지 않는다. 선택된 작업에만 UI 상세를 표시한다. 생성은 단일 GPU 공정 큐를 공유한다.
 
 각 모델 호출은 queue_seconds(대기), worker_seconds(전처리 포함 실제 worker), preparation/tokenization, 첫 stopping callback(TTFT 근사), 전체 생성 토큰/초, 종료 토큰, RAM/VRAM을 기록한다. 첫 callback은 동기화한 GPU 첫 토큰/Discord 사용자 표시 시간이 아니다. load_seconds/switch_seconds는 모델 단계의 별도 값이다. summarize는 성공 전송 E2E 평균/p50/p90/p95, 모든 결과 건수, queue/TTFT/tokens/sec/RAM/VRAM과 재생성을 구분한다. 모델 초기 로딩과 warm 생성, 침묵과 성공 답변 지연을 혼합하지 않는다. 원문/토큰/비공개 추론은 로그에 쓰지 않는다.
