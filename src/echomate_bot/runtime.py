@@ -591,7 +591,7 @@ class Runtime:
                     _,evidence=self.social.packet(event,self.conversations,self.states,self.transport.bot_id)
                     protected|={candidate.key for candidate,version in evidence}
                 completed=[old for key,old in self.conversations.flows.items()
-                    if key in self.states and key not in protected and old.last_bot]
+                    if key in self.states and key not in protected and (old.last_bot or old.last_action=='REACTION')]
                 own=[old for old in completed if (old.guild,old.channel)==(event.guild,event.channel) and event.author in old.direct_peers]
                 victim=min(own or completed,key=lambda old:old.last_at,default=None)
                 if victim:
@@ -766,7 +766,11 @@ class Runtime:
                 # A fresh explicit caller is guaranteed an answer. One bounded
                 # semantic pass may link a real reference, never a bare call.
                 self.stage(event,'social',time.time())
-                try:proposed=await self.backend.assess_social(packet)
+                try:
+                    if known_peer and hasattr(self.backend,'link_direct'):
+                        linked=await self.backend.link_direct(packet)
+                        proposed=SocialDecision('bot','continue',linked,'request',True) if linked!='none' else None
+                    else:proposed=await self.backend.assess_social(packet)
                 except ValueError:
                     self.note('social_link_unavailable_independent');proposed=None
                 if proposed and proposed.target in ('bot','bot_group') and proposed.relation in ('continue','join') and proposed.anchor!='none':
@@ -1252,6 +1256,11 @@ class Runtime:
                         flow=self.conversations.flows.get(self.key(event))
                         if flow:self.conversations.bot(flow,sent);flow.last_at=self.activity_clock()
                     if sent or action.kind==Kind.REACTION:
+                        # A successful reaction is a completed action without
+                        # a Discord bot message ID. Keep that fact separate so
+                        # completed RAM history is reclaimable without forging
+                        # a message/reply or retiring an unsettled request.
+                        if flow:flow.last_action=action.kind.value
                         state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(sent) if sent else 'reaction:'+str(event.id),str(self.transport.bot_id),bot_content,
                             datetime.now(timezone.utc),is_bot=True,reply_to=str(event.response_to or event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
                     active_trace.get().outcome="sent"

@@ -23,7 +23,7 @@ class Counting(Borrowed):
     def __init__(self,backend):super().__init__(backend);self.semantic_calls=0;self.packet_hashes=[]
     def __getattr__(self,key):
         value=super().__getattr__(key)
-        if key not in ('assess_social','assess_dialogue','assess_turn','classify','verify_target','continuity'):return value
+        if key not in ('assess_social','link_direct','assess_dialogue','assess_turn','classify','verify_target','continuity'):return value
         async def measured(*args,**kwargs):
             self.semantic_calls+=1
             if key=='assess_social':self.packet_hashes.append(hashlib.sha256(json.dumps(args[0],ensure_ascii=False,sort_keys=True).encode()).hexdigest())

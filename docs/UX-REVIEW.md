@@ -4,6 +4,9 @@
 
 - [LM Studio 시작 안내](https://lmstudio.ai/docs/app/basics), [메모리의 모델 관리](https://lmstudio.ai/docs/python/manage-models/loading): 설치된 모델과 메모리에 로딩된 모델을 구분한다. EchoMate도 파일 검사·설정 선택·GPU 준비를 서로 다른 상태로 표현한다.
 - [Open WebUI 설정 구분](https://docs.openwebui.com/getting-started/quick-start/settings/), [모델 Workspace](https://docs.openwebui.com/features/workspace/models/): 관리자 정책과 개인 표현 설정을 구분한다. EchoMate의 모델/캐릭터/권한 분리를 유지한다. 개인 설정이 필수 안전·동의 정책을 덮어쓰도록 바꾸지 않는다.
+- [Windows 진행 상태 지침](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/progress-controls): 완료량을 모르면 진행 중과 실제 단계를 표시하고 허구의 백분율을 만들지 않는다. EchoMate도 큐 대기·생성·전송을 별도로 유지한다. 새 progress 위젯을 구현했다는 의미는 아니다.
+- [Discord 통합 관리](https://support.discord.com/hc/en-us/articles/360045093012-Server-Integrations-Page): 설치된 앱과 요청한 권한을 구분해 안내한다. EchoMate의 활동 허용 목록과 Discord 권한을 같은 설정으로 오해하지 않도록 검토했다. 실제 서버를 조회하지 않았다.
+- [Microsoft To Do 알림 설정](https://support.microsoft.com/en-us/todo/add-due-dates-and-reminders-in-microsoft-to-do): 일정 날짜와 알림 시점을 구별한다. EchoMate는 표시 시간대·예약 상태·실패/만료를 구분하며, 새로운 일정 관리 기능을 추가하지 않았다.
 
 이번 채택: AI 모델 상세에서 실제 largest_shard_bytes와 총 bytes를 비교해 분할 가중치를 표시하고 단위를 GiB로 정정했다. 파일 검사를 통과해도 GPU 준비는 적용 시 별도 확인한다고 명시한다. 모델별 미측정 메모리 수치를 일괄 보장하지 않는다.
 

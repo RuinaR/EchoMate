@@ -30,6 +30,7 @@ class Conversation:
     addressee:str='uncertain'
     status:str='candidate'
     candidate_keys:tuple=()
+    last_action:str|None=None
 
 class Conversations:
     def __init__(self):self.flows={};self.message_flow={}

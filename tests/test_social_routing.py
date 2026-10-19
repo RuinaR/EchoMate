@@ -80,6 +80,19 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(self.transport.sent[-1][0].conversation_id,first.conversation_id)
         self.backend.assess_social.assert_awaited_once()
 
+    async def test_confirmed_call_relation_classifier_cannot_revote_audience(self):
+        first=await self.start();self.backend.link_direct=AsyncMock(return_value='none')
+        await self.runtime.ingest(self.event(id=111,content='다온아 실내 조명의 색부터 정하자'));await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],[10,111])
+        self.assertNotEqual(self.transport.sent[-1][0].conversation_id,first.conversation_id)
+        self.backend.link_direct.assert_awaited_once();self.backend.assess_social.assert_not_awaited()
+
+    async def test_relation_classifier_can_link_reference_without_word_overlap(self):
+        first=await self.start();self.backend.link_direct=AsyncMock(return_value='0')
+        await self.runtime.ingest(self.event(id=112,content='다온아 그 말은 누구에게 한 거야'));await self.settle()
+        self.assertEqual(self.transport.sent[-1][0].conversation_id,first.conversation_id)
+        self.backend.link_direct.assert_awaited_once();self.backend.assess_social.assert_not_awaited()
+
     async def test_confirmed_peer_followup_is_semantic_and_has_original_reply(self):
         first=await self.start()
         for i,text in enumerate(('뭐하고있었어','그 이야기는 결말이 의외네','그건 왜 그렇게 된 건데')):
@@ -275,6 +288,24 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([e.id for e,_ in self.transport.sent],list(range(1000,1040)))
         self.assertLessEqual(len(self.runtime.states),32)
         self.assertTrue(any(d['code']=='conversation_history_evicted' for d in self.runtime.diagnostics))
+        self.assertFalse(any(d['code']=='conversation_capacity_veto' for d in self.runtime.diagnostics))
+
+    async def test_completed_reactions_cannot_fill_history_and_erase_direct_requests(self):
+        self.configure();self.runtime.direct_spam_window=0
+        self.backend.fast_text_path=False;self.backend.action='REACTION'
+        self.settings.set(1,'reactions',True)
+        for i in range(32):
+            await self.runtime.ingest(self.event(id=2000+i,content=f'<@999> 이 메시지에 👍 반응 달아줘 점검 {i}'))
+            await self.settle()
+        self.assertEqual(len(self.transport.sent),32)
+        self.assertTrue(all(f.last_bot is None and f.last_action=='REACTION' for f in self.runtime.conversations.flows.values()))
+        held=next(iter(self.runtime.states));original=self.transport.sent[0][0]
+        self.runtime.deferred_events[held]=(original,original.content)
+        self.backend.fast_text_path=True;self.backend.action='TEXT'
+        await self.runtime.ingest(self.event(id=2100,content='<@999> 별개 새 질문을 짧게 설명해 줘'));await self.settle()
+        self.assertEqual(self.transport.sent[-1][0].id,2100)
+        self.assertIn(held,self.runtime.states)
+        self.assertLessEqual(len(self.runtime.states),32)
         self.assertFalse(any(d['code']=='conversation_capacity_veto' for d in self.runtime.diagnostics))
 
     async def test_history_reclamation_preserves_deferred_request_and_semantic_gate(self):
