@@ -279,24 +279,9 @@ class DesktopApp(CompanionViews):
     def edit_name(self):
         if not self.guild_id or not self.snapshot:return
         gid=self.guild_id
-        dialog=tk.Toplevel(self.root);dialog.title('이 서버의 봇 이름');dialog.configure(bg=PANEL)
-        dialog.geometry('430x235');dialog.resizable(False,False);dialog.transient(self.root);dialog.grab_set()
-        canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
-        canvas.create_text(24,20,text='이 서버에서 어떤 이름을 쓸까요?',anchor='nw',fill=FG,font=('맑은 고딕',13,'bold'))
-        value=tk.StringVar(value=guild_name(self.snapshot['cfg'],gid))
-        entry=tk.Entry(dialog,textvariable=value,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',12))
-        entry.place(x=24,y=61,width=380,height=36);entry.focus_set();entry.select_range(0,'end')
-        hint=canvas.create_text(24,110,text='예: 별빛봇 → “별빛아”라고 불러도 문맥을 보고 답해요.\nDiscord에서 이름 변경 권한이 필요할 수 있어요.',anchor='nw',fill=MUTED,font=('맑은 고딕',9))
-        def save():
-            try:name=validate_name(value.get().strip())
-            except ValueError:
-                canvas.itemconfigure(hint,text='이름은 2~32자로, 줄바꿈·멘션·특수 제어문자 없이 입력해 주세요.');return
-            self.controller.submit('name',guild=gid,name=name);dialog.destroy()
-        rounded(canvas,222,178,86,34,CARD,8);rounded(canvas,318,178,86,34,ACCENT,8)
-        canvas.create_text(265,195,text='취소',fill=FG,font=('맑은 고딕',10))
-        canvas.create_text(361,195,text='저장',fill=BG,font=('맑은 고딕',10,'bold'))
-        canvas.bind('<Button-1>',lambda e:save() if 318<=e.x<=404 and 178<=e.y<=212 else dialog.destroy() if 222<=e.x<=308 and 178<=e.y<=212 else None)
-        dialog.bind('<Return>',lambda e:save());dialog.bind('<Escape>',lambda e:dialog.destroy())
+        self.form('이 서버의 봇 이름',[('name','이 서버에서 사용할 이름 · 2~32자',guild_name(self.snapshot['cfg'],gid))],
+            lambda values:self.controller.submit('name',guild=gid,name=validate_name(values['name'])),
+            '호격·접미사를 줄인 호출도 문맥을 확인해요. 실제 Discord 이름 변경에는 권한이 필요할 수 있어요.',guard_context=True)
     def render(self):
         self.canvas.delete('all');self.hits=[];w=max(1040,self.canvas.winfo_width());h=max(740,self.canvas.winfo_height())
         self.canvas.create_rectangle(0,0,196,h,fill='#0e1521',outline='')
@@ -473,12 +458,26 @@ class DesktopApp(CompanionViews):
     def profile_library(self):
         self.controller.submit('profiles')
         from .character_profiles import DEFAULT_PROFILE
-        dialog=tk.Toplevel(self.root);dialog.title('저장한 캐릭터');dialog.configure(bg=PANEL);dialog.geometry('540x440');dialog.transient(self.root)
+        dialog=tk.Toplevel(self.root);dialog.title('저장한 캐릭터');dialog.configure(bg=PANEL);dialog.geometry('540x490');dialog.transient(self.root)
         canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
         canvas.create_text(24,22,text='프로필을 고르고 적용하세요',anchor='nw',fill=FG,font=('맑은 고딕',13,'bold'))
         selected=['default'];listing=SelectionList(canvas,lambda ids:selected.__setitem__(0,next(iter(ids),'default')))
         listing.place(x=24,y=64,width=490,height=280)
-        timer=[None];deleted_label=[None]
+        timer=[None];deleted_label=[None];pending=[None];completion_timer=[None]
+        message=canvas.create_text(24,415,text='',anchor='nw',fill=MUTED,font=('맑은 고딕',9),width=490)
+        def complete():
+            from asyncio import CancelledError
+            completion_timer[0]=None
+            if not pending[0].done():completion_timer[0]=dialog.after(60,complete);return
+            try:
+                result=pending[0].result();ok=result.get('ok',False) if isinstance(result,dict) else result is not False
+                error=result.get('error','') if isinstance(result,dict) else ''
+            except (Exception,CancelledError) as exc:ok=False;error=type(exc).__name__
+            pending[0]=None
+            if ok:dialog.destroy()
+            else:canvas.itemconfigure(message,text='적용하지 못했어요 · '+(error or '저장소를 확인한 뒤 다시 시도해 주세요'))
+        def close():
+            if pending[0] is None:dialog.destroy()
         def refresh():
             values=(self.snapshot or {}).get('profiles',{}) or {'default':DEFAULT_PROFILE}
             listing.set_items([dict(id=k,label=v['name'],hint=v['introduction']) for k,v in values.items()])
@@ -490,15 +489,26 @@ class DesktopApp(CompanionViews):
             rounded(canvas,x,365,145,36,CARD,8);item=canvas.create_text(x+72,383,text=label,fill=FG,font=('맑은 고딕',10))
             if label=='삭제':deleted_label[0]=item
         def click(e):
+            if pending[0] is not None:return
             if not 365<=e.y<=401:return
             action='apply' if 24<=e.x<=169 else 'delete' if 185<=e.x<=330 else 'restore' if 346<=e.x<=491 else None
             if action=='delete' and selected[0]=='default':return
-            if action:self.controller.submit('profiles',action=action,key=selected[0]);dialog.destroy()
+            if action:
+                future=self.controller.submit('profiles',action=action,key=selected[0])
+                from concurrent.futures import Future
+                from asyncio import Future as AsyncFuture
+                if isinstance(future,(Future,AsyncFuture)):
+                    pending[0]=future;canvas.itemconfigure(message,text='적용 결과를 확인하고 있어요 · 잠시 기다려 주세요')
+                    completion_timer[0]=dialog.after_idle(complete)
+                else:dialog.destroy()
         def closed(event):
-            if event.widget is dialog and timer[0]:
-                try:dialog.after_cancel(timer[0])
-                except tk.TclError:pass
-        canvas.bind('<Button-1>',click);dialog.bind('<Escape>',lambda e:dialog.destroy());dialog.bind('<Destroy>',closed)
+            if event.widget is dialog:
+                for job in (timer[0],completion_timer[0]):
+                    if job:
+                        try:dialog.after_cancel(job)
+                        except tk.TclError:pass
+        dialog.protocol('WM_DELETE_WINDOW',close)
+        canvas.bind('<Button-1>',click);dialog.bind('<Escape>',lambda e:close());dialog.bind('<Destroy>',closed)
         refresh()
 
     def advanced_profile(self):

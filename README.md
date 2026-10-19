@@ -4,6 +4,8 @@
 
 EchoMate 소스는 [MIT](LICENSE) 라이선스입니다. 모델·번들 의존성은 [각 라이선스](docs/THIRD-PARTY-NOTICES.md)를 따릅니다.
 
+최신 [사회적 판단 정밀 QA](docs/PRECISION-SOCIAL-QA.md)와 [UI 동작 QA](docs/UI-ACTION-QA.md)에서도 정식 릴리즈는 **BLOCKED**입니다. 운영 자료를 건드리지 않고 창과 설정을 직접 확인하려면 `EchoMate-Check.vbs`를 사용하세요. 가상 정보와 별도 저장소로 실행하며 실제 Discord 연결을 차단합니다. [10~15분 사용자 확인](docs/USER-MANUAL-QA.md)은 아직 사용자가 완료한 결과가 아닙니다.
+
 **현재는 검증 후보입니다.** 기본 모델의 실제 GPU 로딩·모델 전환·Portable 로컬 미리보기는 확인했습니다. 사회적 청자 평가에 오개입·후속 대화 누락이 남아 있으며, 20분 모의 운용을 완료했지만 깨끗한 다른 Windows 설치와 장시간 실사용은 미검증입니다. 일반 배포 릴리즈 PASS가 아닙니다. [배포 QA](docs/DISTRIBUTION-QA.md)를 확인하세요.
 
 최신 안정화에서는 완료된 대화 기록이 32개에 이르면 새 직접 질문이 차단되는 문제를 수정했습니다. 원본 가중치를 보존한 공식 shard 복사본에서 로딩 commit 피크 31.35→13.01GiB도 확인했습니다. 사회적 청자 품질 차단은 남아 있습니다. 실행 결과와 검증 범위는 [최종 안정화 QA](docs/STABILIZATION-QA.md)를 따르세요.

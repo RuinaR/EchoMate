@@ -45,10 +45,15 @@ class CompanionViews:
             ('status','처리 · 확정 / 후보 / 삭제','확정')],save,
             '이 채널에서만 사용해요. 후보는 반복되어도 자동 확정하지 않아요. 같은 호칭을 가진 사람이 여럿이면 보류해요. 기억·알림 대상 권한은 바뀌지 않아요.')
 
-    def form(self,title,fields,submit,help_text='',read_only=False):
+    def form(self,title,fields,submit,help_text='',read_only=False,guard_context=False):
         from .desktop_ui import PANEL,CARD,FG,MUTED,ACCENT,BG,rounded
         from tkinter import font as tkfont
         dialog=tk.Toplevel(self.root);dialog.title(title);dialog.configure(bg=PANEL);dialog.transient(self.root)
+        # A modal can outlive an async refresh or a programmatic selection
+        # change. Never redirect an old edit/delete to the newly selected user.
+        def context():
+            return (self.guild_id,self.page,self.record_user,self.record_key,self.record_search,self.record_kind)
+        original_context=context() if not read_only and (self.page in PAGES or guard_context) else None
         width=580;dialog.resizable(False,False);dialog.grab_set()
         canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
         fonts=[tkfont.Font(dialog,family='맑은 고딕',size=14,weight='bold'),tkfont.Font(dialog,family='맑은 고딕',size=9),tkfont.Font(dialog,family='맑은 고딕',size=10)]
@@ -74,15 +79,58 @@ class CompanionViews:
         hint_box=canvas.bbox(hint);footer=(hint_box[3] if hint_box else y+8+fonts[1].metrics('linespace'))+18
         height=footer+55;viewport=min(height,max(320,self.root.winfo_screenheight()-140))
         dialog.geometry(f'{width}x{viewport}');canvas.configure(scrollregion=(0,0,width,height))
+        pending=[None];completion_timer=[None]
+        dialog._pending_save=False
+        def finish():
+            from asyncio import CancelledError
+            from concurrent.futures import CancelledError as FutureCancelledError
+            completion_timer[0]=None
+            if not dialog.winfo_exists():return
+            if not pending[0].done():completion_timer[0]=dialog.after(60,finish);return
+            try:
+                result=pending[0].result()
+                ok=result.get('ok',False) if isinstance(result,dict) else result is not False
+                message=result.get('error','') if isinstance(result,dict) else ''
+            except (CancelledError,FutureCancelledError):ok=False;message='작업이 취소됐어요'
+            except Exception as exc:ok=False;message='처리 결과를 확인하지 못했어요 · '+type(exc).__name__
+            pending[0]=None;dialog._pending_save=False
+            if ok:dialog.destroy();return
+            for entry in entries:entry.configure(state='normal')
+            update_hint('적용하지 못했어요 · '+(message or '설정과 저장소 상태를 확인해 주세요')+'\n입력은 유지했어요. 수정한 뒤 다시 적용하거나 닫아 주세요.')
+        def close():
+            if not dialog._pending_save:dialog.destroy()
         def save():
             if read_only:dialog.destroy();return
-            try:submit({k:v.get().strip() for k,v in values.items()})
-            except (ValueError,KeyError):canvas.itemconfigure(hint,text='입력 형식과 선택값을 다시 확인해 주세요.');return
+            if dialog._pending_save:return
+            if original_context is not None and context()!=original_context:
+                update_hint('선택한 서버·사람·기록이 바뀌었어요. 이 창을 닫고 다시 열어 주세요.');return
+            before=getattr(self.controller,'last_submission',None)
+            try:result=submit({k:v.get().strip() for k,v in values.items()})
+            except (ValueError,KeyError):update_hint('입력 형식과 선택값을 다시 확인해 주세요.');return
+            from concurrent.futures import Future
+            from asyncio import Future as AsyncFuture
+            after=getattr(self.controller,'last_submission',None)
+            future=result if isinstance(result,(Future,AsyncFuture)) else after if after is not before and isinstance(after,(Future,AsyncFuture)) else None
+            if future is not None:
+                pending[0]=future;dialog._pending_save=True
+                for entry in entries:entry.configure(state='disabled')
+                update_hint('적용 결과를 확인하고 있어요 · 중복 적용을 막기 위해 잠시 기다려 주세요.')
+                completion_timer[0]=dialog.after_idle(finish);return
             dialog.destroy()
+        before_footer=set(canvas.find_all())
         if not read_only:
             rounded(canvas,352,footer,92,30,CARD,8);canvas.create_text(398,footer+15,text='닫기',fill=FG,font=fonts[2])
         rounded(canvas,456,footer,100,30,ACCENT,8)
         canvas.create_text(506,footer+15,text='닫기' if read_only else '적용',fill=BG,font=fonts[2])
+        footer_items=set(canvas.find_all())-before_footer
+        def update_hint(text):
+            nonlocal footer,height,viewport
+            canvas.itemconfigure(hint,text=text)
+            next_footer=canvas.bbox(hint)[3]+18;delta=next_footer-footer
+            for item in footer_items:canvas.move(item,0,delta)
+            footer=next_footer;height=footer+55
+            viewport=min(height,max(320,self.root.winfo_screenheight()-140))
+            dialog.geometry(f'{width}x{viewport}');canvas.configure(scrollregion=(0,0,width,height));thumb()
         dragging=[False]
         def thumb():
             canvas.delete('scroll_thumb');visible=max(1,canvas.winfo_height())
@@ -94,14 +142,19 @@ class CompanionViews:
             dragging[0]=event.x>=565
             if dragging[0]:canvas.yview_moveto(event.y/max(1,canvas.winfo_height()));thumb();return
             if footer<=canvas.canvasy(event.y)<=footer+30:
-                if 352<=event.x<=444 and not read_only:dialog.destroy()
+                if 352<=event.x<=444 and not read_only:close()
                 elif 456<=event.x<=556:save()
         def drag(event):
             if dragging[0]:canvas.yview_moveto(event.y/max(1,canvas.winfo_height()));thumb()
         def closed(event):
-            if event.widget is dialog:values.clear();entries.clear();dialog._form_fonts.clear()
+            if event.widget is dialog:
+                if completion_timer[0]:
+                    try:dialog.after_cancel(completion_timer[0])
+                    except tk.TclError:pass
+                values.clear();entries.clear();dialog._form_fonts.clear()
         canvas.bind('<Button-1>',click);canvas.bind('<B1-Motion>',drag);canvas.bind('<Configure>',lambda e:thumb())
-        dialog.bind('<MouseWheel>',scroll);dialog.bind('<Escape>',lambda e:dialog.destroy());dialog.bind('<Control-Return>',lambda e:save());dialog.bind('<Destroy>',closed)
+        dialog.protocol('WM_DELETE_WINDOW',close)
+        dialog.bind('<MouseWheel>',scroll);dialog.bind('<Escape>',lambda e:close());dialog.bind('<Control-Return>',lambda e:save());dialog.bind('<Destroy>',closed)
         if entries:entries[0].focus_set();entries[0].select_range(0,'end')
         return dialog
 
@@ -115,7 +168,7 @@ class CompanionViews:
             ('aliases','추가 별명 · 쉼표로 구분 (최대 8개)',','.join(g.get('aliases',[]))),
             ('timezone','서버 시간대',g.get('timezone','Asia/Seoul')),
             ('partial_names','접미사를 줄인 호출 · 켜기 / 끄기','켜기' if g.get('partial_names',True) else '끄기')],save,
-            '별명도 문맥을 보고 판단해요. 한국은 Asia/Seoul, 세계 표준시는 UTC예요.')
+            '별명도 문맥을 보고 판단해요. 한국은 Asia/Seoul, 세계 표준시는 UTC예요.',guard_context=True)
 
     def edit_record(self,add=False):
         if not add and self.record_key and self.record_key.startswith('digest:'):self.show_digest();return
@@ -284,7 +337,10 @@ class CompanionViews:
     def remove_record(self):
         if self.record_key and self.record_key.startswith('digest:'):
             key=self.record_key.removeprefix('digest:')
-            self.form('대화 요약 삭제',[('confirm','삭제 라고 입력','')],lambda v:self.record_action('summary_delete',key=key) if v['confirm']=='삭제' else None,'이 요약과 출처 연결을 지워요. 대기 중 자동 요약이 같은 출처로 복원하지 못하게 막아요.');return
+            def remove(values):
+                if values['confirm']!='삭제':raise ValueError()
+                self.record_action('summary_delete',key=key)
+            self.form('대화 요약 삭제',[('confirm','삭제 라고 입력','')],remove,'이 요약과 출처 연결을 지워요. 대기 중 자동 요약이 같은 출처로 복원하지 못하게 막아요.');return
         data=(self.snapshot or {}).get('companion',{});table='memories' if self.page=='memories' else 'reminders'
         row=next((r for r in data.get(table,[]) if r.get('memory_id',r.get('reminder_id'))==self.record_key),None)
         if not row:return

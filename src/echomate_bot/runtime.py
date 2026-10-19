@@ -750,7 +750,7 @@ class Runtime:
         group_call=bool(direct and actual_others)
         if roles and roles.addressee not in (None,self.transport.bot_id) and not roles.ambiguous and not direct:
             decision=SocialDecision('human','shift','none','other',False)
-        elif direct and not group_call:
+        elif direct and (not group_call or hasattr(self.backend,'link_direct')):
             anchor=next((str(i) for i,(f,v) in enumerate(frames) if f.conversation_id==flow.conversation_id), 'none')
             decision=SocialDecision('bot','continue' if anchor!='none' else 'new',anchor,'request',True)
             from .sessions import INDEPENDENT
@@ -760,14 +760,21 @@ class Runtime:
             name_terms=set().union(*(terms(n) for n in bot_names))
             source_terms=lambda text:terms(MENTION.sub('',text))-name_terms
             query_terms=source_terms(event.content)
-            related_source=any(query_terms&source_terms(f.topic) for f,v in frames)
+            # References can point at the bot's actual answer, not only the
+            # first user's topic. Source overlap grants a candidate, never a
+            # listener or conversation membership.
+            references=[str(i) for i,(f,v) in enumerate(frames) if event.author in f.direct_peers or
+                query_terms & set().union(source_terms(f.topic),*(source_terms(t['text']) for t in packet['frames'][i]['turns'])) or
+                group_call and actual_others & f.participants]
+            packet['direct_reference_frames']=references
+            related_source=bool(references)
             known_peer=any(event.author in f.direct_peers for f,v in frames)
             if not bot_reply and not flow.last_bot and (known_peer or related_source) and (known_peer or len(event.content.split())>1) and not INDEPENDENT.search(event.content):
                 # A fresh explicit caller is guaranteed an answer. One bounded
                 # semantic pass may link a real reference, never a bare call.
                 self.stage(event,'social',time.time())
                 try:
-                    if known_peer and hasattr(self.backend,'link_direct'):
+                    if hasattr(self.backend,'link_direct'):
                         linked=await self.backend.link_direct(packet)
                         proposed=SocialDecision('bot','continue',linked,'request',True) if linked!='none' else None
                     else:proposed=await self.backend.assess_social(packet)
@@ -778,7 +785,7 @@ class Runtime:
                     # A fresh caller can always get a separate answer. Merging
                     # a guessed reference additionally needs source relevance;
                     # a miss here never suppresses the explicit request.
-                    if index<len(frames) and (event.author in frames[index][0].direct_peers or query_terms&source_terms(frames[index][0].topic)):
+                    if index<len(frames) and str(index) in references:
                         decision=SocialDecision('bot','continue' if event.author in frames[index][0].direct_peers else 'join',proposed.anchor,proposed.act,True)
             self.note('social_metadata_direct')
         else:
@@ -797,6 +804,9 @@ class Runtime:
                 self.note('social_group_link_unavailable_independent')
         anchor,reason=validate_social(decision,event,frames,bot_id=self.transport.bot_id,direct=direct,bot_reply=bot_reply,pending_human=bool(packet['pending_human_exchange']),allow_reaction=packet['reaction_available'])
         observed=dict(speaker=str(event.author),target=decision.target,relation=decision.relation,act=decision.act,
+            response_expected=decision.respond,decision_plan=decision.plan or ('metadata_direct' if direct and not group_call else 'composite'),
+            candidate_count=len(frames),peer_candidate_count=len(packet['current_peer_frames']),context_omitted=decision.context_omitted,
+            pending_human_exchange=bool(packet['pending_human_exchange']),
             explicit_call=direct,reply_attached=event.reply_to is not None,
             mentioned_subjects=list(map(str,event.member_mentions)),eligibility='silence',evidence=reason,
             confirmed_participants=len(flow.participants),current_peers=list(map(str,sorted(flow.direct_peers))))

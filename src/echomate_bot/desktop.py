@@ -168,7 +168,13 @@ class LocalController:
             self._published_at=time.monotonic()
 
     def submit(self,operation,**kwargs):
-        if self.loop:asyncio.run_coroutine_threadsafe(self.command(operation,**kwargs),self.loop)
+        if self.loop and not self.loop.is_closed() and not self.closed.is_set():
+            future=asyncio.run_coroutine_threadsafe(self.command(operation,**kwargs),self.loop)
+        else:
+            from concurrent.futures import Future
+            future=Future();future.set_result(dict(ok=False,error='앱이 아직 준비되지 않았거나 종료 중이에요. 잠시 뒤 다시 시도해 주세요.'))
+        self.last_submission=future
+        return future
 
     def known_guild(self,gid):
         return gid in self.bootstrap['admin_guilds'] or gid in getattr(self,'record_guilds',[]) or any(g['id']==gid for g in getattr(self,'inventory',[])) or bool(self.client and self.client.is_ready() and self.client.get_guild(gid))
@@ -220,6 +226,7 @@ class LocalController:
         return await self._command(operation,**kwargs)
 
     async def _command(self,operation,**kwargs):
+        success=True
         try:
             if operation=='shutdown':
                 try:await self._cancel_preview()
@@ -238,7 +245,7 @@ class LocalController:
                 self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'],ROOT/'settings.json')
                 from .companion_store import CompanionStore
                 self.companion=CompanionStore(ROOT/'companion.sqlite3');self.companion_view={};self.record_guilds=[]
-                self.phase='등록 완료 · AI 모델과 허용 채널을 선택해 주세요';return
+                self.phase='등록 완료 · AI 모델과 허용 채널을 선택해 주세요';self._publish();return dict(ok=True,error='')
             if not self.settings:raise ValueError('Setup required')
             owner=self.bootstrap['owner_id'];self.settings.authorize(owner)
             self.error=''
@@ -315,7 +322,7 @@ class LocalController:
             elif operation=='refresh':await self.refresh_inventory()
             elif operation=='start':
                 self.settings.set(owner,'enabled',True)
-                if self.job and not self.job.done():return
+                if self.job and not self.job.done():return dict(ok=True,error='')
                 self.job=asyncio.create_task(self._run_bot())
             elif operation=='stop':
                 self.settings.set(owner,'enabled',False)
@@ -493,12 +500,15 @@ class LocalController:
             else:raise ValueError('Unknown operation')
             if operation in {'settings','scope','guild'}:self.notice='설정 저장 완료'
         except Exception as exc:
+            success=False
             safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요','미리보기 정리에 실패했어요. 앱을 닫고 다시 열어 주세요.'}
             from .processes import ResourceLimitError,resource_message
             self.error=resource_message(exc,NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요')) if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
             self.last_management_error=dict(operation=operation,kind=type(exc).__name__,message=self.error,at=time.time())
             if operation=='preview':self.preview_rejection=dict(session=kwargs.get('session'),error=self.error)
+        result=dict(ok=success,error='' if success else self.error)
         self._publish()
+        return result
 
     async def refresh_companion(self,guild,user=None,query='',kind=None):
         self.companion_request=getattr(self,'companion_request',0)+1;request=self.companion_request

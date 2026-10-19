@@ -20,14 +20,25 @@ from echomate_studio.dialogue_state import DialogueState,Turn
 from verify_parallel_gpu import Borrowed,Transport,settle
 
 class Counting(Borrowed):
-    def __init__(self,backend):super().__init__(backend);self.semantic_calls=0;self.packet_hashes=[]
+    def __init__(self,backend):super().__init__(backend);self.semantic_calls=0;self.packet_hashes=[];self.assessments=[]
     def __getattr__(self,key):
         value=super().__getattr__(key)
         if key not in ('assess_social','link_direct','assess_dialogue','assess_turn','classify','verify_target','continuity'):return value
         async def measured(*args,**kwargs):
             self.semantic_calls+=1
             if key=='assess_social':self.packet_hashes.append(hashlib.sha256(json.dumps(args[0],ensure_ascii=False,sort_keys=True).encode()).hexdigest())
-            return await value(*args,**kwargs)
+            observation=None
+            if key in ('assess_social','link_direct'):
+                from copy import deepcopy
+                observation=dict(method=key,packet=deepcopy(args[0]));self.assessments.append(observation)
+            try:result=await value(*args,**kwargs)
+            except Exception as exc:
+                if observation is not None:observation['error']=type(exc).__name__
+                raise
+            if observation is not None:
+                from dataclasses import asdict,is_dataclass
+                observation['decision']=asdict(result) if is_dataclass(result) else result
+            return result
         return measured
 
 class ClassificationOnly(Counting):
@@ -104,7 +115,7 @@ async def run(args):
                         await runtime.ingest(Event(150+n,2,3,item['author'],item['text'],now-timedelta(seconds=len(case.get('before',[]))-n),
                             reply_to=item.get('reply'),reply_author=item.get('reply_author'),member_mentions=tuple(item.get('mentions',()))))
                         await settle(runtime,backend)
-                    item=case['event'];metrics_start=len(backend.metrics);semantic_start=serving.semantic_calls;packet_start=len(serving.packet_hashes);started=time.monotonic()
+                    item=case['event'];metrics_start=len(backend.metrics);semantic_start=serving.semantic_calls;packet_start=len(serving.packet_hashes);assessment_start=len(serving.assessments);started=time.monotonic()
                     await runtime.ingest(Event(200,2,3,item.get('author',4),item['text'],datetime.now(timezone.utc),reply_to=item.get('reply'),
                         reply_author=item.get('reply_author'),member_mentions=tuple(item.get('mentions',()))))
                     await settle(runtime,backend)
@@ -117,6 +128,7 @@ async def run(args):
                     row=dict(case=case['id'],category=case['category'],phase=case.get('phase','original'),mode=mode,generated=generated,expected=case['respond'],responded=bool(sent),
                         passed=(bool(sent)==case['respond'] and flow_ok and kind_ok and state_ok and len(sent)<=1),flow_ok=flow_ok,kind_ok=kind_ok,state_ok=state_ok,seconds=time.monotonic()-started,
                         semantic_calls=serving.semantic_calls-semantic_start,packet_hashes=serving.packet_hashes[packet_start:],
+                        assessments=serving.assessments[assessment_start:],
                         physical_calls=len(backend.metrics[metrics_start:]),traces=runtime.traces,metrics=backend.metrics[metrics_start:],sent=transport.sent)
                     rows.append(row);atomic_private_json(root/'results-private.json',rows)
                     total=sum(mode in c.get('only_modes',args.modes.split(',')) for mode in args.modes.split(',') for c in protocol['cases'])

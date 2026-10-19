@@ -52,6 +52,7 @@ env("TRANSFORMERS_OFFLINE")="1"
 sh.Run Chr(34) & fs.BuildPath(home,"runtime\\pythonw.exe") & Chr(34) & " -m echomate_bot.desktop", 0, False
 '''
     (dest/'EchoMate.vbs').write_text(launcher,encoding='ascii')
+    shutil.copy2(root/'EchoMate-Check.vbs',dest/'EchoMate-Check.vbs')
     manifest_for(dest)
 
 def file_sha256(path):
@@ -81,6 +82,7 @@ def refresh(destination):
         text=text.replace('sh.CurrentDirectory=home','If Not fs.FileExists(fs.BuildPath(home,"runtime\\pythonw.exe")) Then WScript.Quit 1\nIf WScript.Arguments.Named.Exists("check") Then WScript.Quit 0\nsh.CurrentDirectory=home')
         launcher.write_text(text,encoding='ascii')
     if (root/'LICENSE').exists():shutil.copy2(root/'LICENSE',dest/'LICENSE')
+    shutil.copy2(root/'EchoMate-Check.vbs',dest/'EchoMate-Check.vbs')
     samples=dest/'profiles';samples.mkdir(exist_ok=True)
     if (root/'configs/character-default.json').exists():shutil.copy2(root/'configs/character-default.json',samples/'default.json')
     manifest_for(dest)

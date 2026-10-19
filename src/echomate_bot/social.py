@@ -20,6 +20,8 @@ class SocialDecision:
     act:str
     respond:bool
     reaction_only:bool=False
+    plan:str|None=None
+    context_omitted:bool=False
 
 def choices():
     result=[]

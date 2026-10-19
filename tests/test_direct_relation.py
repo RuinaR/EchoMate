@@ -29,3 +29,13 @@ class DirectRelation(unittest.IsolatedAsyncioTestCase):
             backend._job.assert_not_awaited()
         finally:
             await backend.scheduler.close();backend.executor.shutdown()
+
+    async def test_application_reference_indices_are_bounded_without_claiming_peer_identity(self):
+        backend=LocalBackend();backend._job=AsyncMock(return_value='continue 0')
+        try:
+            packet=dict(current={'speaker':'5','text':'synthetic reference'},current_peer_frames=[],direct_reference_frames=['0'],
+                        frames=[dict(index='0',turns=[{'speaker':'4','text':'actual source'}])],surrounding=[])
+            self.assertEqual(await backend.link_direct(packet),'0')
+            self.assertEqual(packet['current_peer_frames'],[])
+            self.assertEqual(backend._job.await_args.kwargs['choices'],['new','continue 0'])
+        finally:await backend.scheduler.close();backend.executor.shutdown()

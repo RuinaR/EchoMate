@@ -26,6 +26,36 @@ class DialogLayout(unittest.TestCase):
         self.app.destroy();self.app=None;self.root=None;gc.collect()
         self.assertFalse(self.callback_errors)
 
+    def test_async_apply_waits_prevents_duplicates_and_preserves_failed_input(self):
+        from concurrent.futures import Future
+        import time
+        first=Future();second=Future();submit=Mock(side_effect=[first,second])
+        dialog=self.app.form('저장 확인',[('value','값','keep this value')],submit)
+        invoke(dialog,'<Control-Return>');invoke(dialog,'<Control-Return>')
+        self.assertEqual(submit.call_count,1);self.assertTrue(dialog._pending_save)
+        invoke(dialog,'<Escape>');self.assertTrue(dialog.winfo_exists())
+        self.root.update_idletasks();first.set_result(dict(ok=False,error='긴 실패 안내 '*40))
+        time.sleep(.07);self.root.update()
+        self.assertFalse(dialog._pending_save)
+        entry=next(w for w in dialog.winfo_children()[0].winfo_children() if isinstance(w,tk.Entry))
+        self.assertEqual(entry.get(),'keep this value');self.assertEqual(entry.cget('state'),'normal')
+        canvas=dialog.winfo_children()[0]
+        hint=next(i for i in canvas.find_all() if canvas.type(i)=='text' and canvas.itemcget(i,'text').startswith('적용하지 못했어요'))
+        apply=next(i for i in canvas.find_all() if canvas.type(i)=='text' and canvas.itemcget(i,'text')=='적용')
+        self.assertLess(canvas.bbox(hint)[3],canvas.bbox(apply)[1])
+        invoke(dialog,'<Control-Return>');second.set_result(dict(ok=True,error=''));self.root.update_idletasks()
+        self.assertFalse(dialog.winfo_exists())
+
+    def test_cancelled_async_apply_does_not_escape_tk_callback(self):
+        import asyncio
+        loop=asyncio.new_event_loop()
+        try:
+            future=loop.create_future();submit=Mock(return_value=future)
+            dialog=self.app.form('취소 결과',[('value','값','retained')],submit)
+            invoke(dialog,'<Control-Return>');future.cancel();self.root.update_idletasks()
+            self.assertFalse(dialog._pending_save);self.assertTrue(dialog.winfo_exists())
+        finally:loop.close()
+
     def test_readonly_dialog_has_no_write_action(self):
         submit=Mock();dialog=self.app.form('읽기 전용 정보',[('value','읽기 전용 값','변경하면 안 되는 값')],submit,read_only=True)
         self.root.update_idletasks();self.assertFalse(dialog.winfo_ismapped())
