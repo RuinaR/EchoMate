@@ -8,9 +8,11 @@
 
 no-LoRA vs disabled-PEFT: E2E p50 4.047/4.234초·p95 4.715/4.797초(n9씩), 출력9쌍 동일. 실제 network는 mock, 큰 속도 개선 주장 없음. 캐릭터는 말투 차이 일부 확인/일부 인사 동일, 사람 블라인드 평가는 로컬 양식만 준비했다.
 
-**정식 릴리즈 BLOCKED**: 최종 미사용12는11/12(후속 우려 누락1), 이전44 개발 재검40/44(오개입1·누락3). 추가 few-shot 의미 후보는 minimum human 수신자 probe부터 실패해 폐기, 앱에 적용하지 않았다. 더 이상 같은 문항으로 최종 점수를 튜닝하지 않는다. 다음 우선순위는 남은 전달/간접 평가·2인칭 수신자 오류의 일반화, 새로운 독립 평가와 사람 검토, 다른 깨끗한 Windows/드라이버/장시간 운용이다. 실제 Discord와 사용자 데스크톱 조작은 계속 금지다.
+**정식 릴리즈 BLOCKED**: 추가12의 최초 평가는11/12(후속 우려 누락1), 이전44 개발 재검40/44(오개입1·누락3). 추가 few-shot 의미 후보는 minimum human 수신자 probe부터 실패해 폐기, 앱에 적용하지 않았다. 더 이상 같은 문항으로 최종 점수를 튜닝하지 않는다. 다음 우선순위는 남은 전달/간접 평가·2인칭 수신자 오류의 일반화, 새로운 독립 평가와 사람 검토, 다른 깨끗한 Windows/드라이버/장시간 운용이다. 실제 Discord와 사용자 데스크톱 조작은 계속 금지다.
 
-운영 자료·LoRA·모델·기존 평가 봉인은 보존한다. 원본은 `local_data/resumed-qa-20261019/`. 검증은 PYTHONPATH=src;tests;tools 후 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`. 프로토콜·Portable GPU 실행의 격리/잠금 조건은 재개 QA를 따른다. 최종 구현 commit/패키지 일치는 마감 절과 git log를 확인한다. 아래 GPU 불가/500 기준은 과거 기록이다.
+운영 자료·LoRA·모델·기존 평가 봉인은 보존한다. 원본은 `local_data/resumed-qa-20261019/`. 검증은 PYTHONPATH=src;tests;tools 후 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`. 프로토콜·Portable GPU 실행의 격리/잠금 조건은 재개 QA를 따른다. 최신 구현 **cbe2c77**(시작263eedc), 이후 문서 commit은 git log를 확인한다. Portable4.59GiB/24,756파일 source81/docs42 byte/공개hash동일, 운영4파일hash동일·봉인4유효·공개20파일 민감검사0건. 아래 GPU 불가/500 기준은 과거 기록이다.
+
+2026-10-20 마감 주의: 12문항은 최초 평가 뒤 개발 기준 자료로 편입되어 최종 일반화 점수가 아니다. 별도 봉인8은 후보 probe 실패로 미평가였고, 고정 commit의 현재 정책 재검도 host 여유27.07GiB<34.28GiB로 로딩 전 차단됐다. GPU 재시도하지 않았다. 다음 작업은 자원 여유를 먼저 확인하고 **새 output에서 이 미사용8을 평가**하는 것과 남은 청자 오류/사람 평가다. 이를 위해 기존 운영 설정/DB를 초기화하지 않는다.
 
 ## 2026-10-19 f1c0ec6 후속 — 최우선 최신 기준
 

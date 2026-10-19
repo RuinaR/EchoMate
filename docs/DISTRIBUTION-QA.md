@@ -6,9 +6,11 @@
 
 실측으로 기존 weight+2GiB가 부족함을 확인해 준비 reserve10GiB+margin2GiB(공식 단일22.28GiB 기준 시작34.28GiB)로 보강하고 이미 사용한 process commit을 중복 계산하지 않는다. cuBLAS workspace가 큰 segment를 붙든 문제를 수정해 생성·전환 후 PyTorch reserved 약6.99GiB→2MiB를 실제 확인했다. no-LoRA/disabled-PEFT E2E p50 4.047/4.234초, p95 4.715/4.797초(n9씩, 큰 개선 주장 없음).
 
-**정식 릴리즈 BLOCKED**: 최종 미사용 청자12는11/12(누락1), 이전44 개발 재검40/44(오개입1·누락3). 추가 의미 후보는 최소 수신자 probe 실패로 폐기했다. 캐릭터 사람 평가·다른 Windows/드라이버·장시간 실사용·실제 Discord는 NOT VERIFIED. 다른 PC가 제공되지 않아 현재 호스트의 격리 PATH/저장소 검사로 대체 성공을 선언하지 않는다.
+**정식 릴리즈 BLOCKED**: 추가 청자12 최초 평가는11/12(누락1), 이전44 개발 재검40/44(오개입1·누락3). 추가 의미 후보는 최소 수신자 probe 실패로 폐기했다. 캐릭터 사람 평가·다른 Windows/드라이버·장시간 실사용·실제 Discord는 NOT VERIFIED. 다른 PC가 제공되지 않아 현재 호스트의 격리 PATH/저장소 검사로 대체 성공을 선언하지 않는다.
 
 구체적 단계/실패/수치/재현과 비공개 파일 목록은 [재개 GPU QA](RESUMED-GPU-QA.md). 아래490/500·GPU 미실행·Portable weights=false 기록은 과거 상태다. 최종 패키지·보존·공개 감사는 마감 절에 누적한다.
+
+2026-10-20 마감 구현 **cbe2c77**: Portable4.59GiB/24,756파일, source81/docs42 byte·공개 manifest hash동일. 운영4파일 hash동일·평가 봉인4개 유효, 공개20파일 민감 리터럴/개인 경로/깨진 링크0건, 패키지 가중치/DB/운영 설정0건. 생성된 bundle/src bytecode만 제거했다. 12문항은 이후 개발 자료가 되어 최종 일반화 점수로 쓰지 않는다. 별도8을 고정 commit으로 시도했지만 host 여유27.07GiB<34.28GiB로 로딩 전 차단했고 재시도하지 않았다. 이8·깨끗한 다른 Windows·장시간·실제 Discord는 미검증이며 릴리즈 BLOCKED다. 이미 완료한 GPU/Portable 성공 범위는 그대로 유효하다.
 
 ## f1c0ec6 후속 — Windows 1455 메모리 감사 (최신)
 

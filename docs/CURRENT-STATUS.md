@@ -6,7 +6,9 @@
 
 실측으로 준비 reserve를 보강했고, GPU 작업 종료 뒤 cuBLAS workspace가 pin한 큰 allocator segment를 정리해 PyTorch reserved 약6.99GiB→2MiB를 확인했다. E2E no-LoRA p50/p95 4.047/4.715초, disabled-PEFT4.234/4.797초, n9씩이며 큰 속도 개선으로 주장하지 않는다. 데이터·원본 모델·LoRA를 보존했다.
 
-남은 차단은 메모리 실패가 아니라 **사회적 청자 품질**이다. 최종 미사용12는11/12, 이전44 개발 재검40/44. 추가 후보는 최소 probe 실패로 폐기했다. 사람 캐릭터 평가/다른 Windows/드라이버/장시간 운용/실제 Discord는 NOT VERIFIED. 정식 릴리즈 승인 없음. 패키지 최종 소스 일치·공개 감사는 DISTRIBUTION-QA 마감 절을 확인한다.
+주요 차단은 **사회적 청자 품질**이다. 추가12 최초 평가는11/12, 이전44 개발 재검40/44. 추가 후보는 최소 probe 실패로 폐기했다. 사람 캐릭터 평가/다른 Windows/드라이버/장시간 운용/실제 Discord는 NOT VERIFIED. 정식 릴리즈 승인 없음. 패키지 최종 소스 일치·공개 감사는 DISTRIBUTION-QA 마감 절을 확인한다.
+
+2026-10-20 마감: 구현 **cbe2c77**. Portable4.59GiB/24,756파일 source81/docs42 byte·공개hash일치, 운영4파일hash동일·봉인4유효·공개20파일 민감검사0건. 위12는 최초 독립 평가 후 개발 자료가 되었으므로 최종 일반화 점수가 아니다. 별도 봉인8의 고정commit 평가를 시도했지만 host 여유27.07GiB로 감소해 admission에서 차단, 가중치/GPU 로딩과 재시도는 없었다. 완료한 GPU/Portable 검증은 유효하며, 최종 별도8/다른Windows/장시간은 미검증으로 남는다.
 
 ## 2026-10-19 f1c0ec6 후속 — 최신 / BLOCKED
 

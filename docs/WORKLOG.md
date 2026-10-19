@@ -10,6 +10,12 @@
 - 새 메모리/정리/보고문 회귀 포함 전체 **506 OK55.636초** (`PYTHONPATH=src;tests;tools`, `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`). 중간502는 test fixture 가변 참조 오류로 실패했으며 수정 후 전체 재실행했다. 모든 실패 로그는 보존했다.
 - 비공개 `local_data/resumed-qa-20261019/`에 측정/응답/프로토콜/봉인/캐릭터 블라인드(사람평가 미실시) 보존. 공개에는 비식별 요약만 기록. [전체 재개 QA](RESUMED-GPU-QA.md). 사회적 정확도·다른Windows/드라이버·장시간·실제Discord 미검증으로 정식 릴리즈 BLOCKED. 최종 package/source/hash·운영 자료 보존·공개 감사/commit은 마감 절에 이어 기록한다.
 
+### 2026-10-20 마감
+
+구현 cbe2c77。공개20파일 staged diff/check·실제 bootstrap 민감리터럴·개인경로·문서링크 검사0, 운영4파일hash동일·평가봉인4개유효. `build_portable.py --refresh-public` 재빌드 후 bundle/src의 생성 bytecode만 절대경로를 확인해 정리, 4.59GiB/24,756파일. source81/docs42 byte/공개manifest hash일치·가중치/DB/운영설정0건. 이후 문서 commit은 git log 확인. 원본/수정/실패/폐기 후보/평가 scope를 RESUMED-GPU-QA에 누적했다.
+
+별도 미사용8을 고정 commit으로 마지막 검사하려 했으나 host commit 여유27.07GiB<34.28GiB로 로딩 전 차단, GPU 시작/재시도 없음. 12문항은 이후 개발 기준에 편입되어 최종 일반화 점수로 쓰지 않는다. 완료한 GPU/Portable 성공과 남은 독립8/사람/다른Windows/장시간 미검증을 구분했다. 정식 릴리즈는 계속 BLOCKED다.
+
 ## 2026-10-19 f1c0ec6 후속 — Windows1455 원인·메모리 안전성
 
 - 시작/원격 main f1c0ec6 clean0/0, 기존490 전체 OK61.101초. 기존 성공 소스와 실패 traceback/설치 라이브러리·공식 소스를 비교했다.
