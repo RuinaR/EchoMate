@@ -28,6 +28,59 @@ class OfflineRecords(unittest.IsolatedAsyncioTestCase):
         c.client=None;c.job=None;c.phase='정지';c.error='';c.updates=queue.Queue(maxsize=8);c.inventory=[];c.record_guilds=[2]
         c.companion=CompanionStore(self.root/'companion.sqlite3');c.companion_view={}
     def tearDown(self):self.temp.cleanup()
+    async def test_preview_close_before_coroutine_start_releases_owned_backend(self):
+        backend=SimpleNamespace(model=None,text=AsyncMock(),close=AsyncMock())
+        with patch('echomate_bot.inference.LocalBackend',return_value=backend):
+            await self.c.command('preview',text='합성 미리보기',session='window-a')
+            await self.c.command('preview_cancel',session='window-a')
+        self.assertTrue(self.c.preview_task.cancelled())
+        backend.text.assert_not_awaited();backend.close.assert_awaited_once()
+        self.assertIsNone(self.c.preview_backend)
+        self.assertFalse(self.c.updates.queue[-1]['preview_busy'])
+
+    async def test_old_preview_window_cannot_cancel_new_window_and_stop_is_available(self):
+        async def wait(*args):await asyncio.Event().wait()
+        backend=SimpleNamespace(model=object(),text=AsyncMock(side_effect=wait),close=AsyncMock())
+        with patch('echomate_bot.inference.LocalBackend',return_value=backend):
+            await self.c.command('preview',text='합성 미리보기',session='window-new');await asyncio.sleep(0)
+            await self.c.command('preview_cancel',session='window-old')
+            self.assertFalse(self.c.preview_task.done());backend.close.assert_not_awaited()
+            snapshot=self.c.updates.queue[-1]
+            self.assertTrue(snapshot['preview_busy']);self.assertEqual(snapshot['preview_session'],'window-new')
+            await self.c.command('stop')
+        self.assertTrue(self.c.preview_task.cancelled());backend.close.assert_awaited_once()
+        self.assertIsNone(self.c.preview_backend)
+
+    async def test_preview_cancel_does_not_close_shared_bot_backend(self):
+        async def wait(*args):await asyncio.Event().wait()
+        backend=SimpleNamespace(model=object(),text=AsyncMock(side_effect=wait),close=AsyncMock())
+        self.c.client=SimpleNamespace(backend=backend);self.c._publish=Mock()
+        await self.c.command('preview',text='합성 미리보기',session='owned-window');await asyncio.sleep(0)
+        await self.c.command('preview_cancel',session='owned-window')
+        self.assertTrue(self.c.preview_task.cancelled());backend.close.assert_not_awaited()
+        self.assertIs(self.c.client.backend,backend)
+        self.c.client=None
+
+    async def test_preview_cleanup_error_is_reported_without_exception_content(self):
+        backend=SimpleNamespace(model=object(),text=AsyncMock(return_value='합성 답변'),close=AsyncMock(side_effect=OSError('synthetic-sensitive-error-content')))
+        with patch('echomate_bot.inference.LocalBackend',return_value=backend):
+            await self.c.command('preview',text='합성 미리보기',session='failing-window')
+            await asyncio.gather(self.c.preview_task,return_exceptions=True);await asyncio.sleep(0)
+        self.assertEqual(self.c.error,'PreviewCleanupOSError')
+        self.assertNotIn('synthetic-sensitive-error-content',str(self.c.updates.queue[-1]))
+        self.assertIs(self.c.preview_backend,backend);self.assertTrue(self.c.preview_cleanup_failed)
+        await self.c.command('preview',text='새 모델을 로딩하지 않아야 함',session='blocked-window')
+        self.assertIn('앱을 닫고 다시',self.c.error);backend.text.assert_awaited_once()
+        self.assertEqual(self.c.preview_rejection['session'],'blocked-window')
+
+    async def test_preview_cleanup_failure_cannot_prevent_app_shutdown(self):
+        backend=SimpleNamespace(model=None,text=AsyncMock(),close=AsyncMock(side_effect=OSError('synthetic close failure')))
+        self.c.main_task=Mock()
+        with patch('echomate_bot.inference.LocalBackend',return_value=backend):
+            await self.c.command('preview',text='합성 미리보기',session='close-window')
+            await self.c.command('shutdown')
+        self.c.main_task.cancel.assert_called_once()
+        self.assertTrue(self.c.preview_cleanup_failed)
     async def test_profile_save_failure_cannot_apply_unsaved_character(self):
         from echomate_bot.character_profiles import DEFAULT_PROFILE
         before=self.c.settings.get();profile=dict(DEFAULT_PROFILE,energy=85)

@@ -38,7 +38,7 @@ def run(output):
                 root.geometry(size);app.canvas.place(x=0,y=0,width=requested_width,height=requested_height);root.update_idletasks()
                 if (app.canvas.winfo_width(),app.canvas.winfo_height())!=(requested_width,requested_height):raise AssertionError('Canvas geometry not allocated')
                 original=deepcopy(app.snapshot)
-                for scenario in ('empty','populated','loading','error','preparing'):
+                for scenario in ('empty','populated','loading','error','preparing','preview','preview_hot'):
                     app.snapshot=deepcopy(original);snap=app.snapshot
                     snap['companion'].update(user='4',people=[] if scenario=='empty' else original['companion']['people'])
                     if scenario=='populated':
@@ -49,6 +49,8 @@ def run(output):
                     elif scenario=='loading':snap['companion_loading']=True
                     elif scenario=='error':snap['error']='합성 조회 오류';snap['companion']['load_error']=True
                     elif scenario=='preparing':snap.update(model_preparing=True,running=True)
+                    elif scenario=='preview':snap.update(model_preparing=True,preview_busy=True)
+                    elif scenario=='preview_hot':snap.update(model_preparing=False,preview_busy=True)
                     for page in ('setup','models','spaces','outputs','character','relations','memories','reminders','status','labs'):
                         app.set_page(page);app.record_user='4'
                         started=time.perf_counter();app.render();root.update_idletasks()

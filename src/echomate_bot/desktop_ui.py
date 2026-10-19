@@ -277,8 +277,10 @@ class DesktopApp(CompanionViews):
         running=bool(s and s.get('running'))
         self.canvas.create_oval(w-350,39,w-342,47,fill=MINT if connected else MUTED,outline='')
         self.text(w-333,31,'Discord에 연결됨' if connected else '연결을 준비하고 있어요' if running else '봇이 꺼져 있어요',10,MUTED)
-        label='응답 재개' if connected and cfg and not cfg['enabled'] else '실행 중' if connected else '준비 중' if running else '봇 켜기'
-        self.button(w-190,23,78,36,label,lambda:self.controller.submit('start'),primary=True,enabled=bool(cfg) and (not running or bool(connected and not cfg['enabled'])))
+        preview_busy=bool(s and s.get('preview_busy'))
+        cleanup_failed=bool(s and s.get('preview_cleanup_failed'))
+        label='다시 열기 필요' if cleanup_failed else '미리보기 중' if preview_busy else '응답 재개' if connected and cfg and not cfg['enabled'] else '실행 중' if connected else '준비 중' if running else '봇 켜기'
+        self.button(w-190,23,78,36,label,lambda:self.controller.submit('start'),primary=True,enabled=bool(cfg) and not preview_busy and not cleanup_failed and (not running or bool(connected and not cfg['enabled'])))
         self.button(w-102,23,78,36,'봇 끄기',lambda:self.controller.submit('stop'),enabled=running)
         error=' · '+s['error'] if s and s['error'] else ''
         phase=s['phase'] if s else '저장된 설정을 읽고 있어요'
@@ -378,13 +380,14 @@ class DesktopApp(CompanionViews):
 
     def draw_models(self,w,h,cfg):
         if not cfg:return
+        busy=bool(self.snapshot.get('model_preparing') or self.snapshot.get('preview_busy') or self.snapshot.get('preview_cleanup_failed'))
         rounded(self.canvas,226,143,w-252,h-210,PANEL)
         self.text(250,163,'공식 기본: Gemma 4 12B · Transformers / NF4',13,bold=True)
         self.text(250,199,'폴더의 파일 구조와 템플릿을 검사해요. 실제 준비 검증이 끝나야 적용돼요.',10,MUTED,width=w-290)
-        self.button(250,233,140,34,'모델 폴더 선택',self.choose_model_folder,enabled=not self.snapshot.get('model_preparing'))
+        self.button(250,233,140,34,'모델 폴더 선택',self.choose_model_folder,enabled=not busy)
         self.button(400,233,110,34,'다시 검색',lambda:self.controller.submit('models'))
         official=any(m['compatible'] and 'models--google--gemma-4-12B-it' in m['path'] for m in self.snapshot.get('models',[]))
-        self.button(520,233,130,34,'기본 모델 사용',lambda:self.set_value('model','base'),enabled=official and not self.snapshot.get('model_preparing'))
+        self.button(520,233,130,34,'기본 모델 사용',lambda:self.set_value('model','base'),enabled=official and not busy)
         entries=self.snapshot.get('models',[])
         if not entries:self.text(250,295,'설치된 모델을 찾지 못했어요. 모델을 models 폴더에 넣거나 설치한 폴더를 선택하세요.',10,MUTED,width=w-290)
         self.model_list.set_items([dict(id=m['id'],label=m['name'],hint=m['format']+' · '+('파일 검사 통과' if m['compatible'] else '사용 불가')) for m in entries])
@@ -399,7 +402,8 @@ class DesktopApp(CompanionViews):
             self.text(550,434,'파일 검사 통과 · GPU 준비는 적용할 때 확인해요' if selected['compatible'] else '지원하지 않는 모델은 적용할 수 없어요',9,MUTED,width=w-590)
             current=cfg['model']==selected['id'] or cfg['model']=='base' and 'models--google--gemma-4-12B-it' in selected['path']
             self.text(550,474,'현재 설정된 모델이에요' if current else '목록 선택만으로는 모델이 바뀌지 않아요',8,MUTED,width=w-590)
-            self.button(550,520,150,34,'검증 후 적용',lambda:self.set_value('model',selected['id']),enabled=selected['compatible'] and not self.snapshot.get('model_preparing'))
+            self.button(550,520,150,34,'검증 후 적용',lambda:self.set_value('model',selected['id']),enabled=selected['compatible'] and not busy)
+        if self.snapshot.get('preview_busy'):self.text(250,h-138,'미리보기 창을 닫아 취소하거나 완료된 뒤 모델을 변경해 주세요.',9,MUTED,width=w-290)
         self.text(250,h-107,'예상 VRAM 약 10GB + 시스템 여유 · 실제 지원 검증은 RTX 4070 Ti SUPER 16GB에 한정돼요.',9,MUTED,width=w-290)
 
     def choose_model_folder(self):
@@ -473,24 +477,32 @@ class DesktopApp(CompanionViews):
         self.form('프로필 파일',[('action','가져오기 / 내보내기','가져오기'),('key','프로필 ID','my-character')],act,'캐릭터 자료만 담아요. 토큰·대화·기억은 포함하지 않아요.')
 
     def character_preview(self):
-        dialog=tk.Toplevel(self.root);dialog.title('Discord 없이 캐릭터 미리보기');dialog.configure(bg=PANEL);dialog.geometry('690x510');dialog.minsize(560,420)
+        import secrets
+        session=secrets.token_hex(12);pending=[False]
+        dialog=tk.Toplevel(self.root);dialog.title('Discord 없이 캐릭터 미리보기');dialog.configure(bg=PANEL);dialog.geometry('690x510');dialog.minsize(560,420);dialog.transient(self.root)
         tk.Label(dialog,text='합성 질문으로 말투를 확인해요 · 대화·기억·관계·예약에 저장하지 않아요',bg=PANEL,fg=MUTED,font=('맑은 고딕',10),wraplength=630).pack(padx=22,pady=16,anchor='w')
         entry=tk.Entry(dialog,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',11));entry.pack(padx=22,fill='x',ipady=8);entry.insert(0,'처음 만난 친구에게 짧게 인사해 줘')
         actions=tk.Canvas(dialog,bg=PANEL,height=48,highlightthickness=0);actions.pack(fill='x',padx=22)
         rounded(actions,0,8,145,32,CARD,8);actions.create_text(72,24,text='로컬 답변 생성',fill=FG,font=('맑은 고딕',10))
         output=tk.Text(dialog,bg=CARD,fg=FG,relief='flat',wrap='word',font=('맑은 고딕',11),state='disabled');output.pack(padx=22,pady=(0,22),fill='both',expand=True)
         def generate():
-            if 1<=len(entry.get())<=1000:self.controller.submit('preview',text=entry.get())
+            if not pending[0] and not (self.snapshot or {}).get('preview_busy') and not (self.snapshot or {}).get('preview_cleanup_failed') and 1<=len(entry.get())<=1000:
+                pending[0]=True;self.controller.submit('preview',text=entry.get(),session=session)
         actions.bind('<Button-1>',lambda e:generate() if e.x<=145 and 8<=e.y<=40 else None);entry.bind('<Return>',lambda e:generate())
         old=[''];timer=[None]
         def poll():
-            value=(self.snapshot or {}).get('preview','') or '질문을 입력하고 답변을 생성해 보세요.'
+            snap=self.snapshot or {};mine=snap.get('preview_session')==session
+            value=(snap.get('preview','') if mine else '') or ('요청을 준비하고 있어요' if pending[0] else '질문을 입력하고 답변을 생성해 보세요. 창을 닫으면 이 미리보기만 취소해요.')
+            if pending[0] and snap.get('preview_rejection',{}).get('session')==session:
+                value='요청을 시작하지 못했어요 · '+snap['preview_rejection']['error'];pending[0]=False
+            if mine and not snap.get('preview_busy'):pending[0]=False
             if value!=old[0]:output.configure(state='normal');output.delete('1.0','end');output.insert('1.0',value);output.configure(state='disabled');old[0]=value
             timer[0]=dialog.after(400,poll)
         def closed(event):
             if event.widget is dialog and timer[0]:
                 try:dialog.after_cancel(timer[0])
                 except tk.TclError:pass
+                if not self.closing and not self.disposed:self.controller.submit('preview_cancel',session=session)
         dialog.bind('<Destroy>',closed);poll();entry.focus_set()
     def select_job(self,ids):self.job_id=next(iter(ids),None);self.render()
     def approve_commands(self):

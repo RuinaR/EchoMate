@@ -121,18 +121,24 @@ class LocalController:
             for cid,p in list(runtime.progress.items()):
                 channel=client.get_channel(p.get('channel',cid))
                 progress.append(dict(channel=channel.name if channel else '허용된 채널',stage=STAGES.get(p['stage'],p['stage']),seconds=round(time.time()-p['started'],1)))
-        preparing=bool(getattr(self,'starting_model',False) or getattr(self,'model_preparing',False) or runtime and getattr(runtime,'changing_model',False))
+        preview=getattr(self,'preview_task',None);preview_busy=bool(preview and not preview.done())
+        serving=client.backend if client else getattr(self,'preview_backend',None)
+        preparing=bool(getattr(self,'starting_model',False) or getattr(self,'model_preparing',False) or runtime and getattr(runtime,'changing_model',False) or preview_busy and getattr(serving,'model',None) is None)
         try:
             from .ledger import Ledger
             statistics=runtime.ledger.statistics() if runtime else Ledger.read_statistics(self.settings.path.parent/'sent.sqlite3') if cfg else {}
         except (OSError,sqlite3.Error):statistics=dict(error=True);self.error='전송 통계를 읽지 못했어요'
-        snapshot=dict(phase='AI 안전 보호로 정지 · 진단 확인 후 다시 시작' if runtime and runtime.stopped and getattr(client.backend,'failed',False) else '모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
+        if preview_busy:progress.append(dict(channel='로컬 미리보기',stage='취소·GPU 정리' if getattr(self,'preview_cancelling',False) else '모델 준비' if preparing else 'GPU 작업 대기·처리',seconds=round(time.monotonic()-getattr(self,'preview_started',time.monotonic()),1)))
+        snapshot=dict(phase='AI 안전 보호로 정지 · 진단 확인 후 다시 시작' if runtime and runtime.stopped and getattr(client.backend,'failed',False) else '미리보기 취소 중 · GPU 작업을 정리하고 있어요' if getattr(self,'preview_cancelling',False) else '로컬 미리보기 · 모델 준비 중' if preview_busy and preparing else '로컬 미리보기 · GPU 작업 대기·처리 중' if preview_busy else '모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
                       model_preparing=preparing,
-                      model_load_seconds=getattr(client.backend,'load_seconds',None) if client else None,
+                      preview_busy=preview_busy,preview_session=getattr(self,'preview_session',None),
+                      preview_cleanup_failed=getattr(self,'preview_cleanup_failed',False),
+                      preview_rejection=getattr(self,'preview_rejection',{}),
+                      model_load_seconds=getattr(serving,'load_seconds',None),
                       model_switch_seconds=getattr(client.backend,'switch_seconds',None) if client else None,
                       models=[m.public() for m in getattr(self,'models',[])],profiles=getattr(self,'profiles_view',{}),preview=getattr(self,'preview_result',''),
                       recent_reason=next((NO_RESPONSE.get(r['code'],'') for r in reversed(runtime.diagnostics) if r['code'] in NO_RESPONSE or r['code']=='response_sent'),'') if runtime else '',
-                      scheduler=client.backend.scheduler.snapshot() if client and hasattr(client.backend,'scheduler') else {},
+                      scheduler=serving.scheduler.snapshot() if serving and hasattr(serving,'scheduler') else {},
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
                       companion_loading=getattr(self,'companion_loading',False),
                       statistics=statistics,
@@ -142,13 +148,14 @@ class LocalController:
                       memory_pending=runtime.memory_queue.qsize() if runtime else 0,
                       private_service=bool(runtime and runtime.service_task and not runtime.service_task.done()),
                       running=bool(self.job and not self.job.done()),
-                      connected=bool(client and client.is_ready()),pending=len(runtime.tasks.keys()|runtime.deferred_events.keys()) if runtime else 0,
+                      connected=bool(client and client.is_ready()),pending=(len(runtime.tasks.keys()|runtime.deferred_events.keys()) if runtime else 0)+int(preview_busy),
                       contexts=runtime.activity_changed() if runtime else 0,safe_stopped=runtime.stopped if runtime else False,
                       latency=runtime.latencies[-1] if runtime and runtime.latencies else None,
                       gpu_seconds=client.backend.metrics[-1]['seconds'] if client and client.backend.metrics else None)
         if self.updates.full():
             try:self.updates.get_nowait()
             except queue.Empty:pass
+        if snapshot['preview_cleanup_failed']:snapshot['phase']='미리보기 정리 실패 · 앱을 닫고 다시 열어 주세요'
         self.updates.put_nowait(snapshot)
         if getattr(self,'lease',None) and time.monotonic()-getattr(self,'_published_at',0)>2:
             from .settings import atomic_private_json
@@ -187,8 +194,26 @@ class LocalController:
         finally:
             await reader.close();self.refreshing=False
 
+    async def _cancel_preview(self):
+        task=getattr(self,'preview_task',None)
+        if task is None:return
+        backend=getattr(self,'preview_backend',None);owned=getattr(self,'preview_owned',False)
+        self.preview_cancelling=not task.done();self._publish()
+        try:
+            task.cancel();await asyncio.gather(task,return_exceptions=True)
+            # A task cancelled before its coroutine first runs cannot execute
+            # its finally block. The controller still owns that backend.
+            if backend is not None and getattr(self,'preview_backend',None) is backend and not getattr(self,'preview_cleanup_failed',False):
+                try:
+                    if owned:await backend.close()
+                except Exception:
+                    self.preview_cleanup_failed=True;raise
+                else:self.preview_backend=None
+            if task.cancelled():self.preview_result='미리보기를 취소했어요'
+        finally:self.preview_cancelling=False
+
     async def command(self,operation,**kwargs):
-        if operation in {'start','stop','shutdown','name','preview','setup','models','profiles'} or (operation=='settings' and 'model' in kwargs.get('values',{})):
+        if operation in {'start','stop','shutdown','name','preview','preview_cancel','setup','models','profiles'} or (operation=='settings' and 'model' in kwargs.get('values',{})):
             if not hasattr(self,'lifecycle_lock'):self.lifecycle_lock=asyncio.Lock()
             async with self.lifecycle_lock:return await self._command(operation,**kwargs)
         return await self._command(operation,**kwargs)
@@ -196,8 +221,8 @@ class LocalController:
     async def _command(self,operation,**kwargs):
         try:
             if operation=='shutdown':
-                preview=getattr(self,'preview_task',None)
-                if preview and not preview.done():preview.cancel();await asyncio.gather(preview,return_exceptions=True)
+                try:await self._cancel_preview()
+                except Exception as exc:self.error='PreviewCleanup'+type(exc).__name__
                 if getattr(self,'settings',None):
                     try:self.settings.set(self.bootstrap['owner_id'],'enabled',False)
                     except OSError:self.error='SettingsWriteError'
@@ -216,9 +241,13 @@ class LocalController:
             if not self.settings:raise ValueError('Setup required')
             owner=self.bootstrap['owner_id'];self.settings.authorize(owner)
             self.error=''
+            if getattr(self,'preview_cleanup_failed',False) and (operation in ('start','preview','models') or operation=='settings' and 'model' in kwargs.get('values',{})):
+                raise RuntimeError('미리보기 정리에 실패했어요. 앱을 닫고 다시 열어 주세요.')
             if getattr(self,'starting_model',False) and (operation=='models' and 'roots' in kwargs or operation=='settings' and 'model' in kwargs.get('values',{})):
                 raise ValueError('최초 모델 준비가 끝난 뒤 변경해 주세요')
             preview=getattr(self,'preview_task',None)
+            if operation=='stop' and preview and not preview.done():
+                await self._cancel_preview()
             if preview and not preview.done() and (operation in ('start','stop','preview') or operation=='settings' and 'model' in kwargs.get('values',{})):
                 raise ValueError('미리보기가 끝난 뒤 모델을 변경하거나 시작해 주세요')
             if operation=='models':
@@ -251,20 +280,34 @@ class LocalController:
                     self.settings.change(owner,lambda cfg:cfg.update(character_profile=profile,**{k:profile[k] for k in SHARED_FIELDS}))
                 self.profiles_view=await asyncio.to_thread(store.list)
                 self.notice='캐릭터 설정을 확인했어요'
+            elif operation=='preview_cancel':
+                if kwargs.get('session') and kwargs['session']==getattr(self,'preview_session',None) and preview and not preview.done():
+                    await self._cancel_preview()
             elif operation=='preview':
                 text=kwargs['text']
                 if not isinstance(text,str) or not 1<=len(text)<=1000:raise ValueError('Invalid preview input')
-                self.preview_result='로컬에서 답변을 준비하고 있어요';self._publish()
+                self.preview_rejection={};self.preview_result='로컬에서 답변을 준비하고 있어요';self._publish()
                 from .inference import LocalBackend
                 cfg=self.settings.get();backend=self.client.backend if self.client else LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None)
                 owns_backend=self.client is None
+                self.preview_session=kwargs.get('session');self.preview_backend=backend;self.preview_owned=owns_backend;self.preview_started=time.monotonic()
                 async def generate_preview():
                     try:self.preview_result=await backend.text([dict(role='user',content=text)],cfg)
                     except asyncio.CancelledError:self.preview_result='미리보기를 취소했어요';raise
-                    except Exception as exc:self.preview_result='미리보기 실패 · '+type(exc).__name__
+                    except Exception as exc:
+                        from .processes import ResourceLimitError,resource_message
+                        self.preview_result='미리보기 실패 · '+(resource_message(exc,'모델 준비 자원이 부족해요') if isinstance(exc,ResourceLimitError) else type(exc).__name__)
                     finally:
-                        if owns_backend:await backend.close()
+                        try:
+                            if owns_backend:await backend.close()
+                        except Exception:
+                            self.preview_cleanup_failed=True;raise
+                        else:self.preview_backend=None
                 self.preview_task=asyncio.create_task(generate_preview())
+                def completed(task):
+                    if not task.cancelled() and task.exception():self.error=('PreviewCleanup' if getattr(self,'preview_cleanup_failed',False) else 'Preview')+type(task.exception()).__name__
+                    self._publish()
+                self.preview_task.add_done_callback(completed)
                 # No Runtime ingestion: consent, memory, affinity and reminders untouched.
             elif operation=='refresh':await self.refresh_inventory()
             elif operation=='start':
@@ -447,9 +490,10 @@ class LocalController:
             else:raise ValueError('Unknown operation')
             if operation in {'settings','scope','guild'}:self.notice='설정 저장 완료'
         except Exception as exc:
-            safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요'}
+            safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요','미리보기 정리에 실패했어요. 앱을 닫고 다시 열어 주세요.'}
             from .processes import ResourceLimitError,resource_message
             self.error=resource_message(exc,NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요')) if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
+            if operation=='preview':self.preview_rejection=dict(session=kwargs.get('session'),error=self.error)
         self._publish()
 
     async def refresh_companion(self,guild,user=None,query='',kind=None):
