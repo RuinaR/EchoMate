@@ -236,7 +236,12 @@ class LocalController:
             elif operation=='profiles':
                 from .character_profiles import ProfileStore,DEFAULT_PROFILE
                 store=ProfileStore(self.settings.path.parent/'characters.json',owner,self.bootstrap['signing_key']);action=kwargs.get('action','list');key=kwargs.get('key','default')
-                if action=='save':await asyncio.to_thread(store.save,owner,key,kwargs['value'])
+                if action in ('save','save_apply'):
+                    await asyncio.to_thread(store.save,owner,key,kwargs['value'])
+                    if action=='save_apply':
+                        from .character_profiles import SHARED_FIELDS
+                        profile=(await asyncio.to_thread(store.list))[key]
+                        self.settings.change(owner,lambda cfg:cfg.update(character_profile=profile,**{k:profile[k] for k in SHARED_FIELDS}))
                 elif action=='delete':await asyncio.to_thread(store.save,owner,key)
                 elif action=='import':await asyncio.to_thread(store.import_file,owner,key,kwargs['path'])
                 elif action=='export':await asyncio.to_thread(store.export_file,key,kwargs['path'])

@@ -150,7 +150,8 @@ class CompanionViews:
         self.people_list.place(x=456,y=230,width=200,height=max(100,h-480))
         self.people_list.selected={self.record_user} if self.record_user else set()
         rows=data.get('memories' if self.page=='memories' else 'reminders',[]) if self.page!='relations' else data.get('people',[])
-        if self.page!='relations' and data.get('user')!=self.record_user:rows=[]
+        matches=(data.get('user')==self.record_user and data.get('query','')==self.record_search and data.get('kind')==self.record_kind)
+        if self.page!='relations' and not matches:rows=[]
         if self.page=='memories':
             if self.record_status=='사용 중':rows=[r for r in rows if r['status']=='active' and (r['expires_at'] is None or r['expires_at']>time.time())]
             elif self.record_status=='곧 만료':rows=[r for r in rows if r['expires_at'] is not None and time.time()<r['expires_at']<=time.time()+86400]
@@ -159,7 +160,7 @@ class CompanionViews:
             elif self.record_status=='확인 필요':rows=[r for r in rows if r['status']=='uncertain']
             items=[dict(id=r['memory_id'],label=r['summary'],hint=next((k for k,v in KINDS.items() if v==r['kind']),r['kind'])+' · '+('장기 기억' if not r['expires_at'] else display_time(r['expires_at'],tz)+' 만료')+' · '+('만료됨' if r['expires_at'] and r['expires_at']<=time.time() else STATES[r['status']])) for r in rows]
             if self.record_kind=='summary':
-                rows=data.get('digests',[]) if data.get('user')==self.record_user else []
+                rows=data.get('digests',[]) if matches else []
                 if self.record_status=='만료':rows=[r for r in rows if r['expires']<=time.time()]
                 elif self.record_status=='사용 중':rows=[r for r in rows if r['expires']>time.time() and r['usable']]
                 if self.record_search:rows=[r for r in rows if self.record_search in str(r['body'])]
@@ -171,12 +172,13 @@ class CompanionViews:
         else:
             aliases=[r for r in data.get('aliases',[]) if r['user']==self.record_user]
             items=[dict(id='alias:'+r['channel']+':'+r['alias'],label=r['alias']+' · '+{'confirmed':'소유자 확인','candidate':'확인 전 후보','deleted':'삭제됨'}[r['status']],hint=f"채널 {r['channel']} · 근거 {r['observations']}건 / {r['witnesses']}명 · 근거점수 {r['confidence']:.0%}") for r in aliases] if self.record_user else [dict(id=r['user'],label=r.get('label','사용자 '+r['user']),hint='사람을 선택하면 호칭 후보를 확인할 수 있어요') for r in rows]
+        if self.record_key not in {item['id'] for item in items}:self.record_key=None
         self.record_list.set_items(items);self.record_list.place(x=674,y=230,width=max(210,w-714),height=max(100,h-480))
         loading=(self.snapshot or {}).get('companion_loading',False)
         self.people_list.empty_hint='자료를 읽고 있어요' if loading else '저장된 사람 자료가 없어요'
         self.record_list.empty_hint='조회에 실패했어요 · 새로고침' if data.get('load_error') else '로컬 자료를 읽고 있어요' if loading else '사람을 먼저 선택해 주세요' if not self.record_user and self.page!='relations' else '이 범위에 저장된 자료가 없어요'
-        self.people_list.redraw();self.record_list.redraw()
         self.record_list.selected={self.record_key} if self.record_key else set()
+        self.people_list.redraw();self.record_list.redraw()
         y=h-226
         self.button(246,y,120,30,'전체 사용자',lambda:(setattr(self,'record_user',None),self.refresh_records()))
         self.button(376,y,120,30,'선택 수정',lambda:self.edit_record(),enabled=bool(self.record_key or self.page=='relations' and self.record_user))

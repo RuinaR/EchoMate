@@ -28,6 +28,16 @@ class OfflineRecords(unittest.IsolatedAsyncioTestCase):
         c.client=None;c.job=None;c.phase='정지';c.error='';c.updates=queue.Queue(maxsize=8);c.inventory=[];c.record_guilds=[2]
         c.companion=CompanionStore(self.root/'companion.sqlite3');c.companion_view={}
     def tearDown(self):self.temp.cleanup()
+    async def test_profile_save_failure_cannot_apply_unsaved_character(self):
+        from echomate_bot.character_profiles import DEFAULT_PROFILE
+        before=self.c.settings.get();profile=dict(DEFAULT_PROFILE,energy=85)
+        with patch('echomate_bot.character_profiles.ProfileStore.save',side_effect=OSError('synthetic disk failure')):
+            await self.c.command('profiles',action='save_apply',key='synthetic',value=profile)
+        self.assertEqual(self.c.settings.get(),before)
+        self.assertTrue(self.c.error)
+        await self.c.command('profiles',action='save_apply',key='synthetic',value=profile)
+        self.assertFalse(self.c.error)
+        self.assertEqual(self.c.settings.get()['character_profile']['energy'],85)
     async def test_offline_memory_alias_reminder_and_consent_visible(self):
         c=self.c;c.companion.add_memory(2,4,3,'나는 퍼즐을 좋아해');c.companion.set_alias(2,3,4,'구름')
         e=Event(100,2,3,4,'1분 뒤 알림',datetime.now(timezone.utc));c.companion.reserve_reminder(e,e.timestamp.timestamp()+60,'Asia/Seoul','테스트')
@@ -104,7 +114,7 @@ class ReleaseTk(unittest.TestCase):
                 self.assertEqual(controller.submit.call_args.kwargs['values'],dict(command_sync_pending=True))
                 self.assertTrue(all(y+height<=740 or root.winfo_height()>740 for x,y,width,height,cb in app.hits))
                 digest=dict(id='digest-test',channel='3',body=dict(items=[dict(kind='correction',text='금요일 모임으로 변경했다',source='111')]),updated=1000,expires=9999999999,usable=True)
-                app.page='memories';app.record_kind='summary';app.record_user='4';app.snapshot['companion']=dict(guild=2,user='4',people=[dict(user='4',consent=dict(summaries=True),affinity=50,interactions=0,last_at=0)],digests=[digest],memories=[])
+                app.page='memories';app.record_kind='summary';app.record_user='4';app.snapshot['companion']=dict(guild=2,user='4',query='',kind='summary',people=[dict(user='4',consent=dict(summaries=True),affinity=50,interactions=0,last_at=0)],digests=[digest],memories=[])
                 app.render();root.update_idletasks();self.assertEqual(app.record_list.items[0]['id'],'digest:digest-test')
                 app.record_key='digest:digest-test';app.form=Mock();app.show_digest();self.assertIn('출처',app.form.call_args.args[1][0][1])
                 app.remove_record();app.form.call_args.args[2](dict(confirm='삭제'))

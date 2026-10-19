@@ -40,6 +40,22 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         self.configure();await self.runtime.ingest(self.event(content='다온아 뭐하고 있어'));await self.settle()
         return next(f for f in self.runtime.conversations.flows.values() if f.last_bot)
 
+    async def test_explicit_group_call_survives_uncertain_link_without_invented_membership(self):
+        original=await self.start()
+        self.backend.assess_social.return_value=SocialDecision('uncertain','uncertain','none','other',False)
+        request=replace(self.event(id=41,content='<@999> <@4>랑 같이 새 계획을 검토해줘'),author=5,member_mentions=(999,4))
+        await self.runtime.ingest(request);await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],[10,41])
+        self.assertNotEqual(self.transport.sent[-1][0].conversation_id,original.conversation_id)
+        self.assertNotIn(5,original.participants)
+
+    async def test_explicit_group_call_survives_malformed_optional_classifier(self):
+        await self.start()
+        self.backend.assess_social.side_effect=ValueError('invalid label')
+        await self.runtime.ingest(replace(self.event(id=42,content='<@999> <@4>랑 같이 확인해줘'),member_mentions=(999,4)))
+        await self.settle()
+        self.assertEqual([e.id for e,_ in self.transport.sent],[10,42])
+
     async def test_confirmed_peer_followup_is_semantic_and_has_original_reply(self):
         first=await self.start()
         for i,text in enumerate(('뭐하고있었어','그 이야기는 결말이 의외네','그건 왜 그렇게 된 건데')):

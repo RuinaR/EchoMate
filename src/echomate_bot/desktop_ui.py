@@ -392,9 +392,11 @@ class DesktopApp(CompanionViews):
         self.model_list.place(x=250,y=290,width=280,height=max(90,h-435))
         selected=next((m for m in entries if m['id']==self.model_id),None)
         if selected:
-            self.text(550,295,selected['format']+f" · {selected['bytes']/1024**3:.1f}GB",11,bold=True)
+            sharded=bool(selected.get('largest_shard_bytes',0) and selected['largest_shard_bytes']<selected['bytes'])
+            self.text(550,295,selected['format']+f" · {selected['bytes']/1024**3:.1f}GiB"+(' · 분할 가중치' if sharded else ''),11,bold=True)
             self.text(550,332,selected['reason'],10,MUTED,width=w-590)
             self.text(550,390,selected['path'],9,MUTED,width=w-590)
+            self.text(550,434,'파일 검사 통과 · GPU 준비는 적용할 때 확인해요' if selected['compatible'] else '지원하지 않는 모델은 적용할 수 없어요',9,MUTED,width=w-590)
             current=cfg['model']==selected['id'] or cfg['model']=='base' and 'models--google--gemma-4-12B-it' in selected['path']
             self.text(550,474,'현재 설정된 모델이에요' if current else '목록 선택만으로는 모델이 바뀌지 않아요',8,MUTED,width=w-590)
             self.button(550,520,150,34,'검증 후 적용',lambda:self.set_value('model',selected['id']),enabled=selected['compatible'] and not self.snapshot.get('model_preparing'))
@@ -415,8 +417,7 @@ class DesktopApp(CompanionViews):
         def save(v):
             p.update(name=v['name'],introduction=v['intro'],speech={'반말':'casual','존댓말':'polite'}[v['speech']],energy=int(v['energy']),humor=int(v['humor']),detail={'간단히':'brief','균형':'balanced','자세히':'detailed'}[v['detail']])
             validate_profile(p)
-            self.controller.submit('profiles',action='save',key=v['key'],value=p)
-            self.set_value('character_profile',p)
+            self.controller.submit('profiles',action='save_apply',key=v['key'],value=p)
         import secrets
         def submit(v):v['key']='character-'+secrets.token_hex(5);save(v)
         self.form('캐릭터 편집 · 복제해서 저장',[('name','캐릭터 이름',p['name']),('intro','소개 · 지시문이 아닌 표시 자료',p['introduction']),('speech','기본 말투 · 반말 / 존댓말','반말' if p['speech']=='casual' else '존댓말'),('energy','반응 에너지 · 0~100',p['energy']),('humor','농담 참여 성향 · 0~100',p['humor']),('detail','설명 · 간단히 / 균형 / 자세히',{'brief':'간단히','balanced':'균형','detailed':'자세히'}[p['detail']])],submit,'권한·개인정보·사실성·코드 출력 제한은 프로필로 바꿀 수 없어요.')

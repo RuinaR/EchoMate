@@ -777,7 +777,18 @@ class Runtime:
             self.note('social_metadata_direct')
         else:
             self.stage(event,'social',time.time())
-            decision=await self.backend.assess_social(packet)
+            try:decision=await self.backend.assess_social(packet)
+            except ValueError:
+                if not group_call:raise
+                decision=SocialDecision('bot','new','none','request',True)
+                self.note('social_group_link_unavailable_independent')
+            if group_call and (not decision.respond or decision.target not in ('bot','bot_group') or
+                               decision.anchor!='none' and int(decision.anchor)>=len(frames)):
+                # A confirmed current call remains a request even when the
+                # optional group-link classifier cannot identify its frame.
+                # Do not guess membership or suppress the independent reply.
+                decision=SocialDecision('bot','new','none','request',True)
+                self.note('social_group_link_unavailable_independent')
         anchor,reason=validate_social(decision,event,frames,bot_id=self.transport.bot_id,direct=direct,bot_reply=bot_reply,pending_human=bool(packet['pending_human_exchange']),allow_reaction=packet['reaction_available'])
         observed=dict(speaker=str(event.author),target=decision.target,relation=decision.relation,act=decision.act,
             explicit_call=direct,reply_attached=event.reply_to is not None,
