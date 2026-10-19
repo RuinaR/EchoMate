@@ -103,17 +103,21 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         key=next(k for k in self.c.profiles_view if k!='default')
         export=self.fixture.root/'profile-export.json'
         with patch('tkinter.filedialog.asksaveasfilename',return_value=str(export)):
-            app.profile_files();self.fill(self.dialog(),['내보내기',key]);await self.sync()
+            app.profile_files();self.fill(self.dialog(),['내보내기']);await self.sync()
         self.assertTrue(export.is_file());self.assertNotIn('token',export.read_text(encoding='utf-8'))
+        keys=set(self.c.profiles_view)
         with patch('tkinter.filedialog.askopenfilename',return_value=str(export)):
-            app.profile_files();self.fill(self.dialog(),['가져오기','imported']);await self.sync()
-        self.assertIn('imported',self.c.profiles_view)
+            app.profile_files();self.fill(self.dialog(),['가져오기']);await self.sync()
+        self.assertEqual(len(set(self.c.profiles_view)-keys),1)
+        self.assertEqual(self.c.settings.get()['character_profile'],cfg['character_profile'])
+        self.assertEqual(__import__('json').loads(export.read_text(encoding='utf-8')),cfg['character_profile'])
         before=deepcopy(self.c.settings.get());n=len(self.commands)
         app.advanced_profile();invoke(self.dialog(),'<Escape>');await self.sync()
         self.assertEqual(self.c.settings.get(),before);self.assertEqual(len(self.commands),n)
+        keys=set(self.c.profiles_view)
         with patch('tkinter.filedialog.askopenfilename',return_value=''):
-            app.profile_files();self.fill(self.dialog(),['가져오기','cancelled']);await self.sync()
-        self.assertNotIn('cancelled',self.c.profiles_view)
+            app.profile_files();self.fill(self.dialog(),['가져오기']);await self.sync()
+        self.assertEqual(set(self.c.profiles_view),keys)
 
     async def test_memory_form_crud_and_revoked_consent_reach_actual_sqlite(self):
         app=self.app;app.page='memories';app.record_user='4'
@@ -223,7 +227,7 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.c.settings.get()['character_profile'],DEFAULT_PROFILE)
         broken=self.fixture.root/'broken.json';broken.write_text('{',encoding='utf-8')
         with patch('tkinter.filedialog.askopenfilename',return_value=str(broken)):
-            app.profile_files();self.fill(self.dialog(),['가져오기','bad']);await self.sync()
+            app.profile_files();self.fill(self.dialog(),['가져오기']);await self.sync()
         self.assertTrue(self.c.error);self.assertNotIn('bad',self.c.profiles_view)
 
     async def test_scope_selection_cancel_file_picker_and_command_approval_do_not_connect(self):

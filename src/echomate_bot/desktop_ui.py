@@ -527,8 +527,11 @@ class DesktopApp(CompanionViews):
             export=v['action']=='내보내기'
             if v['action'] not in ('가져오기','내보내기'):raise ValueError()
             path=filedialog.asksaveasfilename(parent=self.root,defaultextension='.json') if export else filedialog.askopenfilename(parent=self.root,filetypes=[('캐릭터 JSON','*.json')])
-            if path:self.controller.submit('profiles',action='export' if export else 'import',key=v['key'],path=path)
-        self.form('프로필 파일',[('action','가져오기 / 내보내기','가져오기'),('key','프로필 ID','my-character')],act,'캐릭터 자료만 담아요. 토큰·대화·기억은 포함하지 않아요.')
+            if path:
+                import secrets
+                self.controller.submit('profiles',action='export_current' if export else 'import',key='imported-'+secrets.token_hex(5),path=path)
+        self.form('프로필 파일',[('action','현재 캐릭터 내보내기 / 새 캐릭터 가져오기 · 내보내기 / 가져오기','내보내기')],act,
+            '내보내기는 현재 적용한 캐릭터예요. 가져오기는 기존 자료를 덮어쓰지 않고 새 프로필로 보관해요. 저장한 프로필에서 선택해 적용하세요. 토큰·대화·기억은 포함하지 않아요.')
 
     def character_preview(self):
         import secrets

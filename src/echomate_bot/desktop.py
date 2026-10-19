@@ -282,6 +282,7 @@ class LocalController:
                 elif action=='delete':await asyncio.to_thread(store.save,owner,key)
                 elif action=='import':await asyncio.to_thread(store.import_file,owner,key,kwargs['path'])
                 elif action=='export':await asyncio.to_thread(store.export_file,key,kwargs['path'])
+                elif action=='export_current':await asyncio.to_thread(store.export_value,self.settings.get()['character_profile'],kwargs['path'])
                 elif action in ('apply','restore'):
                     from .character_profiles import SHARED_FIELDS
                     profile=store.list()[key] if action=='apply' else dict(DEFAULT_PROFILE)

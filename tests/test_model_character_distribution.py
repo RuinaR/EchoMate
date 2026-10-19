@@ -73,6 +73,21 @@ class ModelsAndProfiles(unittest.TestCase):
         with self.assertRaises(ValueError):store.export_file('copy',self.root/'bootstrap.json')
         envelope=json.loads(store.path.read_text(encoding='utf-8'));envelope['data']['copy']['energy']=99;store.path.write_text(json.dumps(envelope),encoding='utf-8')
         with self.assertRaises(PermissionError):store.list()
+    def test_profile_file_operations_preserve_nonprofile_data_and_existing_keys(self):
+        store=ProfileStore(self.root/'characters.json',1,'k'*32)
+        value=dict(DEFAULT_PROFILE,name='안전한 친구')
+        out=self.root/'profile.json';store.export_value(value,out)
+        store.import_file(1,'copy',out);before=store.path.read_bytes()
+        with self.assertRaises(ValueError):store.import_file(1,'copy',out)
+        with self.assertRaises(PermissionError):store.import_file(2,'other',out)
+        self.assertEqual(store.path.read_bytes(),before)
+        for name,raw in [('settings.json',b'{}'),('database.sqlite3',b'SQLite format'),('config.json',b'{"architecture":"other"}'),('weights.safetensors',b'weights')]:
+            target=self.root/name;target.write_bytes(raw)
+            with self.assertRaises(ValueError):store.export_value(value,target)
+            self.assertEqual(target.read_bytes(),raw)
+        store.export_value(dict(value,energy=90),out)
+        self.assertEqual(json.loads(out.read_text(encoding='utf-8'))['energy'],90)
+
     def test_profile_enums_compilation_and_oversized_import_preserve_existing(self):
         low=compile_profile(dict(DEFAULT_PROFILE,energy=10,detail='brief'));high=compile_profile(dict(DEFAULT_PROFILE,energy=90,detail='detailed'))
         self.assertNotEqual(low,high)

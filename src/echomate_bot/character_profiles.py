@@ -72,11 +72,20 @@ class ProfileStore:
         from .settings import atomic_private_json
         self.path.parent.mkdir(parents=True,exist_ok=True);atomic_private_json(self.path,dict(data=data,signature=self._sign(data)))
     def import_file(self,actor,key,path):
+        if type(actor) is not int or actor!=self.owner:raise PermissionError('소유자만 변경할 수 있어요')
+        if key in self.list():raise ValueError('기존 프로필을 덮어쓰지 않아요. 새 프로필로 가져와 주세요')
         if Path(path).stat().st_size>16384:raise ValueError('프로필 파일이 너무 커요')
         return self.save(actor,key,validate_profile(json.loads(Path(path).read_text(encoding='utf-8'))))
     def export_file(self,key,path):
+        return self.export_value(self.list()[key],path)
+    def export_value(self,value,path):
         # Exports only the selected profile. Never bootstrap, runtime or chats.
         if Path(path).resolve()==self.path.resolve() or Path(path).name in ('bootstrap.json','settings.json','characters.json'):raise ValueError('운영 설정 파일에는 내보낼 수 없어요')
-        value=self.list()[key]
+        if Path(path).suffix.lower()!='.json':raise ValueError('캐릭터 JSON 파일로만 내보낼 수 있어요')
+        if Path(path).exists():
+            if Path(path).stat().st_size>16384:raise ValueError('기존 파일을 덮어쓸 수 없어요')
+            try:validate_profile(json.loads(Path(path).read_text(encoding='utf-8')))
+            except (ValueError,TypeError,KeyError):raise ValueError('기존 캐릭터 파일이 아닌 자료는 덮어쓰지 않아요') from None
+        value=deepcopy(validate_profile(value))
         from .settings import atomic_private_json
         atomic_private_json(Path(path),value)
