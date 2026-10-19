@@ -8,6 +8,8 @@
 
 [모델](MODEL-REGISTRY.md) · [캐릭터](CHARACTER-PROFILES.md) · [설치](USER-INSTALLATION.md) · [배포 QA·실패·마감](DISTRIBUTION-QA.md) · [전체 지연](PERFORMANCE-PIPELINE.md). 아래 이전 차수보다 이 절을 우선한다.
 
+최신 구현·검증 커밋 **826a816** (시작5249fd2). 마감 인수인계 문서 커밋은 `git log -1 --oneline`로 확인한다. 공개66파일 staged 검사: 민감 경로/실제 비밀 리터럴/개인 경로/깨진 문서 링크0, 운영4파일 hash동일. 기본 배포 후보는 Gemma4 base이며 실사용 최적 모델·캐릭터 품질 승격을 선언하지 않는다. 이전6dd3ba2 등은 과거 차수다.
+
 최종 전체490 OK58.325초, 운영4파일 hash동일. Portable4.59GiB는 번들 런타임/PATH 격리 import·실제 Controller/숨긴 Tk·합성 DPAPI 최초 설정·프로필 저장/적용·안전 종료·서명 설정 재읽기까지 확인했다. 공식 기본 모델 새 로딩/독립20·캐릭터12·E2E A/B9는 자원 부족으로 미완료다. 다음 우선순위는 호스트 RAM/commit 여유가 확보된 상태에서 위 비공개 고정 protocol을 새 output에 실행, 실제 모델 전환/복구·사회적 부정 사례/캐릭터 효과 검증, 깨끗한 Windows VM/업데이트 확인이다. 사용자 프로그램 종료·page file 변경·실제 Discord를 임의 수행하지 않는다. 소스 라이선스는 명시 허가에 따라 MIT다. 구현 커밋은 마감 후 아래에 기록한다.
 
 ## 2026-10-19 사회적 청자·대화 상대 — 현재 기준

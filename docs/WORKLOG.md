@@ -8,6 +8,8 @@
 
 [모델](MODEL-REGISTRY.md) · [캐릭터](CHARACTER-PROFILES.md) · [설치](USER-INSTALLATION.md) · [배포 QA·실패·마감](DISTRIBUTION-QA.md) · [전체 지연](PERFORMANCE-PIPELINE.md). 아래 이전 차수보다 이 절을 우선한다.
 
+구현 커밋826a816, 시작5249fd2. 공개66파일·staged diff/민감 리터럴/개인 경로/문서 링크 검사0건, 원격main 충돌0/0 확인 후 커밋했다. 비공개 자료와 Portable 런타임은 Git에 포함하지 않았다. 최종 인수인계 문서 커밋은 git log로 확인한다.
+
 변경 파일은 settings/inference/character/adult_policy/model_registry/character_profiles/paths/onboarding/desktop/UI/processes/runtime/social/members/telemetry와 공개 샘플·Portable 빌더·관련 회귀다. 최종 전체490 OK58.325초. GPU 개발46문항45/46 이후 별도20독립평가는 Windows1455로 시작 실패했다. resource commit 사전 차단을 추가하고 실행 중인 다른 앱을 종료하지 않았다. 세 고정 모델 회귀 행렬은 기본 모델+서로 다른 세 캐릭터로 바꿨고 구형 슬롯은 서명 마이그레이션 검사에만 남긴다. 캐릭터12/성능A/B9는 준비만 했다. Portable 라이브러리 폴더 누락은 수정 후 격리 import와 실제 Controller 최초 설정·저장·종료·복원 통과, 깨끗한 VM/실제 Discord는 미검증이다. MIT는 사용자 허가로 적용했고 제3자 라이선스는 유지한다. 운영4파일·가중치를 보존하고 릴리즈 차단을 유지한다.
 
 ## 2026-10-19 사회적 청자·대화 상대 — 현재 기준

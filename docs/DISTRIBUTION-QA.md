@@ -40,6 +40,8 @@ Portable 첫 실행은 라이브러리 내부 models 폴더를 사용자 모델 
 
 ## 릴리즈 판정
 
+공개 구현 커밋 **826a816**. 커밋 전 공개66파일 staged 경로/실제 토큰·키·개인 ID 리터럴/개인 경로/문서 링크 검사0건, diff --check 통과, 원격main과 시작HEAD 차이0/0이었다. 운영4파일 hash동일. 비공개 실행 산출물은 local_data/distribution-qa-20261019, Portable은 dist/EchoMate-rc-model-character에만 있다. 두 경로 모두 Git 비추적이며 Release 자산 업로드 없음. 후속 마감 문서 커밋은 최신 git log를 확인한다.
+
 최종 전체 회귀 `publication-tests.log`: **489 OK61.667초**. 그 뒤 모델 준비와 종료가 함께 실패해도 준비 표시를 해제하는 finally를 보강했고 Controller 관련12검사 OK4.959초, 관련30검사 OK8.480초를 확인했다. 개발 중 문자 인코딩/모듈 경로 도구 오류, 구형 모델 버튼/정책·오류 문구 기대값 불일치, 초기 캐릭터 문자열 연결·목록 setter 인자 오류는 수정해 재검했다. 미실행 코루틴 경고도 오류로 다뤘다. 수치만 늘리는 성공 기준이 아니다.
 
 소유자의 명시 선택으로 EchoMate 소스에 MIT를 적용했다. Python/패키지/CUDA/모델 라이선스를 MIT로 재지정하지 않는다. Portable 후보4.59GiB·약24700파일을 생성했지만 GitHub Release 자산으로 업로드하지 않았다. 운영4파일 hash4/4 동일, 패키지 내 가중치/비공개 DB·token/key/jsonl 파일0을 확인했다. 공개 staged 민감정보 검사와 최종 커밋은 마감 절에 기록한다.
