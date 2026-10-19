@@ -10,7 +10,7 @@
 
 다음 우선순위: 사용자가 직접 다른 작업을 마쳐 여유를 확보한 뒤 **재검사**. 처음 guard 부족10.90GiB, import까지 고려한 시작 여유 계획값 약25.68GiB이며 전체 성공 보장은 아니다. page file 자동 변경/다른 앱 종료/동일 조건 GPU 재시도 금지. full 성공 후 기존 미사용 청자20 → 캐릭터12 → 모델 전환/복구 → 같은 조건 E2E9/공정 큐 → Portable 실모델/미리보기 순으로 검증한다. NF4/실모델 초기화 피크·새 생성품질·새 p50/p95·다른 Windows는 계속 미검증이다.
 
-검증: PYTHONPATH=src;tests 후 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`. 메모리 도구와 새 output 사용법은 LOADER-MEMORY-QA를 따른다. 비공개 원본은 `local_data/loader-qa-20261019/`, 이전 고정 protocol/seal은 `local_data/distribution-qa-20261019/` 보존. 시작 커밋과 최종 변경은 `git log`로 확인하며 최종 소스 커밋은 마감 절에 기록한다. 아래 이전490/826a816 기준은 과거 기록이다.
+검증: PYTHONPATH=src;tests 후 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`. 메모리 도구와 새 output 사용법은 LOADER-MEMORY-QA를 따른다. 비공개 원본은 `local_data/loader-qa-20261019/`, 이전 고정 protocol/seal은 `local_data/distribution-qa-20261019/` 보존. 최신 구현 커밋 **338af1f**(시작f1c0ec6), 이후 인수인계 문서 커밋은 `git log -1`로 확인한다. Portable4.59GiB source81파일 byte/manifest일치, 격리 최초 설정·암호화·저장·복원·숨긴 Tk 종료 성공. 실모델은 로딩하지 않았다. 운영4파일 hash동일·독립20seal유효·공개12파일 민감 검사0건. 아래 이전490/826a816 기준은 과거 기록이다.
 
 ## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
 

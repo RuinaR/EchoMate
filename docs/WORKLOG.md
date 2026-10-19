@@ -7,7 +7,8 @@
 - Safetensors0.8.0 pread도 선행 전체 COW 매핑. 실제 CPU 합성64/256MiB 각2회·512MiB1회 순간 commit64.13/256.50/513.01MiB; mmap256MiB513.01MiB. import private no-LoRA1432.73MiB vs PEFT 포함1546.89MiB. NF4/전체 모델 피크와 구분했다.
 - 실제 원본22.28GiB / guard24.28GiB / 당시 여유13.37GiB로 차단, GPU 모델 load 시도0회. 기존 +2GiB를 보장값으로 쓰지 않고 유지했다. 사용자 프로그램 종료/page file 변경/모델 변경·삭제/Discord 접속 없음.
 - 테스트: PYTHONPATH=src;tests에서 `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`, 최종 **500 OK60.204초**. 새10검사는 counter·admission·재검사·실패 수명·안전 UI를 검증한다. CPU 계측은 `tools/verify_loader_memory.py`, 비공개 `local_data/loader-qa-20261019/`에 원본 보존.
-- 미확인: 새 기본 GPU 로딩·실제 초기화/NF4/해제 피크·독립 청자/캐릭터/전체 E2E/실GPU 공정 큐·Portable 실모델·다른 Windows·실제 Discord. 릴리즈 BLOCKED 유지. 최종 패키지/보존/공개 감사 결과는 마감 절에 이어 기록한다.
+- 미확인: 새 기본 GPU 로딩·실제 초기화/NF4/해제 피크·독립 청자/캐릭터/전체 E2E/실GPU 공정 큐·Portable 실모델·다른 Windows·실제 Discord. 릴리즈 BLOCKED 유지.
+- 마감 구현338af1f: `tools/build_portable.py --refresh-public --output dist/EchoMate-rc-model-character` 성공, 4.59GiB/24,767파일. source81파일 byte/manifest 일치, 가중치/사용자DB/설정0건. 번들Python·격리PATH/새DATA_HOME/빈HFcache에서 `-m echomate_bot.distribution_check` 실제 숨긴Tk/최초설정/DPAPI/프로필저장/설정복원/종료 성공, Discordfalse·weightsfalse. 운영4파일 hash동일·미사용독립20seal유효. 공개12파일 staged diff/check·실제민감리터럴·개인경로·문서링크 검사0건. 상세 로그/보고서 비공개 보존, 이후 문서 commit은 git log 확인.
 
 ## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
 

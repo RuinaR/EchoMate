@@ -10,7 +10,9 @@
 
 NF4/실제 모델 초기화 피크, 기본 no-LoRA 최소 추론, 독립 청자20, 캐릭터12, E2E A/B9, 최신 실제 GPU 전환/공정 큐, Portable 실모델·미리보기는 **BLOCKED 또는 NOT VERIFIED**다. 깨끗한 다른 Windows/장시간 운영/실제 Discord도 NOT VERIFIED. 아래 과거 성공 수치를 이번 GPU 검증으로 재사용하지 않는다. 전체 릴리즈 **BLOCKED**를 유지한다.
 
-패키지 최종 소스 일치·격리 실행과 운영 파일 보존의 마감 결과는 본 절 아래에 누적한다. 공개 소스 외 가중치/데이터/로그는 배포 및 Git에서 제외한다.
+마감 구현 커밋 **338af1f**. Portable 후보 `dist/EchoMate-rc-model-character` 4.59GiB/24,767파일의 공개 소스를 갱신했다. 프로젝트와 번들 source81파일의 집합·전체 bytes·source manifest hash가 일치했다. 번들 Python3.10.11/Torch2.9.1+cu128/Transformers5.20.1/discord.py2.7.1, 시스템 Python 없는 PATH·새 DATA_HOME·빈 HF cache·숨긴 Tk에서 최초 설정/DPAPI 암호화/프로필 저장/설정 복원/종료를 재검증했다. Discord 연결false, 가중치 로딩false, 빈 cache 모델 발견0은 예상 결과다. 실제 모델 로딩/미리보기/다른 Windows 성공으로 해석하지 않는다.
+
+운영 settings/bootstrap/companion/sent 네 파일 hash동일, 미사용 독립20 protocol seal유효. 공개12파일 staged 검사에서 비공개 경로/실제 bootstrap 민감 리터럴/개인 경로/깨진 문서 링크0건, diff check 통과. 패키지의 가중치·사용자 DB·운영 설정0건. 원본·집계·검사 로그는 `local_data/loader-qa-20261019/`에 보존하며 Git/배포에서 제외했다. 소스/문서 최종 커밋은 `git log`를 확인한다. 공개 릴리즈 파일 업로드/정식 릴리즈 승인은 하지 않는다.
 
 시작 main/HEAD5249fd2, 원격 main fetch0/0, 초기 clean. 운영 설정/bootstrap/companion/sent 네 파일 hash와 소스 기준선을 비공개 local_data/distribution-qa-20261019에 보존했다. 실제 Discord 로그인·조회·동기화·송신/사용자 데스크톱 마우스·키보드 조작은 하지 않는다.
 

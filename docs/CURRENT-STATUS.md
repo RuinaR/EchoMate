@@ -6,7 +6,7 @@
 
 단일 모델22.28GiB / 검사 기준24.28GiB / 당시 commit 여유13.37GiB로 사전 중단, GPU 모델 로딩0회. import/processor 후 동일 검사, 실패 참조 해제, 불필요한 Torch import 방지, 앱의 안전한 메모리 수치 안내를 추가했다. +2GiB margin은 전체 피크 검증이 끝난 값이 아니다. 기준을 낮추거나 page file/사용자 프로그램/개인 모델을 변경하지 않았다.
 
-공식 no-LoRA 최소 추론, 독립 청자/캐릭터 생성, 실제 GPU 전환·공정 큐, E2E p50/p95, Portable 실모델·미리보기는 **BLOCKED/NOT VERIFIED**. 다른 Windows·실제 Discord도 미검증이다. 정식 릴리즈 승인 없음. 패키지·보존 마감은 DISTRIBUTION-QA 최신 절을 확인한다.
+공식 no-LoRA 최소 추론, 독립 청자/캐릭터 생성, 실제 GPU 전환·공정 큐, E2E p50/p95, Portable 실모델·미리보기는 **BLOCKED/NOT VERIFIED**. 다른 Windows·실제 Discord도 미검증이다. 정식 릴리즈 승인 없음. 구현338af1f。Portable4.59GiB source81파일 bytes/manifest 일치, 시스템 Python 없는 PATH의 숨긴 Tk·첫 설정·암호화·저장·재읽기·종료 성공. 운영4파일 hash동일·독립20seal유효·공개민감검사0건. 자세한 마감은 DISTRIBUTION-QA 최신 절을 확인한다.
 
 ## 2026-10-19 모델·캐릭터 분리 및 일반 배포 — 최신 기준
 
