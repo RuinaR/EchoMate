@@ -119,3 +119,6 @@ Portable source/runtime hash·실제 새 저장소·숨긴 Tk·DPAPI·설정 복
 Portable 최종 전체 streaming manifest 생성 뒤 **4.59GiB / 24757파일**, source81/docs43 byte·공개 hash 일치, manifest 누락/크기 차이0, 모델·DB·설정·비공개 파일0건을 확인했다. 서명 bootstrap/settings·운영 companion/sent DB 네 파일의 시작/종료 SHA-256도 모두 동일하다. 원본 base weights는 Hub ETag와 실제 전체 SHA-256이 일치했다. 완전히 resolve한 Xet 저장 식별자를 내용SHA로 오인한 첫 감사는 수정했으며 가중치 변경이나 재다운로드를 하지 않았다.
 
 공개38파일의 실제 운영 secret/ID 리터럴·개인 절대 경로·깨진 문서 링크·index/worktree 차이0, staged diff/check를 확인했다. source commit과 마감 문서 commit 및 최종 clean/push는 후속 마감 절과 git log를 따른다. 원본 비공개 산출물·가중치 복사본·Portable 런타임은 GitHub에 올리지 않았다.
+
+
+최종 구현 commit **94c87fc** (시작d7cf29a). 최종 전체523 OK58.467초·공개38파일 stage검사0건·운영4파일hash동일·원본weights Hub ETag 일치. Portable4.59GiB/24757파일 source81/docs43 byte·manifest 공개hash 일치/비공개 파일0. 정식 릴리즈 BLOCKED, 코드·후보만 보존한다. 최신 문서 마감 commit은 git log를 확인한다. 실제 Discord 접속·사용자 데스크톱/게임 조작 금지는 유지한다.
