@@ -17,6 +17,16 @@ from .settings import ROOT,Settings,MOODS,ACTIVITY
 
 STAGES={'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
         'action':'행동 선택','text':'답변 작성','sending':'Discord 전송'}
+NO_RESPONSE = {
+    'name_not_recognized':'등록된 호출 형태가 없어요', 'name_ambiguous':'이름은 보이지만 부른 대상이 불분명해요',
+    'followup_not_linked':'이어지는 대화 근거가 부족해요', 'continuation_rejected':'대상이나 종료 판단에 따라 답하지 않았어요',
+    'autonomy_cooldown':'새 자율 참여의 대기 시간 또는 부하 제한이에요', 'scope_denied':'허용된 대화 범위가 아니에요',
+    'permission_denied':'채널을 볼 권한이 없어요',
+    'queue_rejected':'작업 대기 한도에 도달했어요', 'request_expired':'요청의 최대 대기 시간이 지났어요',
+    'stale_context':'생성 중 대화나 설정이 바뀌었어요', 'generation_failed':'AI 처리 중 오류가 났어요',
+    'action_silence':'현재 문맥에서는 침묵을 선택했어요', 'send_failed':'Discord 전송을 확인하지 못했어요',
+}
+
 MODES={'침묵':'silent','멘션·대화 이어가기':'mention','문맥에 따라 자율 참여':'autonomous'}
 ACTIVITIES={'조용함':'quiet','보통':'normal','활발함':'active','매우 활발함':'very_active'}
 
@@ -91,6 +101,7 @@ class LocalController:
         preparing=bool(runtime and getattr(runtime,'changing_model',False))
         snapshot=dict(phase='모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
                       model_preparing=preparing,
+                      recent_reason=next((NO_RESPONSE.get(r['code'],'') for r in reversed(runtime.diagnostics) if r['code'] in NO_RESPONSE or r['code']=='response_sent'),'') if runtime else '',
                       scheduler=client.backend.scheduler.snapshot() if client and hasattr(client.backend,'scheduler') else {},
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
                       memory_pending=runtime.memory_queue.qsize() if runtime else 0,

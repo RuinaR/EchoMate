@@ -139,18 +139,19 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
 
     async def test_compact_joint_assessment_fast_text_and_unmentioned_continuation(self):
         from echomate_bot.inference import parse_turn_assessment
+        from echomate_bot.dialogue_intent import parse_intent
         self.settings.set(1,'reactions',True)
         calls=[]
-        async def assess(context):calls.append(context);return parse_turn_assessment('0 1 1 1 1')
+        async def assess(context,**kwargs):calls.append(context);return parse_intent('0 0 1 1')
         async def forbidden(*args):raise AssertionError('Redundant model call')
-        self.backend.assess_turn=assess;self.backend.fast_text_path=True
+        self.backend.assess_dialogue=assess;self.backend.fast_text_path=True
         self.backend.classify=forbidden;self.backend.continuity=forbidden;self.backend.propose=forbidden
         await self.runtime.ingest(self.event());await self.settle()
         with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-3')
         # Default new-conversation cooldown stays 60 seconds. This is a follow-up.
         await self.runtime.ingest(self.event(id=11,content='그럼 다음 단계는?'));await self.settle()
-        # A clear single-partner follow-up now needs no interruption-model vote.
-        self.assertEqual(len(calls),0);self.assertEqual(len(self.transport.sent),2)
+        # A follow-up uses one joint semantic pass; direct mentions use none.
+        self.assertEqual(len(calls),1);self.assertEqual(len(self.transport.sent),2)
         self.assertFalse(self.runtime.progress)
         self.assertEqual(len(self.runtime.latencies),2)
         with self.assertRaises(ValueError):parse_turn_assessment('0 1 1 1 1 extra')
@@ -360,13 +361,13 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):self.settings.set(1,'model','untrusted_remote')
         with self.assertRaises(ValueError):self.settings.set(1,'media_probability',1)
         with self.assertRaises(ValueError):self.settings.set(1,'media_probability',2)
-    async def test_visual_presence_reaches_assessment_without_fabricating_user_text(self):
+    async def test_visual_presence_reaches_generation_without_fabricating_user_text(self):
         captured=[]
-        async def classify(context):captured.append(context);return ContextAssessment(False,True,True)
-        self.backend.classify=classify
+        async def generate(context,cfg):captured.append(context);return '합성 답변'
+        self.backend.text=generate
         await self.runtime.ingest(replace(self.event(content='<@999>'),assets=(('attachment:5','https://cdn.discordapp.com/attachments/1/5.png'),)))
         await self.settle()
-        self.assertIn('visual_inputs',captured[0][-1]['content'])
+        self.assertIn('visual_inputs',str(captured[0]))
         _,turns=self.runtime.states[3].snapshot(channel_id=3,thread_id=None)
         self.assertEqual(turns[0].content,'<@999>')
         self.assertIsNotNone(turns[0].context_metadata)
@@ -458,8 +459,8 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(select(0,IDs([99,99,1,3])),[4])
         with self.assertRaises(ValueError):select(0,IDs([99,99,7]))
     async def test_repeated_failures_pause_only_affected_conversation(self):
-        async def fail(context):raise RuntimeError('synthetic')
-        self.backend.classify=fail
+        async def fail(context,cfg):raise RuntimeError('synthetic')
+        self.backend.text=fail
         for i in range(3):await self.runtime.ingest(self.event(id=20+i));await self.settle()
         self.assertFalse(self.runtime.stopped)
         self.assertEqual(self.runtime.flow_failures[3],3)

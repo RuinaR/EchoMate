@@ -52,6 +52,9 @@ class DiscordTransport:
             except ValueError:pass
         return names
 
+    def other_names(self,event):
+        return [name for (guild,uid),name in self.client.user_names.items() if guild==event.guild and uid!=self.bot_id]
+
     async def deliver_reminder(self,row,fresh):
         if not self.client.is_ready():raise ValueError('Disconnected')
         channel=await self.client.fetch_channel(int(row['channel']))
@@ -345,9 +348,10 @@ class EchoClient(discord.Client):
     async def on_message(self,message):
         received=time.monotonic()
         if not message.guild or message.author.bot or message.webhook_id:return
+        self.runtime.note('gateway_message_received')
         parent=message.channel.parent_id if isinstance(message.channel,discord.Thread) else None
         cfg=self.settings.get()
-        if scope(cfg,message.guild.id,message.channel.id,parent)=="silent":return
+        if scope(cfg,message.guild.id,message.channel.id,parent)=="silent":self.runtime.note('scope_denied');return
         self.user_names[(message.guild.id,message.author.id)]=message.author.display_name[:80]
         if len(self.user_names)>1000:self.user_names.pop(next(iter(self.user_names)))
         standard=tuple(dict(id=str(s.id),official_description=(s.description or '')[:180],official_tags=s.tags[:12]) for item in message.stickers if (s:=self.standard_stickers.get(item.id)))

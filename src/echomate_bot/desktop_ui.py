@@ -356,7 +356,7 @@ class DesktopApp(CompanionViews):
         if s['pending']>1 or s['contexts']>1:
             counts=q.get('counts',{});self.text(248,h-157,f"GPU 실행 {q.get('running',0)} · 대기 {q.get('waiting',0)} · 최장 대기 {q.get('oldest_seconds',0)}초 · 취소 {counts.get('cancelled',0)} · 실패 {counts.get('failed',0)}",9,MUTED)
         self.text(248,h-130,f"기억 정리 대기 {s.get('memory_pending',0)}건 · 알림 확인 {'동작 중' if s.get('private_service') else '봇 연결 후 시작'}",9,MUTED)
-        self.text(248,h-107,'대화 내용은 이 화면에 표시하지 않아요. 긴 답변은 작성에 시간이 더 걸릴 수 있어요.',9,MUTED)
+        self.text(248,h-107,'최근 판단: '+s['recent_reason'] if s.get('recent_reason') else '대화 내용은 이 화면에 표시하지 않아요.',9,MUTED,width=w-300)
     def draw_outputs(self,w,h,cfg):
         if not cfg:return
         rounded(self.canvas,226,143,w-252,h-210,PANEL)

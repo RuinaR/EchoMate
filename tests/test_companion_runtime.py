@@ -76,7 +76,9 @@ class CommonRuntime(unittest.IsolatedAsyncioTestCase):
         await self.runtime.reaction_event(2,3,5,9001,'👍',remove=True)
         self.assertEqual(self.store.familiarity(2,5),50)
 
-    async def test_grounded_single_partner_question_skips_interruption_vote_but_ending_does_not(self):
+    async def test_single_partner_semantic_request_and_ending_are_distinguished(self):
+        from echomate_bot.dialogue_intent import DialogueIntent
+        self.backend.assess_dialogue=AsyncMock(return_value=DialogueIntent('request','bot','continue',True))
         self.backend.fast_text_path=True
         await self.runtime.ingest(self.event());await self.settle()
         self.backend.classify=AsyncMock(return_value=ContextAssessment(False,False,False))
@@ -84,6 +86,7 @@ class CommonRuntime(unittest.IsolatedAsyncioTestCase):
         with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-3')
         await self.runtime.ingest(self.event(id=11,content='그럼 3 더하기 4의 답만 알려줘'));await self.settle()
         self.backend.classify.assert_not_awaited();self.assertEqual(len(self.transport.sent),2)
+        self.backend.assess_dialogue.return_value=DialogueIntent('closing','bot','end',False)
         await self.runtime.ingest(self.event(id=12,content='고마워, 여기까지면 충분해. 이제 다른 친구랑 이야기할게.'));await self.settle()
         await self.runtime.ingest(self.event(id=13,content='다음 질문은 7 더하기 8이야?'));await self.settle()
         self.assertEqual(len(self.transport.sent),2)

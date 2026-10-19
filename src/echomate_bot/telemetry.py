@@ -35,6 +35,7 @@ class Trace:
         self.calls = []
         self.outcome = 'silence'
         self.regenerations = 0
+        self.codes = []
 
     def stage(self, name):
         if name not in STAGES:raise ValueError('Unknown stage')
@@ -49,7 +50,7 @@ class Trace:
         if self.stage_name:
             self.stages[self.stage_name] = self.stages.get(self.stage_name,0.)+now-self.stage_at
         return dict(seconds=now-self.started, outcome=self.outcome, stages=self.stages,
-                    regenerations=self.regenerations, calls=self.calls,decision=getattr(self,'decision',None))
+                    regenerations=self.regenerations, calls=self.calls,codes=self.codes,decision=getattr(self,'decision',None))
 
 
 @contextmanager

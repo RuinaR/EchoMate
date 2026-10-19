@@ -22,7 +22,7 @@ from .actions import Action,Kind,parse_action,validate_action
 from .vision import download
 from .character import effective_character
 from .telemetry import Trace,active_trace,summarize
-from .naming import guild_name,name_candidate
+from .naming import guild_name,name_address
 from .adult_policy import turn_profile,adult_request_blocked,boundary_limited
 
 
@@ -274,6 +274,8 @@ class Runtime:
                             self._schedule(event,state,request)
 
     def note(self,code):
+        trace=active_trace.get()
+        if trace:trace.codes.append(code)
         record=dict(at=time.time(),code=code)
         self.diagnostics.append(record);self.diagnostics=self.diagnostics[-200:]
         path=self.ledger.path.parent/'diagnostic.jsonl'
@@ -308,14 +310,16 @@ class Runtime:
         for task in list(self.tasks.values()):task.cancel()
 
     async def ingest(self,event):
-        if self.stopped or event.bot or event.opted_out or scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':return
+        self.note('event_received')
+        if self.stopped or event.bot or event.opted_out:return
+        if scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':self.note('scope_denied');return
         lock=self.ingest_locks.setdefault(event.channel,asyncio.Lock())
         async with lock:await self._ingest(event)
 
     async def _ingest(self,event):
         cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
         if self.stopped or event.bot or event.opted_out or mode=="silent":return
-        if not (await self.transport.permissions(event)).get("view",False):return
+        if not (await self.transport.permissions(event)).get("view",False):self.note('permission_denied');return
         if self.stopped or scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':return
         if event.id in self.seen:return
         self.seen[event.id]=time.time()
@@ -323,7 +327,10 @@ class Runtime:
         if len(self.seen)>5000:self.seen.pop(next(iter(self.seen)))
         extra=list(cfg['guilds'].get(str(event.guild),{}).get('aliases',()))
         if hasattr(self.transport,'address_names'):extra.extend(self.transport.address_names(event))
-        explicit=mentions_bot(event.content,self.transport.bot_id) or name_candidate(event.content,guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True))
+        name_evidence=name_address(event.content,guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True),
+                                   self.transport.other_names(event) if hasattr(self.transport,'other_names') else ())
+        self.note('name_direct_accepted' if name_evidence=='direct' else 'name_ambiguous' if name_evidence=='ambiguous' else 'name_not_recognized')
+        explicit=mentions_bot(event.content,self.transport.bot_id) or name_evidence!='none'
         verified_reply=False
         if event.reply_to:
             reply_key=self.conversations.message_flow.get((event.guild,event.channel,str(event.reply_to)))
@@ -342,7 +349,15 @@ class Runtime:
         intent=re.sub(r'^\s*<@!?'+str(self.transport.bot_id)+r'>[, :]*','',event.content)
         for form in sorted(address_forms(guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True)),key=len,reverse=True):
             intent=re.sub(r'^\s*'+re.escape(form)+r'(?:아|야|님)?(?:[, :]+|$)','',intent,flags=re.I)
-        flow,relation=self.conversations.choose(event,direct=explicit,pending=self.tasks.keys()|self.deferred_events.keys(),intent_text=intent)
+        # A new speaker's bare, verified call has no independent topic. It can
+        # join the unique invited dialogue without inventing a Discord reply.
+        bare_join=[]
+        if name_evidence=='direct' and not intent.strip():
+            place=[f for f in self.conversations.flows.values() if f.guild==event.guild and f.channel==event.channel and not f.ended]
+            if not any(event.author in f.participants for f in place):
+                bare_join=list({f.conversation_id:f for f in place if f.engaged and (f.last_bot or f.key in self.tasks)}.values())
+        if len(bare_join)==1:flow,relation=bare_join[0],'reply'
+        else:flow,relation=self.conversations.choose(event,direct=explicit,pending=self.tasks.keys()|self.deferred_events.keys(),intent_text=intent)
         if flow is None:self.note('ambiguous_request_cancel');return
         if relation=='cancel':
             pending=self.requests.get(flow.key) or self.deferred_events.get(flow.key)
@@ -353,7 +368,7 @@ class Runtime:
             flow.ended=True;flow.engaged=False;self.activity_changed()
             self.note('explicit_request_cancelled');return
         from .sessions import END
-        if relation=='end' or END.fullmatch(intent.strip()):
+        if (relation=='end' or END.fullmatch(intent.strip())) and (not hasattr(self.backend,'assess_dialogue') or re.fullmatch(r'대화\s*끝|여기까지',intent.strip())):
             self.end_conversation(flow,event.author)
             if flow.key not in self.states:self.conversations.drop(flow.key)
             return
@@ -374,7 +389,11 @@ class Runtime:
         from .routing import prose
         ordinary=prose(event.content)
         other_target=bool(MENTION.search(ordinary) or re.search(r'너\s*말고|봇\s*말고|다른\s*사람|(?:친구|걔)(?:한테|에게)|^[가-힣A-Za-z]{1,16}[아야][,\s]',ordinary))
-        event=replace(event,flow_key=flow.key,conversation_id=flow.conversation_id,invited=bool(verified_reply or relation=='independent' and prior and ordinary.strip() and not other_target))
+        if name_evidence=='direct' or mentions_bot(event.content,self.transport.bot_id):other_target=False
+        related_pending=bool(relation=='independent' and prior and ordinary.strip() and not other_target)
+        if related_pending and hasattr(self.backend,'assess_dialogue'):
+            flow.candidate_key=prior[0].key;relation='group_candidate'
+        event=replace(event,flow_key=flow.key,conversation_id=flow.conversation_id,invited=bool(verified_reply or related_pending and not hasattr(self.backend,'assess_dialogue')))
         import hashlib
         event=replace(event,target_content_hash=hashlib.sha256(event.content.encode()).hexdigest(),source_content_hash=hashlib.sha256(event.content.encode()).hexdigest())
         self.conversations.observe(flow,event)
@@ -405,8 +424,9 @@ class Runtime:
             g=cfg['guilds'].get(str(event.guild),{})
             details['bot_names']=sorted(address_forms(guild_name(cfg,event.guild),extra_names,g.get('partial_names',True)))
             metadata=json.dumps(details,ensure_ascii=False)
-        if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None,context_metadata=metadata)):return
-        if self.companion and cfg['memory_auto']:
+        if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None,context_metadata=metadata)):
+            self.note('out_of_order_or_duplicate');return
+        if self.companion and cfg['memory_auto'] and not (flow.candidate_key is not None and hasattr(self.backend,'assess_dialogue')):
             try:self.memory_queue.put_nowait((event,self.settings.revision))
             except asyncio.QueueFull:self.note('memory_queue_full')
         request_content=None
@@ -419,7 +439,7 @@ class Runtime:
             self.pending_mentions[self.key(event)]=(event.author,event.timestamp,event.content,event.id)
         else:self.pending_mentions.pop(self.key(event),None)
         if explicit or event.invited:flow.engaged=True;self.activity_changed()
-        elif not flow.engaged and relation!='group_candidate' and not self.autonomy_allowed(event):
+        elif not flow.engaged and relation not in ('group_candidate','continue','reply') and not self.autonomy_allowed(event):
             self.note('new_autonomy_blocked');return
         if self.changing_model or not self.gateway_available:
             self.deferred_events[self.key(event)]=(event,request_content);return
@@ -442,7 +462,8 @@ class Runtime:
                 state.is_current(channel_id=event.channel,thread_id=None,version=version) and
                 time.monotonic()<=event.received_at+180 and
                 self.settings.revision==revision and scope(self.settings.get(),event.guild,event.channel,event.parent)!="silent")
-        if not current():return False
+        if not current():
+            self.note('request_expired' if time.monotonic()>event.received_at+180 else 'stale_context');return False
         permissions=await self.transport.permissions(event)
         age_ok=permissions.get('age_restricted') is True
         if require_adult and age_ok and permissions.get('view',False) and hasattr(self.transport,'verify_adult'):
@@ -451,6 +472,7 @@ class Runtime:
 
     async def process(self,event,state,request_content=None):
         trace=Trace(event.received_at);token=active_trace.set(trace)
+        memory_revision=self.settings.revision
         from .scheduler import request_context
         flow=self.conversations.flows.get(self.key(event))
         request_token=request_context.set(dict(conversation_id=flow.conversation_id if flow else 'offline',
@@ -459,12 +481,14 @@ class Runtime:
             created_at=event.received_at,deadline=event.received_at+180,
             context_version=state.snapshot(channel_id=event.channel,thread_id=None)[0]))
         user_lock=self.turn_locks.setdefault((event.guild,event.channel,event.author),asyncio.Lock())
-        conversation_lock=self.conversation_locks.setdefault(flow.conversation_id if flow else self.key(event),asyncio.Lock())
         try:
             # Fixed order: author FIFO -> shared-flow FIFO -> GPU admission -> send.
             # No GPU work is held while acquiring either conversation lock.
             self.stage(event,'conversation_wait',time.time())
             async with user_lock:
+                flow=self.conversations.flows.get(self.key(event))
+                lock_flow=self.conversations.flows.get(flow.candidate_key) if flow and flow.candidate_key is not None else flow
+                conversation_lock=self.conversation_locks.setdefault(lock_flow.conversation_id if lock_flow else self.key(event),asyncio.Lock())
                 async with conversation_lock:await self._process(event,state,request_content)
         except asyncio.CancelledError:
             trace.outcome='cancelled';raise
@@ -473,6 +497,10 @@ class Runtime:
             if flow and not flow.last_bot and self.tasks.get(self.key(event)) is asyncio.current_task():flow.engaged=False
             if self.tasks.get(self.key(event)) is asyncio.current_task():self.progress.pop(self.key(event),None)
             self.activity_changed()
+            if (flow and flow.candidate_key is not None and self.companion and self.settings.get()['memory_auto'] and
+                memory_revision==self.settings.revision and trace.outcome!='cancelled' and hasattr(self.backend,'assess_dialogue')):
+                try:self.memory_queue.put_nowait((replace(event,conversation_id=flow.conversation_id),memory_revision))
+                except asyncio.QueueFull:self.note('memory_queue_full')
             self.traces.append(trace.finish());self.traces=self.traces[-1000:]
             active_trace.reset(token)
             request_context.reset(request_token)
@@ -487,6 +515,7 @@ class Runtime:
             except OSError:self.note('telemetry_write_failed')
 
     async def _process(self,event,state,request_content=None):
+        if getattr(self.backend,'failed',False):self.stopped=True;self.note('safe_disabled');return
         if self.flow_failures.get(self.key(event),0)>=3:self.note('conversation_error_paused');return
         started=time.time();self.stage(event,'assessment',started)
         revision=self.settings.revision;cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
@@ -513,15 +542,15 @@ class Runtime:
             guild_cfg=cfg['guilds'].get(str(event.guild),{})
             aliases=list(guild_cfg.get('aliases',()))
             if hasattr(self.transport,'address_names'):aliases.extend(self.transport.address_names(event))
-            named=name_candidate(event.content,guild_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True))
+            name_evidence=name_address(event.content,guild_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True),
+                                       self.transport.other_names(event) if hasattr(self.transport,'other_names') else ())
+            named=name_evidence!='none'
+            from .routing import prose
+            if not mention and name_evidence!='direct' and MENTION.search(prose(event.content)):
+                self.note('continuation_rejected');return
             _,known_turns=state.snapshot(channel_id=event.channel,thread_id=None)
             verified_bot_reply=any(t.is_bot and t.message_id==str(event.reply_to) for t in known_turns[:-1])
-            direct=mention or verified_bot_reply or event.invited
-            if not direct and not named and self.followup_fast_path:
-                from .routing import grounded_followup,grounded_group_followup
-                flow=self.conversations.flows.get(self.key(event))
-                if grounded_followup(known_turns,event) or flow and not flow.ended and grounded_group_followup(known_turns,event,flow.participants):
-                    direct=True;self.note('grounded_followup_no_interruption_vote')
+            direct=mention or name_evidence=='direct' or verified_bot_reply or event.invited
             if mention:
                 allowed,_=permit_mention_reply(MentionPolicy(allowed_channel_ids=frozenset({event.channel}),cooldown_seconds=0),
                     content=verified_request,bot_user_id=self.transport.bot_id,channel_id=event.channel,thread_id=None,
@@ -531,21 +560,78 @@ class Runtime:
             if not direct and not named and mode=="mention":
                 # Verified reply/semantic addressee may continue existing participation.
                 _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
-                if not any(t.is_bot for t in turns):return
+                if not any(t.is_bot for t in turns) and not (flow and flow.candidate_key is not None):self.note('followup_not_linked');return
             from .scheduler import request_context
             metadata=request_context.get()
             if metadata is not None:
-                metadata.update(request_type='mention' if mention else 'name' if named else 'continuation' if direct or any(t.is_bot for t in known_turns) else 'autonomy',
-                                priority=0 if mention or named else 1 if direct or any(t.is_bot for t in known_turns) else 2)
-            evidence=None
-            if direct and text_mode!='silent' and getattr(self.backend,'fast_text_path',False):
-                # A verified explicit request does not need an interruption vote.
-                # Response safety and deterministic send checks still apply.
+                metadata.update(request_type='mention' if mention else 'name' if named else 'continuation' if direct or any(t.is_bot for t in known_turns) or flow and flow.candidate_key is not None else 'autonomy',
+                                priority=0 if mention or named else 1 if direct or any(t.is_bot for t in known_turns) or flow and flow.candidate_key is not None else 2)
+            evidence=None;intent=None;semantic_group=False
+            semantic_context=context
+            candidate=self.conversations.flows.get(flow.candidate_key) if flow and flow.candidate_key is not None else None
+            if candidate and candidate.key in self.states and not candidate.ended:
+                candidate_version=self.states[candidate.key].snapshot(channel_id=event.channel,thread_id=None)[0]
+                _,candidate_context=self.states[candidate.key].recent_context(channel_id=event.channel,thread_id=None,max_chars=5000)
+                semantic_context=[*candidate_context,*context[-1:]]
+            guaranteed_direct=direct
+            if direct and text_mode!='silent' and not candidate:
                 from echomate_studio.participation import ContextAssessment
                 assessment=ContextAssessment(False,True,True)
                 self.note('explicit_request_no_interruption_vote')
+            elif hasattr(self.backend,'assess_dialogue'):
+                from echomate_studio.participation import ContextAssessment
+                from echomate_studio.implicit_address import ImplicitAddress
+                evidence_turns=self.states[candidate.key].snapshot(channel_id=event.channel,thread_id=None)[1] if candidate and candidate.key in self.states else known_turns
+                last_bot=next((t for t in reversed(evidence_turns) if t.is_bot),None)
+                last_recipient=next((t.author_id for t in evidence_turns if last_bot and t.message_id==last_bot.reply_to),None)
+                facts=dict(bot_user_id=str(self.transport.bot_id),current_author_id=str(event.author),
+                    last_bot_reply_recipient=last_recipient,reply_to_current_author=last_recipient==str(event.author),
+                    explicit_name_evidence=name_evidence,reply_to=str(event.reply_to) if event.reply_to else None)
+                intent=await self.backend.assess_dialogue(semantic_context,facts=facts)
+                from .naming import address_forms
+                mentioned_name=any(n.casefold() in event.content.casefold() for n in address_forms(guild_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True)))
+                if not guaranteed_direct and hasattr(self.backend,'verify_target') and intent.link!='end' and (mentioned_name or intent.target!='bot' and last_bot):
+                    verified=await self.backend.verify_target(semantic_context,facts=facts)
+                    self.note('target_verified_'+verified)
+                    if verified in ('direct','continue'):
+                        intent=replace(intent,target='bot',link='continue' if verified=='continue' else 'new',respond=True)
+                    elif verified=='group_continue':intent=replace(intent,target='group',link='continue',respond=True)
+                    else:intent=replace(intent,target='other' if verified=='other' else 'uncertain',respond=False)
+
+                if guaranteed_direct:intent=replace(intent,target='bot',respond=True,link='continue' if intent.link=='continue' else 'new')
+                semantic_group=bool(intent.target=='group' and intent.link=='continue' and intent.respond and last_bot)
+                addressed=intent.target=='bot' and intent.link!='end'
+                if addressed and intent.respond:direct=True
+                assessment=ContextAssessment(False,intent.respond,intent.respond)
+                evidence=ImplicitAddress(addressed,intent.link=='continue')
+                if intent.link=='end':
+                    if flow:flow.ended=True;flow.engaged=False;self.activity_changed()
+                    self.note('continuation_rejected');return
+                candidate_current=bool(candidate and not candidate.ended and candidate.key in self.states and
+                    self.states[candidate.key].is_current(channel_id=event.channel,thread_id=None,version=candidate_version))
+                if candidate and not candidate_current and not guaranteed_direct:
+                    self.note('stale_context');return
+                if candidate_current and (addressed or semantic_group) and intent.link=='continue' and intent.respond:
+                    # Only actual source turns are merged, after semantic approval.
+                    state.merge_actual(channel_id=event.channel,thread_id=None,
+                        turns=self.states[candidate.key].snapshot(channel_id=event.channel,thread_id=None)[1])
+                    flow.conversation_id=candidate.conversation_id
+                    flow.participants.update(candidate.participants);candidate.participants.add(event.author)
+                    event=replace(event,conversation_id=flow.conversation_id)
+                    if metadata is not None:metadata['conversation_id']=flow.conversation_id
+                    if cfg['context_excerpts']:version,context=build_context(state,event.channel,event.content,event.reply_to)
+                    else:version,context=state.recent_context(channel_id=event.channel,thread_id=None,max_chars=6000)
+                    if context and context[-1]['role']=='assistant':context.append(dict(role='user',content=event.content))
+                    if metadata is not None:metadata['context_version']=version
+                    direct=direct or addressed;self.note('semantic_group_joined')
+                elif candidate:self.note('followup_not_linked')
+                if not intent.respond:
+                    if flow:flow.engaged=False;self.activity_changed()
+                    self.note('semantic_'+intent.act+'_'+intent.target+'_'+intent.link)
+                    self.note('continuation_rejected');return
             elif hasattr(self.backend,'assess_turn'):assessment,evidence=await self.backend.assess_turn(context)
             else:assessment=await self.backend.classify(context)
+            if intent:self.note('semantic_'+intent.act+'_'+intent.target+'_'+intent.link)
             active_trace.get().decision=dict(sensitive=assessment.is_sensitive_moment,useful=assessment.has_useful_contribution,
                 appropriate=assessment.interruption_is_appropriate,addressed=evidence.addressed_to_bot if evidence else None,
                 topic=evidence.topic_continues if evidence else None)
@@ -554,14 +640,14 @@ class Runtime:
                 if evidence.addressed_to_bot and assessment.interruption_is_appropriate:
                     direct=True
 
-            continuing=False
+            continuing=semantic_group
             _,turns=state.snapshot(channel_id=event.channel,thread_id=None)
             if not direct and any(t.is_bot for t in turns[:-1]):
                 if evidence is None:
                     self.stage(event,'continuity',started)
                     evidence=await self.backend.continuity(context)
                 reply_verified=any(t.is_bot and t.message_id==str(event.reply_to) for t in turns[:-1])
-                continuing=continue_engagement(EngagementPolicy(),ongoing=True,
+                continuing=semantic_group or continue_engagement(EngagementPolicy(),ongoing=True,
                     seconds_since_last_bot_reply=since,addressed_to_bot=reply_verified or evidence.addressed_to_bot,topic_continues=evidence.topic_continues)
                 # A new question explicitly addressed to the established bot is
                 # not a random new interruption merely because its topic changed.
@@ -570,12 +656,14 @@ class Runtime:
             # Sensitivity limits unsolicited interruption, not an invited request
             # for comfort/information. Output privacy/safety gates remain separate.
             if assessment.is_sensitive_moment and not (direct or continuing):return
+            if not direct and not continuing and intent and intent.target in ('other','uncertain'):
+                self.note('continuation_rejected');return
             if not direct and not continuing:
                 flow=self.conversations.flows.get(self.key(event))
                 if flow and flow.engaged and evidence and not evidence.addressed_to_bot and not evidence.topic_continues:
                     flow.ended=True;flow.engaged=False;self.activity_changed()
-                if not self.autonomy_allowed(event):self.note('new_autonomy_blocked');return
-                if mode=="mention":return
+                if not self.autonomy_allowed(event):self.note('autonomy_cooldown');return
+                if mode=="mention":self.note('continuation_rejected' if any(t.is_bot for t in turns) else 'followup_not_linked');return
                 decision=decide(ParticipationPolicy(enabled=True,allowed_channel_ids=frozenset({event.channel}),
                     opportunity_probability=self.autonomy_probability(cfg),cooldown_seconds=cfg["cooldown"]),assessment,
                     channel_id=event.channel,thread_id=None,is_bot_message=False,opted_out=False,
@@ -660,6 +748,7 @@ class Runtime:
             if proposed.kind.value not in allowed:
                 self.note('disabled_candidate_veto');return
             if proposed.kind==Kind.SILENCE:
+                self.note('action_silence')
                 self.pending_mentions.pop(self.key(event),None);return
             if reaction_only and proposed.kind!=Kind.REACTION:
                 self.note('reaction_mode_veto');return
@@ -701,7 +790,7 @@ class Runtime:
             if not validate_action(action,self.settings.get(),mode,permissions,latest_catalog,self.library,event.guild):
                 self.note('action_policy_veto');return
             if not await self.fresh(event,state,version,revision):
-                self.note('stale_output_veto');return
+                self.note('stale_context');return
             lock=self.send_locks.setdefault(event.channel,asyncio.Lock())
             async with lock:
                 while direct or continuing:
@@ -735,6 +824,7 @@ class Runtime:
                         state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(sent) if sent else 'reaction:'+str(event.id),str(self.transport.bot_id),bot_content,
                             datetime.now(timezone.utc),is_bot=True,reply_to=str(event.response_to or event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
                     active_trace.get().outcome="sent"
+                    self.note('response_sent')
                     self.failures=0;self.flow_failures.pop(self.key(event),None)
                     if self.companion and cfg['relations_auto'] and await self.automatic_subject_allowed(event.guild,event.author):
                         try:await asyncio.to_thread(self.companion.relationship,event.guild,event.author,'reply:'+str(event.id),'reaction' if action.kind==Kind.REACTION else 'conversation')
@@ -749,6 +839,8 @@ class Runtime:
             self.note("stale_cancelled");raise
         except Exception as exc:
             active_trace.get().outcome="failed"
+            from .scheduler import QueueRejected,RequestExpired
+            self.note("queue_rejected" if isinstance(exc,QueueRejected) else "request_expired" if isinstance(exc,RequestExpired) else "generation_failed" if self.progress.get(self.key(event),{}).get("stage") in ("text","assessment","continuity","action") else "turn_failed_"+type(exc).__name__)
             self.failures+=1;self.note("turn_failed_"+type(exc).__name__)
             self.flow_failures[self.key(event)]=self.flow_failures.get(self.key(event),0)+1
             if getattr(self.backend,"failed",False):

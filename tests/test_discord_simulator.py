@@ -11,7 +11,7 @@ import secrets
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch,AsyncMock
 
 import discord
 from echomate_bot.actions import Action, Kind
@@ -125,6 +125,20 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
         await self.client.on_message(self.message(mid=101, author=999))
         self.assertEqual(self.client.backend.calls, [])
         self.assertEqual(self.http.sends, [])
+
+    async def test_name_then_unpunctuated_followup_through_sdk_keep_distinct_replies(self):
+        from echomate_bot.dialogue_intent import DialogueIntent
+        self.settings.change(1,lambda c:c['guilds']['2'].update(name='다온봇'))
+        self.client.runtime.direct_cooldown=0
+        self.client.backend.assess_dialogue=AsyncMock(return_value=DialogueIntent('question','bot','continue',True))
+        sources=[]
+        for text in ('다온아','어떤 생각하고있었어'):
+            await asyncio.sleep(.01)
+            mid=discord.utils.time_snowflake(datetime.now(timezone.utc));sources.append(mid)
+            await self.client.on_message(self.message(mid=mid,content=text))
+            await asyncio.wait_for(asyncio.gather(*list(self.client.runtime.tasks.values())),5)
+        self.assertEqual([int(b['message_reference']['message_id']) for _,b in self.http.sends],sources)
+        self.client.backend.assess_dialogue.assert_awaited_once()
 
     async def test_thread_permissions_reaction_and_standard_sticker_keep_source(self):
         self.message(channel=30)

@@ -119,20 +119,21 @@ class AdultRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.transport.sent[0][0].response_to,200)
 
     async def test_all_three_modes_continue_without_entry_chance_across_people_topics_and_pause(self):
+        from echomate_bot.dialogue_intent import DialogueIntent
         self.backend.prepare_mode=AsyncMock();self.settings.set(1,'activity','quiet')
         for index,model in enumerate(('base','persona','adult')):
             channel=30+index;self.settings.set_scope(1,2,channel,'mention',inherit=True)
             self.settings.set(1,'model',model);before=len(self.transport.sent)
             await self.runtime.ingest(self.event(id=100+index*10,channel=channel));await self.settle()
             with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-700')
-            self.backend.continuity=AsyncMock(return_value=ImplicitAddress(True,True))
+            self.backend.assess_dialogue=AsyncMock(return_value=DialogueIntent('reaction','bot','continue',True))
             await self.runtime.ingest(replace(self.event(id=101+index*10,channel=channel,content='그 이야기 조금 더 알려 줘.'),author=5));await self.settle()
             self.assertEqual(len(self.transport.sent),before+2)
             with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-3')
-            self.backend.continuity=AsyncMock(return_value=ImplicitAddress(True,False))
+            self.backend.assess_dialogue=AsyncMock(return_value=DialogueIntent('question','bot','new',True))
             await self.runtime.ingest(self.event(id=102+index*10,channel=channel,content='너에게 새 질문이야. 다른 주제도 물어볼게.'));await self.settle()
             self.assertEqual(len(self.transport.sent),before+3)
-            self.backend.continuity=AsyncMock(return_value=ImplicitAddress(False,False))
+            self.backend.assess_dialogue=AsyncMock(return_value=DialogueIntent('closing','other','end',False))
             await self.runtime.ingest(self.event(id=103+index*10,channel=channel,content='고마워, 이제 우리끼리 이야기할게.'));await self.settle()
             self.assertEqual(len(self.transport.sent),before+3)
 

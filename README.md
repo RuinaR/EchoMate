@@ -1,5 +1,8 @@
 # EchoMate
 
+명확한 이름 호출·문장부호 없는 후속·그룹 평가·기분 표현의 최신 변경과 검증 범위는 [의미 중심 참여](docs/SEMANTIC-ROUTING.md)를 참고하세요. 실제 서버 테스트 없이 로컬 GPU·모의 환경으로 검증했습니다.
+
+
 다중 사용자 요청·고정 원본 답장·공정한 단일 GPU 큐의 최신 구현은 [병렬 대화 문서](docs/PARALLEL-CONVERSATIONS.md), 실제 검증과 릴리즈 NOT VERIFIED의 근거는 [릴리즈 QA](docs/RELEASE-QA.md)를 먼저 읽으세요.
 
 공통 대화·관계·선택 기억·자연어 예약의 최신 구현/검증/사용법은 [통합 문서](docs/COMPANION-MEMORY-REMINDERS.md)를 참고하세요. 자동 기억은 기본 꺼짐이며 실제 Discord 1분 알림 시험을 완료했습니다. 모델 최종 선정과 장시간 품질 승인은 별도입니다.

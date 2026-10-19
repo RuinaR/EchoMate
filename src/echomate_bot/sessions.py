@@ -23,6 +23,7 @@ class Conversation:
     engaged:bool=False
     topic:str=''
     last_bot:str|None=None
+    candidate_key:object=None
 
 class Conversations:
     def __init__(self):self.flows={};self.message_flow={}
@@ -35,16 +36,18 @@ class Conversations:
         reply=self.message_flow.get((event.guild,event.channel,str(event.reply_to))) if event.reply_to else None
         flow=self.flows.get(reply)
         if flow:
-            # Explicit reply is the only automatic way for a new speaker to join.
+            # Actual reply proves a shared flow; Runtime separately handles verified bare calls.
             flow.ended=False
             return flow,'cancel' if CANCEL.fullmatch(text) and event.author in flow.participants else 'reply'
         if CANCEL.fullmatch(text):
             active=[f for f in own if f.key in pending]
             return (active[0],'cancel') if len(active)==1 else (None,'ambiguous_cancel')
         if END.fullmatch(text) and own:return own[0],'end'
-        if not own and not direct and re.search(r'그\s*이야기|나도|저도|우리도|같이',text):
-            shared=[f for f in self.flows.values() if (f.guild,f.channel)==place and not f.ended and f.last_bot and f.key not in pending]
-            if len(shared)==1:return shared[0],'group_candidate'  # still requires semantic addressee approval
+        candidate=None
+        if not own and not direct:
+            shared=[f for f in self.flows.values() if (f.guild,f.channel)==place and not f.ended and f.engaged and f.last_bot and f.key not in pending]
+            unique={f.conversation_id:f for f in sorted(shared,key=lambda f:f.last_at)}
+            if len(unique)==1:candidate=next(iter(unique.values()))  # evidence candidate, not automatic membership
         if own:
             latest=own[0]
             busy=latest.key in pending
@@ -53,8 +56,8 @@ class Conversations:
                 if SUPPLEMENT.search(text):return latest,'supplement'
             # Busy independent questions own their source and version; no overwrite.
         key=event.channel if not any(f.channel==event.channel for f in self.flows.values()) else (event.guild,event.channel,secrets.token_hex(8))
-        flow=Conversation(key,event.guild,event.channel,event.parent);self.flows[key]=flow
-        return flow,'independent' if own else 'new'
+        flow=Conversation(key,event.guild,event.channel,event.parent,candidate_key=candidate.key if candidate else None);self.flows[key]=flow
+        return flow,'independent' if own else 'group_candidate' if candidate else 'new'
 
     def observe(self,flow,event):
         flow.participants.add(event.author);flow.messages.add(str(event.id));flow.last_at=time.monotonic()

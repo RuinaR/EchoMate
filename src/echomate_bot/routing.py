@@ -1,7 +1,7 @@
-"""Grounded fast path for a single established interlocutor's clear request.
+"""Prose isolation plus legacy grounded helpers for compatibility tests.
 
-Not an autonomous-entry rule. Real bot reply provenance, speaker continuity,
-explicit request language and absence of a different addressee are all required.
+Production Runtime uses structured semantic speech-act/addressee inference;
+these legacy punctuation/request shortcuts no longer grant participation.
 """
 import re
 
