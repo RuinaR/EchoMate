@@ -2,6 +2,8 @@
 
 ## 2026-10-19 — 서버 구성원 호칭·청자 근거 계층
 
+구현·검증 커밋 **e5cf00f**. 공개26파일 staged 검사: 비공개 파일·실제 bootstrap 민감 값·개인 경로 포함0, 문서 상대 링크 오류0, diff check 통과. 후속 문서 커밋에 실제 구현 해시를 기록한다. 비공개 평가·DB·설정·어댑터는 제외했다.
+
 기준5697cbd의 깨끗한 작업 트리에서 README/정의/구조/인수인계/로그와 기존 이름·라우팅·세션·Runtime·SDK·관계 저장소를 확인했다. 기존382검사 OK29.361초를 기준선으로 보존했다. 사용자 지시대로 실제 Discord 연결/송신/사용자 수동 QA는 하지 않았다.
 
 변경 파일: members/member_aliases 추가, runtime/discord_app/dialogue_intent/companion_store/desktop/companion_ui 통합, 관련 SDK·호칭·저장소·UI 회귀, verify_members_gpu 평가 도구, MEMBER-ADDRESSING 및 관련 문서. 봇 이름 호출과 구성원 후보를 분리하고 실제 화자/청자/멘션/답장/참조 후보를 역할별로 전달한다. 생산 경로의 중복된 일반 호격 추측을 제거하고 기존 의미 모델을 필요한 곳에만 사용한다. 새로운 모델/경량 분류기/학습은 추가하지 않았다.
