@@ -15,7 +15,7 @@ import tkinter as tk
 
 from .settings import ROOT,Settings,MOODS,ACTIVITY
 
-STAGES={'assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
+STAGES={'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
         'action':'행동 선택','text':'답변 작성','sending':'Discord 전송'}
 MODES={'침묵':'silent','멘션·대화 이어가기':'mention','문맥에 따라 자율 참여':'autonomous'}
 ACTIVITIES={'조용함':'quiet','보통':'normal','활발함':'active','매우 활발함':'very_active'}
@@ -44,6 +44,8 @@ class LocalController:
             self.lease=InstanceLease()
             self.bootstrap=json.loads((ROOT/'bootstrap.json').read_text(encoding='utf-8'))
             self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'])
+            from .companion_store import CompanionStore
+            self.companion=CompanionStore(ROOT/'companion.sqlite3');self.companion_view={}
             if not self.bootstrap['admin_guilds']:raise ValueError('No approved guild')
             self.phase='서버와 채널 목록을 불러오고 있어요'
             self._publish()
@@ -63,6 +65,7 @@ class LocalController:
         servers=[]
         if cfg:
             guild_ids=set(self.bootstrap['admin_guilds'])
+            guild_ids.update(map(int,cfg['guilds']))
             guild_ids.update(g['id'] for g in getattr(self,'inventory',[]))
             if client and client.is_ready():guild_ids.update(g.id for g in client.guilds)
             for gid in sorted(guild_ids):
@@ -88,6 +91,9 @@ class LocalController:
         preparing=bool(runtime and getattr(runtime,'changing_model',False))
         snapshot=dict(phase='모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
                       model_preparing=preparing,
+                      companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
+                      memory_pending=runtime.memory_queue.qsize() if runtime else 0,
+                      private_service=bool(runtime and runtime.service_task and not runtime.service_task.done()),
                       running=bool(self.job and not self.job.done()),
                       connected=bool(client and client.is_ready()),pending=client.backend.pending if client else 0,
                       contexts=len(runtime.states) if runtime else 0,safe_stopped=runtime.stopped if runtime else False,
@@ -164,7 +170,7 @@ class LocalController:
                 self.phase='정지'
             elif operation=='settings':
                 values=kwargs['values']
-                allowed={'enabled','text','reactions','vision','stickers','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model'}
+                allowed={'enabled','text','reactions','vision','stickers','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours'}
                 if set(values)-allowed:raise ValueError('Unknown GUI setting')
                 from .settings import validate
                 validate(dict(self.settings.get(),**values))
@@ -186,6 +192,58 @@ class LocalController:
                 if self.client:
                     self.client.runtime.invalidate_all()
                     await self.client.apply_guild_name(gid)
+            elif operation=='companion':
+                gid=int(kwargs['guild']);action=kwargs['action']
+                if not self.known_guild(gid) and str(gid) not in self.settings.get()['guilds']:raise PermissionError('Unknown guild')
+                store=self.companion;user=int(kwargs['user']) if kwargs.get('user') else None
+                if action=='server_options':
+                    from .temporal import zone
+                    from .naming import validate_name
+                    tz=kwargs['timezone'];zone(tz)
+                    aliases=[validate_name(x.strip()) for x in kwargs['aliases'].split(',') if x.strip()]
+                    def options(cfg):
+                        g=cfg['guilds'].setdefault(str(gid),dict(enabled=False,channels={},threads={}))
+                        g.update(timezone=tz,aliases=aliases,partial_names=kwargs['partial_names'])
+                    self.settings.change(owner,options)
+                    if self.client:self.client.runtime.cancel_pending()
+                elif action=='affinity':
+                    if not user:raise ValueError('Choose user')
+                    await asyncio.to_thread(store.set_affinity,gid,user,float(kwargs['value']))
+                elif action=='forget_user':
+                    if not user:raise ValueError('Choose user')
+                    await asyncio.to_thread(store.forget,gid,user)
+                elif action=='forget_guild':await asyncio.to_thread(store.forget,gid)
+                elif action in ('memory_reset','relationship_reset','reminder_reset'):
+                    area={'memory_reset':'memories','relationship_reset':'relationships','reminder_reset':'reminders'}[action]
+                    await asyncio.to_thread(store.clear_records,gid,area,user)
+                elif action in ('memory_add','memory_edit'):
+                    from .temporal import editor_timestamp
+                    tz=self.settings.get()['guilds'].get(str(gid),{}).get('timezone','Asia/Seoul')
+                    expires=editor_timestamp(kwargs.get('expires',''),tz)
+                    if action=='memory_add':
+                        if not user:raise ValueError('Choose user')
+                        channel=int(kwargs['channel'])
+                        g=self.settings.get()['guilds'].get(str(gid),{})
+                        if str(channel) not in g.get('channels',{}) and str(channel) not in g.get('threads',{}):raise ValueError('Choose configured source channel')
+                        key=await asyncio.to_thread(store.add_memory,gid,user,channel,kwargs['summary'],kwargs.get('kind','explicit'),tz=tz,expires=expires,policy=self.settings.get())
+                        if key is None:raise ValueError('Subject opted out or source deleted')
+                    else:await asyncio.to_thread(store.edit_memory,gid,kwargs['key'],kwargs['summary'],expires,kwargs.get('status','active'))
+                elif action=='memory_delete':await asyncio.to_thread(store.delete_memory,gid,kwargs['key'])
+                elif action in ('reminder_cancel','reminder_edit'):
+                    from .temporal import editor_timestamp
+                    tz=self.settings.get()['guilds'].get(str(gid),{}).get('timezone','Asia/Seoul')
+                    due=editor_timestamp(kwargs.get('due',''),tz) if action=='reminder_edit' else None
+                    if action=='reminder_edit' and due is None:raise ValueError('Date required')
+                    await asyncio.to_thread(store.change_reminder,gid,owner,kwargs['key'],due=due,text=kwargs.get('text'),cancel=action=='reminder_cancel',owner=True)
+                elif action=='cleanup':await asyncio.to_thread(store.cleanup)
+                elif action=='clear_context':
+                    if self.client:
+                        for channel in list(self.client.runtime.states):
+                            c=self.client.get_channel(channel)
+                            if c and c.guild.id==gid:self.client.runtime.invalidate(channel)
+                elif action!='refresh':raise ValueError('Unknown companion action')
+                await self.refresh_companion(gid,user,kwargs.get('query',''),kwargs.get('kind'))
+                self.notice='로컬 기록을 확인했어요' if action=='refresh' else '변경을 적용했어요'
             elif operation=='diagnostics':
                 from .settings import atomic_private_json
                 from .telemetry import summarize
@@ -227,6 +285,23 @@ class LocalController:
             if operation in {'settings','scope','guild'}:self.notice='설정 저장 완료'
         except Exception as exc:self.error=type(exc).__name__
         self._publish()
+
+    async def refresh_companion(self,guild,user=None,query='',kind=None):
+        self.companion_request=getattr(self,'companion_request',0)+1;request=self.companion_request
+        def read():
+            store=self.companion
+            memories=store.memories(guild,user,query=query,kind=kind)
+            reminders=store.reminders(guild,user)
+            people={r['user']:dict(r) for r in store.users(guild)}
+            for row in [*store.memories(guild),*store.reminders(guild)]:
+                uid=row.get('user',row.get('requester'))
+                people.setdefault(uid,dict(user=uid,affinity=50,interactions=0,last_at=0))
+            return dict(guild=guild,user=user,people=list(people.values()),memories=memories,reminders=reminders,query=query,kind=kind,history=store.relationship_history(guild,user) if user else [])
+        view=await asyncio.to_thread(read)
+        if request!=self.companion_request:return
+        self.companion_view=view
+        names=getattr(self.client,'user_names',{}) if self.client else {}
+        for person in self.companion_view['people']:person['label']=names.get((guild,int(person['user'])),f"사용자 {person['user']}")
 
     async def _run_bot(self):
         try:

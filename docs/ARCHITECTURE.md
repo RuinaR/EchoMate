@@ -1,5 +1,11 @@
 # 아키텍처
 
+## 공통 companion 계층 (2026-10-19)
+
+Runtime→routing/context→선택적 memory_context→기존 단일 LocalBackend 순서다. private_request는 코드 해석/SQLite commit 후 GPU 없이 확인한다. background companion worker는 source revision/scope를 확인하며 만료/관계/메모리 저장을 수행한다. scheduler는 별도 task로 GPU 큐와 쿨다운을 기다리지 않는다. 선점 트랜잭션에서 최신 예약을 읽고 HTTP 직전 설정·권한·대상을 확인한다. 불명확한 전송은 앱 재시도하지 않는다.
+
+CompanionStore는 per-connection SQLite/WAL과 서버·사용자·출처 채널 격리, tombstone/cutoff·opt-out, 만료 즉시 조회 제외, 상태별 보존을 제공한다. 소유자 Windows 관리와 본인 자료 삭제 권한을 구별한다. UI 목록은 별도 비동기 조회로 갱신하며 진단에는 본문을 넣지 않는다. RAM 발췌는 사실 생성 요약이 아니며 모델 weights에 자동 학습하지 않는다. 상세: [COMPANION-MEMORY-REMINDERS](COMPANION-MEMORY-REMINDERS.md).
+
 ## 성인 유머·성별·공통 지속 대화 경계 (2026-10-19)
 
 adult_policy.py는 일반 모델/정책 대안의 turn_profile과 제한된 경계 검사를 제공한다. model=adult는 현재 동일 Transformers 기반 모델의 정책 모드이며 실제 job weight는 base다. GGUFProbe는 평가 전용 별도 프로세스/loopback 인증 HTTP/직렬 lock/취소·종료를 사용하고 개인 PEFT를 로드하지 않는다. 앱에 검증 안 된 GGUF를 자동 연결하지 않는다. 준비·승격 기준과 자원 실험은 ADULT-MODE-QA 참조.

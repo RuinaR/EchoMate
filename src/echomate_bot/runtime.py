@@ -8,6 +8,7 @@ import random
 import sqlite3
 import time
 import weakref
+from contextlib import contextmanager,closing
 
 from echomate_studio.dialogue_state import DialogueState,Turn
 from echomate_studio.participation import ParticipationPolicy,decide
@@ -46,7 +47,10 @@ class Ledger:
     def __init__(self,path):
         self.path=private_path(path);self.path.parent.mkdir(parents=True,exist_ok=True)
         with self.db() as db:db.execute("CREATE TABLE IF NOT EXISTS sent (event TEXT PRIMARY KEY, channel TEXT, day TEXT, at REAL, status TEXT)")
-    def db(self):return sqlite3.connect(self.path)
+    @contextmanager
+    def db(self):
+        with closing(sqlite3.connect(self.path,timeout=.5)) as db:
+            with db:yield db
     def last(self,channel):
         with self.db() as db:row=db.execute("SELECT MAX(at) FROM sent WHERE channel=?",(str(channel),)).fetchone()
         return row[0] or 0
@@ -66,7 +70,7 @@ class Ledger:
 
 
 class Runtime:
-    def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None):
+    def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None,companion=None,followup_fast_path=True):
         self.settings=settings;self.backend=backend;self.transport=transport;self.cache=cache;self.library=None
         self.ledger=Ledger(ledger_path);self.rng=rng or random.Random()
         self.states={};self.tasks={};self.seen={};self.blocked_assets=set();self.failures=0
@@ -75,6 +79,82 @@ class Runtime:
         self.stopped=False;self.diagnostics=[];self.progress={};self.latencies=[];self.traces=[]
         self.telemetry_lock=asyncio.Lock()
         self.model_lock=asyncio.Lock();self.changing_model=False;self.deferred_events={}
+        self.companion=companion;self.service_task=None;self.memory_queue=asyncio.Queue(maxsize=64)
+        self.followup_fast_path=followup_fast_path
+
+    def start_services(self):
+        if self.companion and (not self.service_task or self.service_task.done()):
+            self.service_task=asyncio.create_task(self._services(),name='echomate-private-services')
+
+    async def _services(self):
+        try:
+            try:await asyncio.to_thread(self.companion.recover)
+            except (OSError,RuntimeError,sqlite3.Error):self.note('private_recovery_failed')
+            cleaned=0
+            while not self.stopped:
+                try:
+                    for _ in range(min(8,self.memory_queue.qsize())):
+                        event,revision=self.memory_queue.get_nowait();cfg=self.settings.get()
+                        if revision==self.settings.revision and cfg['memory_auto'] and scope(cfg,event.guild,event.channel,event.parent)!='silent':
+                            tz=cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul')
+                            await asyncio.to_thread(self.companion.extract,event,tz,policy=cfg)
+                    if time.monotonic()-cleaned>=60:
+                        await asyncio.to_thread(self.companion.cleanup);cleaned=time.monotonic()
+                    await self.deliver_reminders()
+                except Exception as exc:
+                    self.note('private_service_'+type(exc).__name__);await asyncio.sleep(5)
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:raise
+
+    async def deliver_reminders(self):
+        cfg=self.settings.get()
+        if self.stopped or not self.companion or not cfg['enabled'] or not cfg['reminders_enabled'] or not hasattr(self.transport,'deliver_reminder'):return
+        if hasattr(self.transport,'ready') and not self.transport.ready():return
+        for row in await asyncio.to_thread(self.companion.due,cfg['reminder_grace']):
+            event=Event(int(row['source']),int(row['guild']),int(row['channel']),int(row['requester']),'',datetime.now(timezone.utc),parent=int(row['parent']) if row['parent'] else None)
+            async def allowed():
+                latest=self.settings.get()
+                if self.companion.clock()<row['due_at'] or self.companion.clock()>row['due_at']+latest['reminder_grace']:return False
+                if self.stopped or not latest['reminders_enabled'] or not latest['text'] or scope(latest,event.guild,event.channel,event.parent,action='text')=='silent':return False
+                p=await self.transport.permissions(event);latest=self.settings.get()
+                return not self.stopped and latest['reminders_enabled'] and latest['text'] and scope(latest,event.guild,event.channel,event.parent,action='text')!='silent' and p.get('view',False) and p.get('send',False)
+            try:
+                if not await allowed():
+                    await asyncio.to_thread(self.companion.defer_preflight,row['reminder_id'],'scope_or_permission');continue
+                claimed=await asyncio.to_thread(self.companion.claim,row['reminder_id'])
+                if not claimed:continue
+                row=claimed  # Use edits committed after the due-list snapshot.
+                async def fresh_delivery():return await allowed() and await asyncio.to_thread(self.companion.processing,row['reminder_id'])
+                try:
+                    await self.transport.deliver_reminder(row,fresh_delivery)
+                    await asyncio.to_thread(self.companion.finish,row['reminder_id'],'delivered')
+                except BaseException as exc:
+                    await asyncio.shield(asyncio.to_thread(self.companion.finish,row['reminder_id'],'failed',type(exc).__name__))
+                    if isinstance(exc,asyncio.CancelledError):raise
+                    self.note('reminder_delivery_'+type(exc).__name__)
+            except Exception as exc:
+                self.note('reminder_preflight_'+type(exc).__name__)
+                try:await asyncio.to_thread(self.companion.defer_preflight,row['reminder_id'],'preflight_'+type(exc).__name__)
+                except (OSError,RuntimeError,sqlite3.Error):self.note('reminder_store_failed')
+
+    async def message_changed(self,guild,channel,message,content=None):
+        task=self.tasks.get(channel)
+        if task:task.cancel()
+        self.pending_mentions.pop(channel,None);self.deferred_events.pop(channel,None)
+        state=self.states.get(channel)
+        if state:state.change_message(channel_id=channel,thread_id=None,message_id=str(message),content=content)
+        if self.companion:
+            try:await asyncio.to_thread(self.companion.delete_source,guild,message,known=state is not None)
+            except (OSError,RuntimeError,sqlite3.Error):self.note('memory_delete_failed')
+
+    async def reaction_event(self,guild,channel,user,message,emoji,*,remove=False,parent=None):
+        if not self.companion or not self.settings.get()['relations_auto'] or scope(self.settings.get(),guild,channel,parent)=='silent':return
+        state=self.states.get(channel)
+        if not state:return
+        _,turns=state.snapshot(channel_id=channel,thread_id=None)
+        if not any(t.is_bot and t.message_id==str(message) for t in turns):return
+        try:await asyncio.to_thread(self.companion.relationship,guild,user,f'reaction:{message}:{user}:{emoji}','reaction',remove=remove)
+        except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_update_failed')
 
     async def switch_model(self,owner,mode):
         from .settings import MODELS
@@ -155,11 +235,19 @@ class Runtime:
             details=json.loads(metadata) if metadata else {}
             details['standard_stickers_official_metadata']=event.standard_stickers
             metadata=json.dumps(details,ensure_ascii=False)
-        if guild_name(cfg,event.guild)!='EchoMate':
+        extra_names=list(cfg['guilds'].get(str(event.guild),{}).get('aliases',()))
+        if hasattr(self.transport,'address_names'):extra_names.extend(self.transport.address_names(event))
+        if guild_name(cfg,event.guild)!='EchoMate' or extra_names:
             details=json.loads(metadata) if metadata else {}
             details['configured_bot_name']=guild_name(cfg,event.guild)
+            from .naming import address_forms
+            g=cfg['guilds'].get(str(event.guild),{})
+            details['bot_names']=sorted(address_forms(guild_name(cfg,event.guild),extra_names,g.get('partial_names',True)))
             metadata=json.dumps(details,ensure_ascii=False)
         if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None,context_metadata=metadata)):return
+        if self.companion and cfg['memory_auto']:
+            try:self.memory_queue.put_nowait((event,self.settings.revision))
+            except asyncio.QueueFull:self.note('memory_queue_full')
         request_content=None
         if mentions_bot(event.content,self.transport.bot_id):
             self.pending_mentions[event.channel]=(event.author,event.timestamp,event.content,event.id)
@@ -215,15 +303,25 @@ class Runtime:
         revision=self.settings.revision;cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
         text_mode=scope(cfg,event.guild,event.channel,event.parent,action='text')
         reaction_mode=scope(cfg,event.guild,event.channel,event.parent,action='reaction')
-        version,context=state.recent_context(channel_id=event.channel,thread_id=None,max_chars=6000)
+        if cfg['context_excerpts']:
+            from .context import build_context
+            version,context=build_context(state,event.channel,event.content,event.reply_to)
+        else:version,context=state.recent_context(channel_id=event.channel,thread_id=None,max_chars=6000)
         try:
             since=time.time()-self.ledger.last(event.channel)
             verified_request=request_content if request_content is not None else event.content
             mention=mentions_bot(verified_request,self.transport.bot_id)
-            named=name_candidate(event.content,guild_name(cfg,event.guild))
+            guild_cfg=cfg['guilds'].get(str(event.guild),{})
+            aliases=list(guild_cfg.get('aliases',()))
+            if hasattr(self.transport,'address_names'):aliases.extend(self.transport.address_names(event))
+            named=name_candidate(event.content,guild_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True))
             _,known_turns=state.snapshot(channel_id=event.channel,thread_id=None)
             verified_bot_reply=any(t.is_bot and t.message_id==str(event.reply_to) for t in known_turns[:-1])
             direct=mention or verified_bot_reply
+            if not direct and not named and self.followup_fast_path:
+                from .routing import grounded_followup
+                if grounded_followup(known_turns,event):
+                    direct=True;self.note('grounded_followup_no_interruption_vote')
             if mention:
                 allowed,_=permit_mention_reply(MentionPolicy(allowed_channel_ids=frozenset({event.channel}),cooldown_seconds=2),
                     content=verified_request,bot_user_id=self.transport.bot_id,channel_id=event.channel,thread_id=None,
@@ -243,7 +341,9 @@ class Runtime:
                 self.note('explicit_request_no_interruption_vote')
             elif hasattr(self.backend,'assess_turn'):assessment,evidence=await self.backend.assess_turn(context)
             else:assessment=await self.backend.classify(context)
-            if assessment.is_sensitive_moment:return
+            active_trace.get().decision=dict(sensitive=assessment.is_sensitive_moment,useful=assessment.has_useful_contribution,
+                appropriate=assessment.interruption_is_appropriate,addressed=evidence.addressed_to_bot if evidence else None,
+                topic=evidence.topic_continues if evidence else None)
             if named and not direct:
                 if evidence is None:evidence=await self.backend.continuity(context)
                 if evidence.addressed_to_bot and assessment.interruption_is_appropriate:
@@ -262,6 +362,9 @@ class Runtime:
                 # not a random new interruption merely because its topic changed.
                 if evidence.addressed_to_bot and assessment.has_useful_contribution and assessment.interruption_is_appropriate:
                     continuing=True
+            # Sensitivity limits unsolicited interruption, not an invited request
+            # for comfort/information. Output privacy/safety gates remain separate.
+            if assessment.is_sensitive_moment and not (direct or continuing):return
             if not direct and not continuing:
                 if mode=="mention":return
                 decision=decide(ParticipationPolicy(enabled=True,allowed_channel_ids=frozenset({event.channel}),
@@ -285,8 +388,24 @@ class Runtime:
                     seconds_since_reaction=since,rng=self.rng)
                 if chance is None:return
             if since<reply_cooldown or not await self.fresh(event,state,version,revision):return
+            command_answer=None
+            if self.companion and speech_eligible and (direct or continuing):
+                from .companion import handle_request,request_kind
+                self.stage(event,'private_request' if request_kind(event.content) else 'memory_lookup',started)
+                if request_kind(event.content):
+                    try:command_answer=await asyncio.to_thread(handle_request,self.companion,event,cfg,self.transport.bot_id)
+                    except asyncio.CancelledError:
+                        await asyncio.shield(asyncio.to_thread(self.companion.delete_source,event.guild,event.id));raise
+                    except (OSError,RuntimeError,ValueError,sqlite3.Error):command_answer='처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
+                else:
+                    try:
+                        remembered=await asyncio.to_thread(self.companion.memories,event.guild,event.author,event.channel,event.content)
+                        if remembered:
+                            from .memory_context import memory_context
+                            context.insert(max(0,len(context)-1),dict(role='user',content=memory_context(remembered,cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul'))))
+                    except (OSError,RuntimeError,sqlite3.Error):self.note('memory_lookup_failed')
             visual=[]
-            if cfg["vision"]:
+            if cfg["vision"] and command_answer is None:
                 for asset,url in event.assets[:4]:
                     if not await self.fresh(event,state,version,revision):return
                     try:
@@ -319,7 +438,8 @@ class Runtime:
             self.stage(event,'action',started)
             fast_text=(allowed==['SILENCE','TEXT'] or
                        ('TEXT' in allowed and assessment.has_useful_contribution and not catalog['media'] and not catalog['stickers']))
-            if getattr(self.backend,'fast_text_path',False) and fast_text:
+            if command_answer is not None:proposed=Action(Kind.TEXT,command_answer)
+            elif getattr(self.backend,'fast_text_path',False) and fast_text:
                 # The semantic participation gate already approved this reply.
                 # Useful text takes priority over optional decorative reactions.
                 proposed=Action(Kind.TEXT)
@@ -342,10 +462,15 @@ class Runtime:
                 adult_for_turn=profile['_adult_active']
                 character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
                 character['_guild_name']=guild_name(cfg,event.guild)
+                if self.companion:
+                    try:character['_familiarity']=await asyncio.to_thread(self.companion.familiarity,event.guild,event.author)
+                    except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_lookup_failed')
                 indicator=(asyncio.create_task(self.transport.indicate_typing(event,lambda:self.fresh(event,state,version,revision)))
                            if hasattr(self.transport,'indicate_typing') else None)
                 try:
-                    if adult_for_turn and adult_request_blocked(event.content):
+                    if command_answer is not None:
+                        adult_for_turn=False;answer=command_answer
+                    elif adult_for_turn and adult_request_blocked(event.content):
                         answer='그런 식으로 누군가를 성적으로 괴롭히거나 미성년자를 성적 농담에 넣는 건 안 할게. 다른 농담으로 가자.'
                     else:answer=await self.backend.text(context,character)
                 finally:
@@ -388,6 +513,9 @@ class Runtime:
                         datetime.now(timezone.utc),is_bot=True,reply_to=str(event.response_to or event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
                 active_trace.get().outcome="sent"
                 self.failures=0
+                if self.companion and cfg['relations_auto']:
+                    try:await asyncio.to_thread(self.companion.relationship,event.guild,event.author,'reply:'+str(event.id),'reaction' if action.kind==Kind.REACTION else 'conversation')
+                    except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_update_failed')
                 self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
             except Exception:
                 self.ledger.completed(event,"failed_or_uncertain")
@@ -407,9 +535,12 @@ class Runtime:
 
     async def close(self):
         self.stopped=True
+        if self.service_task:
+            self.service_task.cancel();await asyncio.gather(self.service_task,return_exceptions=True)
         tasks=list(self.tasks.values())
         for task in tasks:task.cancel()
         await asyncio.gather(*tasks,return_exceptions=True)
         self.states.clear()
+        while not self.memory_queue.empty():self.memory_queue.get_nowait()
         self.deferred_events.clear()
         async with self.model_lock:await self.backend.close()

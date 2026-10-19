@@ -17,7 +17,9 @@ MODELS={'base','persona','adult'}
 DEFAULTS = dict(enabled=False, text=True, reactions=False, stickers=False, media=False,
                 vision=False, mood="평온", warmth=75, cuteness=40, playfulness=20,
                 auto_mood=False, activity="normal", cooldown=60, engagement_seconds=600,
-                media_probability=0., daily_limit=100, model="persona", guilds={},asset_policy=2,gender='neutral')
+                media_probability=0., daily_limit=100, model="persona", guilds={},asset_policy=2,gender='neutral',
+                memory_auto=False,relations_auto=True,context_excerpts=True,reminders_enabled=True,reminder_grace=900,
+                memory_plan_grace=3600,memory_date_grace=86400,memory_state_hours=6)
 
 
 def private_path(value):
@@ -55,13 +57,13 @@ def validate(cfg):
     if set(cfg) != set(DEFAULTS):
         raise ValueError("Unknown settings; owner identity cannot be configured here")
     if cfg['asset_policy']!=2 or cfg['media'] or cfg['media_probability']!=0:raise ValueError('Registered media is removed')
-    for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood"):
+    for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood",'memory_auto','relations_auto','context_excerpts','reminders_enabled'):
         if type(cfg[key]) is not bool:
             raise ValueError("Boolean required")
     if cfg["mood"] not in MOODS or cfg["activity"] not in ACTIVITY or cfg["model"] not in MODELS or cfg['gender'] not in GENDERS:
         raise ValueError("Unknown mood, activity or trusted model")
     for key, lo, hi in (("warmth", 0, 100), ("cuteness", 0, 100), ("playfulness", 0, 100),
-                        ("cooldown", 2, 3600), ("engagement_seconds", 10, 86400), ("daily_limit", 1, 1000)):
+                        ("cooldown", 2, 3600), ("engagement_seconds", 10, 86400), ("daily_limit", 1, 1000),('reminder_grace',0,86400),('memory_plan_grace',0,86400),('memory_date_grace',0,86400),('memory_state_hours',1,72)):
         if type(cfg[key]) is not int or not lo <= cfg[key] <= hi:
             raise ValueError("Setting outside permitted range")
     if type(cfg["media_probability"]) not in (int, float) or not 0 <= cfg["media_probability"] <= 1:
@@ -70,11 +72,19 @@ def validate(cfg):
         raise ValueError("Guild limit")
     for gid, g in cfg["guilds"].items():
         positive_id(int(gid))
-        if set(g) not in ({"enabled", "channels", "threads"},{"enabled", "channels", "threads","name"}) or type(g["enabled"]) is not bool:
+        if not {'enabled','channels','threads'}<=set(g) or set(g)-{'enabled','channels','threads','name','aliases','partial_names','timezone'} or type(g["enabled"]) is not bool:
             raise ValueError("Invalid guild")
         if 'name' in g:
             from .naming import validate_name
             validate_name(g['name'])
+        if 'timezone' in g:
+            from .temporal import zone
+            zone(g['timezone'])
+        if 'partial_names' in g and type(g['partial_names']) is not bool:raise ValueError('Invalid name matching')
+        if 'aliases' in g:
+            from .naming import validate_name
+            if not isinstance(g['aliases'],list) or len(g['aliases'])>8:raise ValueError('Alias limit')
+            for alias in g['aliases']:validate_name(alias)
         if len(g["channels"]) + len(g["threads"]) > 200:
             raise ValueError("Scope limit")
         for table, rules in (("channels", g["channels"]), ("threads", g["threads"])):
@@ -132,6 +142,8 @@ class Settings:
                 verified=dict(verified,asset_policy=2,vision=False,media=False,media_probability=0.)
             # Migrate only after verifying the original signature; never auto-enable adult mode.
             if 'gender' not in verified:verified=dict(verified,gender='neutral')
+            for key in ('memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours'):
+                if key not in verified:verified=dict(verified,**{key:deepcopy(DEFAULTS[key])})
             self._cfg = validate(verified)
 
     def authorize(self, user_id):

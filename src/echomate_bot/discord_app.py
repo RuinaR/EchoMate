@@ -41,6 +41,31 @@ def assets_from_message(message):
 
 
 class DiscordTransport:
+    def ready(self):return self.client.is_ready()
+
+    def address_names(self,event):
+        from .naming import validate_name
+        guild=self.client.get_guild(event.guild);me=guild.me if guild else None
+        names=[]
+        for value in (getattr(me,'nick',None),getattr(self.client.user,'global_name',None),getattr(self.client.user,'name',None)):
+            try:names.append(validate_name(value))
+            except ValueError:pass
+        return names
+
+    async def deliver_reminder(self,row,fresh):
+        if not self.client.is_ready():raise ValueError('Disconnected')
+        channel=await self.client.fetch_channel(int(row['channel']))
+        if not getattr(channel,'guild',None) or channel.guild.id!=int(row['guild']):raise ValueError('Wrong guild')
+        if not isinstance(channel,(discord.TextChannel,discord.Thread)):raise ValueError('Unsupported destination')
+        if isinstance(channel,discord.Thread) and (channel.archived or channel.locked):raise ValueError('Thread unavailable')
+        if row['target']!=row['requester']:raise ValueError('Target must be requester')
+        target=await channel.guild.fetch_member(int(row['target']))
+        if target.bot or not await fresh():raise ValueError('Stale reminder')
+        mention=discord.AllowedMentions(everyone=False,roles=False,users=[discord.Object(id=target.id)],replied_user=False)
+        sent=await channel.send(f"<@{target.id}> 예약한 시간이야. 부탁한 내용: {row['text'][:300]}",
+                                nonce=row['reminder_id'],allowed_mentions=mention,suppress_embeds=True)
+        return sent.id
+
     def __init__(self,client):self.client=client
     @property
     def bot_id(self):return self.client.user.id
@@ -135,13 +160,17 @@ class OwnerPanel(discord.ui.View):
 class EchoClient(discord.Client):
     def __init__(self,settings,backend,admin_guilds):
         intents=discord.Intents.none();intents.guilds=True;intents.guild_messages=True
-        intents.message_content=True;intents.emojis_and_stickers=True
+        intents.message_content=True;intents.emojis_and_stickers=True;intents.guild_reactions=True
         super().__init__(intents=intents,allowed_mentions=discord.AllowedMentions.none(),max_messages=None,
                          member_cache_flags=discord.MemberCacheFlags.none())
         self.settings=settings;self.backend=backend;self.admin_guilds=admin_guilds
-        self.tree=app_commands.CommandTree(self);self.cache=VisualCache();self.library=None
+        self.tree=app_commands.CommandTree(self);self.cache=VisualCache(settings.path.parent/'visual.sqlite3');self.library=None
         self.standard_stickers={}
-        self.runtime=Runtime(settings,backend,DiscordTransport(self),self.cache,self.library)
+        self.user_names={}
+        from .companion_store import CompanionStore
+        self.companion=CompanionStore(settings.path.parent/'companion.sqlite3')
+        self.runtime=Runtime(settings,backend,DiscordTransport(self),self.cache,self.library,
+                             ledger_path=settings.path.parent/'sent.sqlite3',companion=self.companion)
         self.owner_tasks=set()
         self.shutdown_lock=asyncio.Lock()
         self.install_commands()
@@ -248,6 +277,26 @@ class EchoClient(discord.Client):
             await i.response.send_message("종료할게.",ephemeral=True)
             asyncio.create_task(self.close())
         for guild in self.admin_guilds:self.tree.add_command(group,guild=discord.Object(guild))
+        @app_commands.choices(action=[app_commands.Choice(name=name,value=value) for name,value in [('기억 목록','목록'),('내 기억 전체 삭제','기억삭제'),('기억·관계·알림 모두 삭제','전체삭제'),('저장 다시 허용','저장다시허용')]])
+        async def own_memory(i:discord.Interaction,action:str):
+            if not i.guild_id or str(i.guild_id) not in self.settings.get()['guilds']:
+                await i.response.send_message('이 서버에는 관리할 기억이 없어.',ephemeral=True);return
+            await i.response.defer(ephemeral=True)
+            if action=='전체삭제':
+                await asyncio.to_thread(self.companion.forget,i.guild_id,i.user.id)
+                result='네 기억·관계·예약 기록을 삭제하고 자동 저장을 막았어.'
+            elif action=='기억삭제':
+                await asyncio.to_thread(self.companion.forget_memories,i.guild_id,i.user.id)
+                result='이 서버의 네 기억을 지우고 기억 자동 저장을 막았어.'
+            elif action=='저장다시허용':
+                await asyncio.to_thread(self.companion.resume_subject,i.guild_id,i.user.id)
+                result='네 정보의 저장 거부를 해제했어. 자동 저장은 소유자 설정이 켜져 있어야 해.'
+            else:
+                rows=await asyncio.to_thread(self.companion.memories,i.guild_id,i.user.id,i.channel_id)
+                result='현재 이 채널에서 사용할 수 있는 기억이 없어.' if not rows else '\n'.join(r['summary'] for r in rows[:5])
+            await i.followup.send(result,ephemeral=True,allowed_mentions=discord.AllowedMentions.none())
+        command=app_commands.Command(name='내기억',description='자신의 로컬 기억 조회·삭제·저장 동의 관리',callback=own_memory)
+        for guild in self.admin_guilds:self.tree.add_command(command,guild=discord.Object(guild))
 
         @self.tree.error
         async def command_error(i,error):
@@ -275,6 +324,7 @@ class EchoClient(discord.Client):
                 raise
 
     async def on_ready(self):
+        self.runtime.start_services()
         self.runtime.note("gateway_ready")
         for gid,g in self.settings.get()['guilds'].items():
             if 'name' in g:
@@ -290,13 +340,29 @@ class EchoClient(discord.Client):
         parent=message.channel.parent_id if isinstance(message.channel,discord.Thread) else None
         cfg=self.settings.get()
         if scope(cfg,message.guild.id,message.channel.id,parent)=="silent":return
+        self.user_names[(message.guild.id,message.author.id)]=message.author.display_name[:80]
+        if len(self.user_names)>1000:self.user_names.pop(next(iter(self.user_names)))
         standard=tuple(dict(id=str(s.id),official_description=(s.description or '')[:180],official_tags=s.tags[:12]) for item in message.stickers if (s:=self.standard_stickers.get(item.id)))
         await self.runtime.ingest(Event(message.id,message.guild.id,message.channel.id,message.author.id,
             message.content,message.created_at,parent=parent,reply_to=message.reference.message_id if message.reference else None,
             assets=assets_from_message(message) if cfg['vision'] else (),standard_stickers=standard,received_at=received))
 
-    async def on_raw_message_delete(self,payload):self.runtime.invalidate(payload.channel_id)
-    async def on_raw_message_edit(self,payload):self.runtime.invalidate(payload.channel_id)
+    async def on_raw_message_delete(self,payload):
+        if payload.guild_id:await self.runtime.message_changed(payload.guild_id,payload.channel_id,payload.message_id)
+    async def on_raw_message_edit(self,payload):
+        if payload.guild_id and 'content' in payload.data:await self.runtime.message_changed(payload.guild_id,payload.channel_id,payload.message_id,payload.data['content'])
+    async def _reaction_event(self,payload,remove):
+        if not payload.guild_id or payload.user_id==self.user.id:return
+        guild=self.get_guild(payload.guild_id)
+        if not guild:return
+        channel=guild.get_channel_or_thread(payload.channel_id)
+        parent=channel.parent_id if isinstance(channel,discord.Thread) else None
+        if scope(self.settings.get(),guild.id,payload.channel_id,parent)=='silent':return
+        try:member=getattr(payload,'member',None) or await guild.fetch_member(payload.user_id)
+        except discord.HTTPException:return
+        if not member.bot:await self.runtime.reaction_event(guild.id,payload.channel_id,member.id,payload.message_id,str(payload.emoji),remove=remove,parent=parent)
+    async def on_raw_reaction_add(self,payload):await self._reaction_event(payload,False)
+    async def on_raw_reaction_remove(self,payload):await self._reaction_event(payload,True)
     async def on_guild_channel_update(self,before,after):self.runtime.invalidate_all()
     async def on_guild_channel_delete(self,channel):self.runtime.invalidate_all()
     async def on_guild_role_update(self,before,after):self.runtime.invalidate_all()

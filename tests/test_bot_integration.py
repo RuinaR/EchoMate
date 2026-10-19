@@ -88,8 +88,10 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import patch
         from types import SimpleNamespace
         import discord
-        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
+        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache) as cache_factory,patch('echomate_bot.discord_app.Runtime',return_value=self.runtime) as runtime_factory:
             client=EchoClient(self.settings,self.backend,[2])
+        cache_factory.assert_called_once_with(self.settings.path.parent/'visual.sqlite3')
+        self.assertEqual(runtime_factory.call_args.kwargs['ledger_path'],self.settings.path.parent/'sent.sqlite3')
         standard=discord.StandardSticker(state=None,data=dict(id='1',name='Wave',description='A greeting',format_type=1,pack_id='10',sort_value=0,tags='hello,wave',type=1))
         client.standard_stickers={1:standard,2:SimpleNamespace(id=2,tags=['hello'])}
         self.assertEqual(set(client.standard_catalog('안녕')),{'1'})
@@ -145,7 +147,8 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         with self.runtime.ledger.db() as db:db.execute('UPDATE sent SET at=at-3')
         # Default new-conversation cooldown stays 60 seconds. This is a follow-up.
         await self.runtime.ingest(self.event(id=11,content='그럼 다음 단계는?'));await self.settle()
-        self.assertEqual(len(calls),1);self.assertEqual(len(self.transport.sent),2)
+        # A clear single-partner follow-up now needs no interruption-model vote.
+        self.assertEqual(len(calls),0);self.assertEqual(len(self.transport.sent),2)
         self.assertFalse(self.runtime.progress)
         self.assertEqual(len(self.runtime.latencies),2)
         with self.assertRaises(ValueError):parse_turn_assessment('0 1 1 1 1 extra')

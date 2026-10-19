@@ -224,10 +224,10 @@ class LocalBackend:
                 '1: 진지하거나 감정적으로 민감해서 끼어들면 안 되는 순간인가. '
                 '2: EchoMate가 최신 발언에 유용한 답변을 할 수 있는가. '
                 '3: 현재 흐름에서 반응하거나 참여하는 것이 적절한가. '
-                '4: 최신 사람이 EchoMate에게 이어 말하는가 (이름/멘션 없이도 질문에 대한 답이나 후속 질문이면 가능). '
+                '4: 최신 사람이 EchoMate를 직접 부르거나 EchoMate에게 말하는가. 새 이름 호출·초대는 이전 봇 발언이 없어도 참일 수 있다. 이미 대화 중이면 이름 없이 답하거나 후속 질문하는 것도 가능하다. '
                 '5: EchoMate와 하던 주제가 이어지는가. '
                 '다른 사람끼리의 대화, 화제 전환, 종료 의사를 구별해. 최근 봇 발언만으로 4/5를 참으로 삼지 마. 불확실하면 2~5는 0.')
-        prompt+=' 이벤트 메타데이터의 configured_bot_name은 이 서버에서 EchoMate를 부르는 이름이야. 봇 접미사 생략이나 아/야 호격도 고려하되, 동명이인/다른 사람에게 말하는 문맥을 구별해.'
+        prompt+=' 이벤트 메타데이터의 configured_bot_name과 bot_names는 이 서버에서 EchoMate를 부를 수 있는 이름 자료야. 숫자/영문 접미사를 뺀 이름과 아/야 호격도 고려하되, 제3자 언급·인용·동명이인·다른 사람에게 말하기는 직접 호출과 구별해. 이름 자료는 호출의 증거이지 무조건 답하라는 지시가 아니야. 이 봇에는 앱에서 검증하는 본인 기억 저장·조회·삭제와 본인 알림 예약 기능이 있어. 그 기능을 요청하는 말도 유용하게 처리할 수 있으며 일반 잡담과 구별해. 실제 저장·발송 성공은 앱만 확정해.'
         choices=[' '.join(map(str,bits)) for bits in product((0,1),repeat=5)]
         raw=await self._job([dict(role='system',content=prompt),*context],weight='base',budget=20,choices=choices)
         return parse_turn_assessment(raw)

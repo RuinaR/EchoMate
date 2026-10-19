@@ -1,5 +1,17 @@
 # 작업 로그
 
+## 2026-10-19 — 세 요구 순차 통합·GPU/실제 예약 검증
+
+기준 f2539f9에서 비공개 기존1104파일 inventory를 보존하고 common character/context/relations → SQLite 선택 기억·UTC/서버 시간대 만료 → 본인 자연어 예약·독립 scheduler 순서로 구현했다. 영향: companion/store/ui/context/memory_context/routing/temporal 신규, runtime/discord_app/desktop/settings/naming/inference/DialogueState/telemetry 및 테스트·QA 도구·문서. 자동 기억 OFF, 소유자/HMAC/allowlist·이전 모델/미디어 제약 유지. 새 GPU 학습 없음.
+
+개발 GPU 초기 실패 원인(첫 이름 호출 누락/일반 시간 질문 오예약/직접 공감 veto)을 분석 수정했다. Windows ledger connection 미종료와 예약 편집/선점 stale 본문 경쟁도 수정했다. 별도 트랜잭션 최신 row와 processing 편집 거부, 취소·원본 삭제 tombstone, opt-out cutoff, 만료 조회 배제/보존 정리를 구현했다.
+
+검증 명령 `$env:PYTHONPATH='src'`; `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`: 최종328개 OK20.504초. 숨긴 Tk DPI1.33/2.0/최소창, 실제 SQLite200예약·재시작·DST·개인격리·삭제 부활, 모의 Discord 권한·nonce·본인 멘션·GPU busy 포함. 도구 verify_companion.py/verify_companion_release.py는 실제 GPU+합성 transport다. 개발72턴은 모든 턴 응답/완벽한20턴 기억을 보장하지 않았고 기본2/개인1개 추가 누락을 기록했다. 이름 독립36사례 기대 일치, 기억 재시작 A/B0/3→3/3. 경로 A/B는 출력 불일치로 속도 개선율 산출 금지.
+
+사용자가 실제 테스트 채널1분 알림을 허용했다. live-1은 채널 불일치 수신0 후 정리, live-2에서 소유자 요청1/확인1/알림1·GPU 실행 중 예정+1.936초(API1.312초). 사용자가 한 번 도착을 확인했다. 다른 범위8이벤트 차단, 원래 설정 불변. QA 전용 signed 설정/DB만 쓰고 Gateway/GPU를 정리했다. 실제 Windows 사용자 조작/장시간 soak/사람 블라인드 말투 평가는 미완료이며 자동 화면 조작은 하지 않았다.
+
+private 원본: local_data/companion-qa-20261019/. 상세 설계·표·한계·재현은 COMPANION-MEMORY-REMINDERS.md. 공개 파일만 staged 검토 후 커밋하며 모델 승격은 보류한다.
+
 ## 2026-10-19 — 세 모델 선택·공통 성별·지속 대화 QA
 
 기능·평가 기록 커밋: `ad7b903`. 소스/합성 테스트/비식별 문서30개만 포함했다. staged 비공개 파일0, bootstrap 값/개인 경로/토큰 패턴 검출0. 기존701파일 모두 존재하고 runtime.lock 외700파일 크기/mtime를 보존했다. GPU 평가 프로세스 정상 종료도 확인했다.
@@ -578,3 +590,6 @@
 - 단위/모의 통합 회귀: 원자 저장에서 실제 Windows 일시적 교체 잠금 1회 실패를 관측해 제한 재시도/이전 파일 보존을 추가하고 예외 주입으로 검증. 패널 버튼 이름이 View.stop을 가리던 충돌도 수정했다. 최종 `$env:PYTHONPATH='src'; .\.venv-gemma4\Scripts\python.exe -m unittest discover -s tests -q` → **243개 OK, 6.627초**. 본문 비파괴 검사, owner/컴포넌트 인증, scope/스레드, 중복·취소/권한·설정 철회, 독립 반응, 캐시/파일·설정 변조, 큐 상한/취소, OOM 예외 주입을 포함한다. 실제 GPU 메모리를 고갈시키지 않고 OOM 안전 비활성화를 검증했다.
 - 소스 커밋: `baeb0b1` 통합, `faab6f4` 출력 폐기 진단, `c9ea53c` 행동 후보 필터/실제 QA 소스 보존, `7b4802a` 미처리 멘션 유지. 문법/whitespace 검사와 공개 소스의 홈 경로/일반 키 패턴 미검출, local_data 추적 파일0 확인. private bootstrap은 사용자 로컬 입력/Windows ACL로 생성됐으며 Git 스테이징하지 않았다. GitHub push 없음.
 - 미확인: 일반 사용자 실계정 거절, 실제 권한 철회/네트워크 단절, 다중 채널/미디어 실제 송신, 실제 OOM/장시간 안정성, 개인 말투 사람 평가. Lottie 미지원, 모델은 Gemma base/persona 선택만 제공한다. 빈도/모델 loss/모의 성공을 실사용 품질 승인으로 해석하지 않는다.
+
+
+보존 최종 검사: 기존1104파일 누락0. 가중치/학습자료/원래 서명 설정은 보존했다. 실제 QA 과정에서 기존 runtime.lock, diagnostic.jsonl, sent.sqlite3, telemetry.json 네 운영 파일은 실행 기록이 갱신됐다. 원래 파일을 삭제/되돌리지 않았다. QA 설정 폴더를 써도 EchoClient의 기본 ledger 경로가 운영 폴더를 가리키던 원인을 확인해, visual/ledger/진단을 설정 폴더에 함께 두도록 수정하고 경로 회귀 검사를 추가했다. 이 최종 경로 격리 수정은 모의 SDK/전체 회귀 검증이며 실제 Discord 재시험은 하지 않았다.

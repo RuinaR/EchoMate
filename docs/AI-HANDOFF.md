@@ -1,5 +1,23 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 최신 — 공통 기억·관계·자연어 알림 통합 (2026-10-19)
+
+세 첨부 요구를 순서대로 공통 런타임에 구현했다. 상세 설계/경계/실패/재현은 [COMPANION-MEMORY-REMINDERS](COMPANION-MEMORY-REMINDERS.md)를 먼저 읽는다. 아래 성인 모드 기록은 이전 단계이며 **새 GGUF 승격 없음**, 개인 모델도 잠정이다.
+
+구현 완료: 서버 별칭/영문·숫자 접미사 생략 호출, 출처가 있는 제한적 RAM 발췌, 실제 답장 관계에 근거한 후속 경로, 숫자 관계/반응 취소, 기본 OFF 선택적 장기 기억/절대 시각·자동 만료/수정·삭제·opt-out, 본인 자연어 예약·조회·취소·연기와 별도 스케줄러, 소유자 Windows 관리3영역. 기존 세 앱 모드와 소유자/HMAC/allowlist/단일 GPU/취소 경계를 유지했다. 스레드·다중 화자 애매함을 항상 응답으로 해결하지 않는다.
+
+검증: 전체328테스트 OK(20.504초), 실제 SQLite200예약/삭제 부활·재시작·DST/격리와 모의 Discord, 숨긴 Tk DPI1.33/2.0 검사. 실제 GPU 개발72턴은 기본/개인/성인 정책 출력20/21/22개, 사실 문자열5/6·6/6·6/6. 의도한 옆 대화/종료 침묵 외 기본2턴·개인1턴 누락이 남는다. 독립 새 이름12문항×3모드 기대 행동 일치. 재시작 기억 A/B는 사실 포함0/3→3/3이나 사람 품질 평가가 아니다. CPU 조회 p95 2.0728ms, 추가 GPU 호출 없음. 경로 A/B는 기존 침묵/변경 응답으로 출력이 달라 속도 개선율로 쓰지 않는다.
+
+**실제 Discord 검증 완료:** 사용자 허용 기존 테스트 채널에서 소유자 요청1/예약 확인1/알림1, 실제 GPU 작업 중 예정+1.936초(API1.312초). 사용자도 한 번 도착했다고 확인했다. 다른 범위8이벤트는 시험 도구에서 차단했고 원래 서명 설정은 변하지 않았다. 최초 시험은 채널 불일치로 수신0 후 중단, 재시험에서 완료했다. 시험 전용 복사본/DB만 사용했고 종료 후 임시 Gateway/GPU 작업을 정리했다. 이는 모의 이벤트나 실제 운영 서버/모든 Discord 기능의 종합 승인과 구별한다.
+
+수정한 실제 결함: 이름 첫 호출 기준 누락, 일반 시간 질문을 예약으로 오인, 직접 위로 요청에 끼어들기 veto 적용, Windows Ledger 연결 미종료, 예약 수정/선점 사이 오래된 본문 전송 경쟁. 실패 결과도 private에 보존했다.
+
+미완료/위험: 사람 블라인드 말투 평가, 다중 화자 지속성 누락, 사용자 화면 직접 조작/DPI 체감, 장시간 soak, 범용 자연어 날짜/요약. 자동 과거 Discord 기록 수집이나 가중치 재학습 없음. exactly-once 미보장: 불명확한 송신/재시작 processing은 실패로 보존하고 자동 재발송하지 않는다. DB 오류는 기억·예약 기능을 격리한다. 기본 자동 기억 OFF를 사용자 동의 없이 켜지 않는다.
+
+다음: EchoMate.vbs → 사람과 관계 별칭/시간대 확인 → 기억 관리 자동 저장 선택 → 본인 약속/취향 저장·만료·삭제 → 예약 목록/수정·취소를 직접 확인. 기억만 삭제와 전체 본인 자료 삭제는 다르다. `/내기억`은 본인 자료용이며 소유자 설정 권한을 부여하지 않는다. 이전 성인 모델 블라인드 평가는 여전히 대기다.
+
+기준 커밋 f2539f9, 선행 구현 ad7b903. 새 구현 커밋은 `git log -1 --oneline`로 확인한다. private는 `local_data/companion-qa-20261019/`(gpu-1~4, release-probe, live-1/2, tests-final-2.log). 실행: `$env:PYTHONPATH='src'`; `.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q`; `-m compileall -q src/echomate_bot`; GUI는 EchoMate.vbs. GPU QA 중 앱을 같이 시작하지 않는다.
+
 ## 최신 — 성인 유머·공통 성별·지속 대화 (2026-10-19)
 
 자동 판정 추가 검토: 정상166응답 전부 만점이었으나, 같은 판정기의 사전 고정 대조6개 중 기대 기준 일치는3개(부정 대조 검출2/5)였다. 따라서 자동 점수는 모델 선정/품질 동등성 근거에서 제외한다. GGUF 승격은 보류하고 사람 블라인드 평가를 남긴다. 세부 결과는 ADULT-MODE-QA를 따른다.
@@ -711,3 +729,6 @@ git status --short
 - User-provided final report: 2500/2500 finished, baseline validation loss 22.50891, best=7.3267 at step 2500, 32 validation samples, peak allocated 9629.2 MiB, no optimizer resume. Validation improved every recorded evaluation, tapering after ~1500; not proof of stylistic quality or non-memorization.
 - `tools/compare_gemma4_persona.py` compares same eight synthetic Korean prompts for original google/gemma-4-12B-it vs saved best PEFT adapter; single local NF4 GPU model using `disable_adapter()`, greedy sampling, offline cache. Write generated output to gitignored local_data only; manual inspect for sensitive leakage before sharing. Adapter path passed explicitly. Synthetic prompts and automatic regression tests are NOT real-user evaluation.
 - `tests/test_gemma4_persona_comparison.py`: two static checks; Windows GPU runtime is not verified. If PEFT generate / chat template fails on Gemma4 multimodal runtime, debug from user's traceback before claiming success. Next: actual A/B user review, private leakage checks, then Discord integration.
+
+
+보존 최종 검사: 기존1104파일 누락0. 가중치/학습자료/원래 서명 설정은 보존했다. 실제 QA 과정에서 기존 runtime.lock, diagnostic.jsonl, sent.sqlite3, telemetry.json 네 운영 파일은 실행 기록이 갱신됐다. 원래 파일을 삭제/되돌리지 않았다. QA 설정 폴더를 써도 EchoClient의 기본 ledger 경로가 운영 폴더를 가리키던 원인을 확인해, visual/ledger/진단을 설정 폴더에 함께 두도록 수정하고 경로 회귀 검사를 추가했다. 이 최종 경로 격리 수정은 모의 SDK/전체 회귀 검증이며 실제 Discord 재시험은 하지 않았다.

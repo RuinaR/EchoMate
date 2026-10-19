@@ -7,7 +7,7 @@ import math
 import time
 
 active_trace = ContextVar('echomate_trace', default=None)
-STAGES = frozenset({'assessment','continuity','visual','action','text','sending'})
+STAGES = frozenset({'assessment','continuity','visual','action','text','sending','memory_lookup','private_request'})
 
 
 def process_ram_mib():
@@ -49,7 +49,7 @@ class Trace:
         if self.stage_name:
             self.stages[self.stage_name] = self.stages.get(self.stage_name,0.)+now-self.stage_at
         return dict(seconds=now-self.started, outcome=self.outcome, stages=self.stages,
-                    regenerations=self.regenerations, calls=self.calls)
+                    regenerations=self.regenerations, calls=self.calls,decision=getattr(self,'decision',None))
 
 
 @contextmanager

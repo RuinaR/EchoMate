@@ -5,6 +5,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Deque
+import json
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,15 @@ class Turn:
 
 
 class DialogueState:
+    @staticmethod
+    def context_metadata(turn,latest):
+        if latest or not turn.context_metadata:return turn.context_metadata
+        try:
+            value=json.loads(turn.context_metadata)
+            if not isinstance(value,dict):return turn.context_metadata
+            value={k:v for k,v in value.items() if k not in ('configured_bot_name','bot_names')}
+            return json.dumps(value,ensure_ascii=False) if value else None
+        except ValueError:return turn.context_metadata
     def __init__(self, *, limit: int = 500, max_age_seconds: int = 86400):
         if limit < 1 or max_age_seconds < 1:
             raise ValueError("limit and max age must be positive")
@@ -65,6 +75,17 @@ class DialogueState:
     def is_current(self, *, channel_id: int, thread_id: int | None, version: int) -> bool:
         return self._versions.get((channel_id, thread_id), 0) == version
 
+    def change_message(self,*,channel_id,thread_id,message_id,content=None):
+        """Invalidate in-flight snapshots; preserve unrelated actual history."""
+        from dataclasses import replace
+        key=(channel_id,thread_id)
+        history=self._channels.get(key)
+        if history is None:return
+        self._channels[key]=deque(replace(t,content=content[:8000]) if t.message_id==message_id else t
+                                  for t in history if t.message_id!=message_id or content is not None)
+        self._ids[key]={t.message_id for t in self._channels[key]}
+        self._versions[key]=self._versions.get(key,0)+1
+
     def recent_context(self, *, channel_id: int, thread_id: int | None,
                        max_chars: int | None = None, now: datetime | None = None) -> tuple[int, list[dict[str, str]]]:
         """Build a bounded prompt window from the newest turns while keeping older RAM history."""
@@ -75,7 +96,7 @@ class DialogueState:
         selected: list[Turn] = []
         used = 0
         for turn in reversed(turns):
-            cost = len(turn.content) + len(turn.author_id) + 64 + len(turn.context_metadata or '')
+            cost = len(turn.content) + len(turn.author_id) + 64 + len(self.context_metadata(turn,not selected) or '')
             if selected and used + cost > budget:
                 break
             if not selected and cost > budget:
@@ -92,7 +113,7 @@ class DialogueState:
     def to_model_context(turns: list[Turn]) -> list[dict[str, str]]:
         """Speaker labels prevent multi-user conversation from becoming one user monologue."""
         context = []
-        for turn in turns:
+        for index,turn in enumerate(turns):
             role = "assistant" if turn.is_bot else "user"
             if turn.is_bot:
                 content = turn.content
@@ -100,7 +121,8 @@ class DialogueState:
                 content = f"[참여자 {turn.author_id}] {turn.content}"
                 if turn.reply_to:
                     content = f"[답장 대상 메시지 {turn.reply_to}] " + content
-            if turn.context_metadata:
-                content+='\n[관측된 이벤트 메타데이터 / 실제 발언 인용이 아님] '+turn.context_metadata
+            metadata=DialogueState.context_metadata(turn,index==len(turns)-1)
+            if metadata:
+                content+='\n[관측된 이벤트 메타데이터 / 실제 발언 인용이 아님] '+metadata
             context.append({"role": role, "content": content})
         return context

@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 from .settings import scope
 from .naming import guild_name,validate_name
+from .companion_ui import CompanionViews,PAGES
 
 BG='#0b1018';PANEL='#121b28';CARD='#182333';LINE='#273447'
 FG='#e9eff9';MUTED='#94a4bb';ACCENT='#9b91ff';MINT='#5ed8b8'
@@ -12,7 +13,7 @@ MOODS=['평온','기쁨','신남','우울','화남','피곤함','부끄러움']
 ACTIVITY={'조용함':'quiet','보통':'normal','활발함':'active','매우 활발함':'very_active'}
 MODES={'대답하지 않기':'silent','멘션·이어지는 대화만':'mention','자연스럽게 대화에 참여':'autonomous'}
 REACTION_MODES={'반응하지 않기':'silent','대화 중에만 반응':'mention','어울릴 때 가볍게 반응':'autonomous'}
-STAGES={'assessment':'참여·지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석','action':'행동 선택','text':'답변 작성','sending':'전송'}
+STAGES={'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석','action':'행동 선택','text':'답변 작성','sending':'전송'}
 
 
 def rounded(canvas,x,y,w,h,fill,r=12,outline=''):
@@ -92,13 +93,15 @@ class SelectionList(tk.Canvas):
         if self.focus_get() is self:self.create_rectangle(1,1,w-2,h-2,outline=ACCENT)
 
 
-class DesktopApp:
+class DesktopApp(CompanionViews):
     def __init__(self,root,controller):
         self.root=root;self.controller=controller;self.snapshot=None;self.page='spaces';self.hits=[]
+        self.button_fonts={}
         self.guild_id=None;self.channel_ids=set();self.text_mode='silent';self.react_mode='silent';self.inherit=False;self.drafts={};self.scope_baseline=None;self.closing=False;self.show_all=False
         self.canvas=tk.Canvas(root,bg=BG,highlightthickness=0,takefocus=True);self.canvas.pack(fill='both',expand=True)
         self.server_list=SelectionList(self.canvas,self.select_guild)
         self.channel_list=SelectionList(self.canvas,self.select_channels,True)
+        self.setup_records()
         root.title('EchoMate');root.geometry('1180x820');root.minsize(1040,740);root.configure(bg=BG)
         try:
             import ctypes
@@ -115,9 +118,13 @@ class DesktopApp:
     def text(self,x,y,value,size=11,color=FG,bold=False,width=None):
         return self.canvas.create_text(x,y,text=value,anchor='nw',fill=color,font=('맑은 고딕',size,'bold' if bold else 'normal'),width=width or 0)
     def button(self,x,y,w,h,label,callback,selected=False,primary=False,enabled=True,font_size=10):
+        while font_size>6 and self.button_font(font_size).measure(label)>w-16:font_size-=1
         rounded(self.canvas,x,y,w,h,ACCENT if primary and enabled else '#2d2b4d' if selected else CARD,8)
-        self.canvas.create_text(x+w/2,y+h/2,text=label,fill=MUTED if not enabled else BG if primary else ACCENT if selected else FG,font=('맑은 고딕',font_size,'bold'))
+        self.canvas.create_text(x+w/2,y+h/2,text=label,fill=MUTED if not enabled else BG if primary else ACCENT if selected else FG,font=self.button_font(font_size),tags=('button_label',))
         if enabled:self.hits.append((x,y,w,h,callback))
+    def button_font(self,size):
+        if size not in self.button_fonts:self.button_fonts[size]=tkfont.Font(root=self.root,family='맑은 고딕',size=size,weight='bold')
+        return self.button_fonts[size]
     def toggle(self,x,y,label,on,callback):
         rounded(self.canvas,x,y,38,22,MINT if on else LINE,11)
         self.canvas.create_oval(x+(20 if on else 3),y+3,x+(36 if on else 19),y+19,fill=BG if on else MUTED,outline='')
@@ -141,7 +148,10 @@ class DesktopApp:
     def activate_focus(self,event):
         if 0<=self.focus_index<len(self.hits):self.hits[self.focus_index][4]()
         return 'break'
-    def set_page(self,page):self.page=page;self.focus_index=-1
+    def set_page(self,page):
+        self.page=page;self.focus_index=-1
+        if page in PAGES:
+            self.record_key=None;self.record_status='전체';self.refresh_records()
     def set_value(self,key,value):self.controller.submit('settings',values={key:value})
     def remember_scope(self):
         if self.guild_id and self.channel_ids:
@@ -161,6 +171,8 @@ class DesktopApp:
     def select_guild(self,ids):
         self.remember_scope()
         self.guild_id=next(iter(ids),None);self.channel_ids=set();self.channel_list.selected=set();self.refresh_lists();self.render()
+        self.record_user=None;self.record_key=None
+        if self.page in PAGES:self.refresh_records()
     def select_channels(self,ids):
         self.remember_scope()
         self.channel_ids=set(ids)
@@ -242,11 +254,11 @@ class DesktopApp:
         self.canvas.create_rectangle(0,0,196,h,fill='#0e1521',outline='')
         self.canvas.create_oval(24,27,44,47,fill=ACCENT,outline='');self.canvas.create_oval(30,33,38,41,fill=BG,outline='')
         self.text(56,25,'EchoMate',16,bold=True);self.text(26,63,'내 PC에서 동작하는 봇',8,MUTED)
-        for index,(page,label) in enumerate([('spaces','대화할 곳'),('outputs','응답 방식'),('character','성격과 기분'),('status','진행 상황'),('labs','실험 기능')]):
+        for index,(page,label) in enumerate([('spaces','대화할 곳'),('outputs','응답 방식'),('character','성격과 기분'),*PAGES.items(),('status','진행 상황'),('labs','실험 기능')]):
             self.button(16,116+index*52,164,42,label,lambda p=page:self.set_page(p),self.page==page)
         self.text(24,h-90,'모델은 내 PC에서 실행',9,MUTED);self.text(24,h-65,'Gemma 4 12B',10)
         s=self.snapshot;cfg=s['cfg'] if s and s.get('cfg') else None
-        title={'spaces':'대화할 곳','outputs':'응답 방식','character':'성격과 기분','status':'지금 무엇을 하고 있나요?','labs':'실험 기능'}[self.page]
+        title={'spaces':'대화할 곳','outputs':'응답 방식','character':'성격과 기분','status':'지금 무엇을 하고 있나요?','labs':'실험 기능',**PAGES}[self.page]
         self.text(226,28,title,21,bold=True)
         connected=bool(s and s['connected'])
         running=bool(s and s.get('running'))
@@ -261,11 +273,13 @@ class DesktopApp:
         self.text(226,76,phase+error,10,MUTED)
         if cfg and connected:self.toggle(w-200,78,'응답 허용',cfg['enabled'],lambda:self.set_value('enabled',not cfg['enabled']))
         self.server_list.place_forget();self.channel_list.place_forget()
+        self.people_list.place_forget();self.record_list.place_forget()
         if self.page=='spaces':self.draw_spaces(w,h,cfg)
         elif self.page=='outputs':self.draw_outputs(w,h,cfg)
         elif self.page=='character':self.draw_character(w,h,cfg)
         elif self.page=='status':self.draw_status(w,h,s)
         elif self.page=='labs':self.draw_labs(w,h,cfg)
+        elif self.page in PAGES:self.draw_records(w,h,cfg)
         footer=('저장하지 않은 채널 설정이 있어요 · 선택을 바꿔도 임시 보관돼요' if self.scope_dirty else
                 '변경을 적용하지 못했어요. 서버 목록과 설정을 확인해 주세요.' if s and s['error'] else
                 s['notice']+' · 재시작 없이 적용돼요' if s and s.get('notice') else
@@ -285,6 +299,7 @@ class DesktopApp:
         if cfg and self.guild_id:
             self.text(left+16,bottom-90,'이 서버의 봇 이름',9,MUTED)
             self.button(left+10,bottom-62,190,34,guild_name(cfg,self.guild_id)[:16]+' · 변경',self.edit_name)
+            self.button(left+10,bottom-25,190,24,'별명·시간대 설정',self.server_options,font_size=8)
         self.channel_list.place(x=mid+10,y=sy+78,width=right-mid-35,height=bottom-sy-94)
         x=right+16;self.text(x,sy+17,'이곳에서 어떻게 할까요?',12,bold=True)
         self.text(x,sy+46,f'{len(self.channel_ids)}곳을 선택했어요' if self.channel_ids else '먼저 왼쪽에서 채널을 골라 주세요',9,ACCENT)
@@ -303,7 +318,7 @@ class DesktopApp:
         self.button(x,sy+488,216,32,'이 서버에서 모두 쉬기' if server and server['enabled'] else '이 서버에서 활동 허용',self.change_guild,enabled=bool(server))
     def choices(self,x,y,choices,current,callback,width=105,enabled=True):
         size=10
-        while size>7 and max(tkfont.Font(family='맑은 고딕',size=size,weight='bold').measure(label) for label,_ in choices)>width-16:size-=1
+        while size>6 and max(self.button_font(size).measure(label) for label,_ in choices)>width-16:size-=1
         for index,(label,value) in enumerate(choices):self.button(x+index*(width+8),y,width,35,label,lambda v=value:callback(v),value==current,enabled=enabled,font_size=size)
     def number(self,x,y,label,key,value,step,lo,hi):
         display=str(value)+'%' if key in {'warmth','cuteness','playfulness'} else str(value//60)+'분' if key=='engagement_seconds' and value>=60 else str(value)+'초'
@@ -337,6 +352,7 @@ class DesktopApp:
         self.button(w-430,291,180,32,'개인정보 없는 진단 저장',lambda:self.controller.submit('diagnostics'))
         for i,p in enumerate(s['progress'][:max(1,(h-420)//48)]):
             y=344+i*48;self.text(248,y,p['channel'],11);self.text(510,y,p['stage'],11,ACCENT);self.text(w-120,y,str(p['seconds'])+'초',11,MUTED)
+        self.text(248,h-130,f"기억 정리 대기 {s.get('memory_pending',0)}건 · 알림 확인 {'동작 중' if s.get('private_service') else '봇 연결 후 시작'}",9,MUTED)
         self.text(248,h-107,'대화 내용은 이 화면에 표시하지 않아요. 긴 답변은 작성에 시간이 더 걸릴 수 있어요.',9,MUTED)
     def draw_outputs(self,w,h,cfg):
         if not cfg:return
@@ -360,12 +376,16 @@ class DesktopApp:
         try:
             while True:self.snapshot=self.controller.updates.get_nowait()
         except queue.Empty:pass
+        if self.page in PAGES:
+            import time
+            if time.monotonic()-getattr(self,'_records_refreshed_at',0)>5:self.refresh_records()
         self.refresh_lists();self.render();self.poll_id=self.root.after(400,self.poll)
     def destroy(self):
         if self.disposed:return
         self.disposed=True
         self.root.after_cancel(self.poll_id)
         self.hits.clear();self.drafts.clear();self.snapshot=None
+        self.button_fonts.clear()
         self.root.destroy()
     def close(self):
         if self.closing:return
