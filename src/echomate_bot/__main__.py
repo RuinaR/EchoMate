@@ -29,7 +29,7 @@ def setup():
     path.write_text(json.dumps(dict(owner_id=owner,token=token,admin_guilds=[guild],signing_key=key)),encoding="utf-8")
     settings=Settings(owner,key)
     settings.set_scope(owner,guild,channel,"mention")
-    print("저장 완료. 기본은 정지 상태야. 시작 후 /echo panel, /echo set key:enabled value:true로 테스트 채널만 켜 줘.")
+    print("저장 완료. 기본은 정지 상태야. Windows 앱에서 허용 채널과 응답 방식을 고른 뒤 시작해 줘. 개인정보 설정은 본인의 /동의에서 관리해.")
 
 
 async def run():

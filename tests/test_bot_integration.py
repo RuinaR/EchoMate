@@ -81,7 +81,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.settings.path.write_text(json.dumps(envelope),encoding='utf-8')
         migrated=Settings(1,self.settings._key.decode(),self.settings.path)
         self.assertFalse(migrated.get()['vision']);self.assertFalse(migrated.get()['media'])
-        self.assertEqual(migrated.get()['asset_policy'],2)
+        self.assertEqual(migrated.get()['asset_policy'],3)
         migrated.set(1,'vision',True)
         self.assertTrue(Settings(1,self.settings._key.decode(),self.settings.path).get()['vision'])
 
@@ -94,11 +94,8 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
             client=EchoClient(self.settings,self.backend,[2])
         cache_factory.assert_called_once_with(self.settings.path.parent/'visual.sqlite3')
         self.assertEqual(runtime_factory.call_args.kwargs['ledger_path'],self.settings.path.parent/'sent.sqlite3')
-        standard=discord.StandardSticker(state=None,data=dict(id='1',name='Wave',description='A greeting',format_type=1,pack_id='10',sort_value=0,tags='hello,wave',type=1))
-        client.standard_stickers={1:standard,2:SimpleNamespace(id=2,tags=['hello'])}
-        self.assertEqual(set(client.standard_catalog('안녕')),{'1'})
-        group=client.tree.get_commands(guild=discord.Object(2))[0]
-        self.assertIsNone(group.get_command('media_add'));self.assertIsNone(group.get_command('media'))
+        self.assertEqual([c.name for c in client.tree.get_commands()],['동의'])
+        self.assertEqual(client.tree.get_commands(guild=discord.Object(2)),[])
         self.assertFalse(validate_action(Action(Kind.REACTION,asset='<:fake:123456789>'),dict(DEFAULTS,reactions=True),'autonomous',dict(view=True,react=True),dict(reactions={'<:fake:123456789>':'x'}),None,2))
     async def test_transient_windows_replace_lock_preserves_atomic_settings(self):
         from unittest.mock import patch
@@ -299,23 +296,17 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):parse_action('{"kind":"TEXT","text":"x","asset":"","api":"send"}')
         self.assertFalse(validate_action(Action(Kind.MEDIA,asset='unknown'),dict(DEFAULTS,media=True),'autonomous',{'view':True,'send':True,'attach':True},{},self.library,2))
     async def test_live_sdk_command_and_component_checks(self):
-        from echomate_bot.discord_app import EchoClient,OwnerPanel
+        from echomate_bot.discord_app import EchoClient
+        from echomate_bot.consent_ui import ConsentPanel
         from unittest.mock import AsyncMock,patch
         from types import SimpleNamespace
         import discord
-        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
-            client=EchoClient(self.settings,self.backend,[2])
-        response=SimpleNamespace(is_done=lambda:False,send_message=AsyncMock())
-        intruder=SimpleNamespace(user=SimpleNamespace(id=4),guild_id=2,response=response)
-        owner=SimpleNamespace(user=SimpleNamespace(id=1),guild_id=2,response=response)
-        group=client.tree.get_commands(guild=discord.Object(2))[0]
-        self.assertFalse(await group.interaction_check(intruder))
-        self.assertTrue(await group.interaction_check(owner))
-        panel=OwnerPanel(client)
-        self.assertFalse(await panel.interaction_check(intruder))
-        self.assertTrue(await panel.interaction_check(owner))
-        response.send_message.assert_called_with('이 작업은 사용할 수 없어.',ephemeral=True)
-        panel.stop()
+        with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):client=EchoClient(self.settings,self.backend,[2])
+        response=SimpleNamespace(send_message=AsyncMock())
+        panel=ConsentPanel(client,2,4,dict(relationships=False,memory=False,summaries=False),dict(relationships=0,memory=0,summaries=0))
+        self.assertFalse(await panel.interaction_check(SimpleNamespace(user=SimpleNamespace(id=1),guild_id=2,response=response)))
+        self.assertTrue(await panel.interaction_check(SimpleNamespace(user=SimpleNamespace(id=4),guild_id=2,response=response)))
+        self.assertEqual([c.name for c in client.tree.get_commands()],['동의']);panel.stop()
     async def test_cache_refresh_page_retains_previous_assets_and_clear_is_explicit(self):
         from echomate_bot.discord_app import EchoClient
         from unittest.mock import AsyncMock,patch
@@ -326,13 +317,9 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.settings.set(1,'vision',True)
         with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
             client=EchoClient(self.settings,self.backend,[2])
-        i=SimpleNamespace(user=SimpleNamespace(id=1),guild_id=2,channel_id=3,channel=SimpleNamespace(),guild=SimpleNamespace(emojis=[],stickers=[]),
-            response=SimpleNamespace(defer=AsyncMock(),send_message=AsyncMock()),followup=SimpleNamespace(send=AsyncMock()))
-        cmd=client.tree.get_commands(guild=discord.Object(2))[0].get_command('cache')
-        await cmd.callback(i,refresh=True,offset=0,limit=1)
+        self.assertEqual([c.name for c in client.tree.get_commands()],['동의'])
         self.assertIn('emoji:5',self.cache.descriptions(2))
-        await cmd.callback(i,refresh=False,offset=0,limit=1)
-        self.assertEqual(self.cache.descriptions(2),{})
+        self.cache.clear(2);self.assertEqual(self.cache.descriptions(2),{})
     async def test_transport_rechecks_scope_before_each_output_and_sets_nonce(self):
         from echomate_bot.discord_app import DiscordTransport
         from types import SimpleNamespace
@@ -341,6 +328,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         channel=SimpleNamespace(fetch_message=AsyncMock(return_value=current))
         transport=DiscordTransport(SimpleNamespace(user=SimpleNamespace(id=999)))
         transport.channel=lambda event:channel
+        transport._permissions=AsyncMock(return_value=dict(view=True,send=True,react=True))
         checks=iter([True,True,False])
         async def fresh():return next(checks)
         with self.assertRaises(ValueError):

@@ -8,6 +8,8 @@ import asyncio
 import json
 import logging
 import queue
+import sqlite3
+from contextlib import closing
 import threading
 import time
 from pathlib import Path
@@ -16,12 +18,15 @@ import tkinter as tk
 from .settings import ROOT,Settings,MOODS,ACTIVITY
 
 STAGES={'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
-        'action':'행동 선택','text':'답변 작성','sending':'Discord 전송'}
+        'action':'행동 선택','text':'답변 작성','sending':'Discord 전송','research':'공식 인터넷 근거 확인','output_check':'출력 정책 검사'}
 NO_RESPONSE = {
     'name_not_recognized':'등록된 호출 형태가 없어요', 'name_ambiguous':'이름은 보이지만 부른 대상이 불분명해요',
     'followup_not_linked':'이어지는 대화 근거가 부족해요', 'continuation_rejected':'대상이나 종료 판단에 따라 답하지 않았어요',
     'autonomy_cooldown':'새 자율 참여의 대기 시간 또는 부하 제한이에요', 'scope_denied':'허용된 대화 범위가 아니에요',
     'permission_denied':'채널을 볼 권한이 없어요',
+    'daily_limit_reached':'오늘의 전송 한도에 도달했어요 · 한국 시각 오전 9시에 새 한도 시작',
+    'duplicate_request':'이미 처리한 요청이에요', 'response_cooldown':'발언 간격을 기다리고 있어요',
+    'reaction_disabled':'이 범위의 이모지 반응이 꺼져 있어요',
     'member_other_addressee':'다른 구성원에게 한 말로 확인했어요',
     'queue_rejected':'작업 대기 한도에 도달했어요', 'request_expired':'요청의 최대 대기 시간이 지났어요',
     'stale_context':'생성 중 대화나 설정이 바뀌었어요', 'generation_failed':'AI 처리 중 오류가 났어요',
@@ -54,13 +59,18 @@ class LocalController:
             from .instance import InstanceLease
             self.lease=InstanceLease()
             self.bootstrap=json.loads((ROOT/'bootstrap.json').read_text(encoding='utf-8'))
-            self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'])
+            self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'],ROOT/'settings.json')
             from .companion_store import CompanionStore
             self.companion=CompanionStore(ROOT/'companion.sqlite3');self.companion_view={}
+            self.record_guilds=await asyncio.to_thread(self.companion.guild_ids) if not self.companion.error else []
+            cached=ROOT/'inventory.json'
+            if cached.exists():
+                try:self.inventory=json.loads(cached.read_text(encoding='utf-8'))
+                except (OSError,ValueError):self.error='저장된 서버 목록을 읽지 못했어요'
             if not self.bootstrap['admin_guilds']:raise ValueError('No approved guild')
             self.phase='서버와 채널 목록을 불러오고 있어요'
             self._publish()
-            await self.refresh_inventory()
+            # Local records remain available without logging into Discord.
             if not self.job or self.job.done():self.phase='정지 — 시작 버튼으로 연결'
         except Exception as exc:
             self.phase='다른 EchoMate 앱이 실행 중이야' if isinstance(exc,RuntimeError) else '로컬 설정 필요 — setup_discord_bot.ps1 확인'
@@ -77,6 +87,7 @@ class LocalController:
         if cfg:
             guild_ids=set(self.bootstrap['admin_guilds'])
             guild_ids.update(map(int,cfg['guilds']))
+            guild_ids.update(getattr(self,'record_guilds',[]))
             guild_ids.update(g['id'] for g in getattr(self,'inventory',[]))
             if client and client.is_ready():guild_ids.update(g.id for g in client.guilds)
             for gid in sorted(guild_ids):
@@ -92,7 +103,7 @@ class LocalController:
                             channels[c.id]=dict(id=c.id,label=label,thread=isinstance(c,discord.Thread),parent=c.parent_id if isinstance(c,discord.Thread) else None)
                 for table in ('channels','threads'):
                     for cid in g[table]:channels.setdefault(int(cid),dict(id=int(cid),label='등록된 '+('스레드' if table=='threads' else '채널'),thread=table=='threads'))
-                servers.append(dict(id=gid,label=guild.name if guild else saved['label'] if saved else '등록된 테스트 서버',enabled=g['enabled'],channels=list(channels.values())))
+                servers.append(dict(id=gid,label=guild.name if guild else saved['label'] if saved else f'서버 {gid} · 로컬 자료',enabled=g['enabled'],channels=list(channels.values())))
         runtime=client.runtime if client else None
         progress=[]
         if runtime:
@@ -100,11 +111,24 @@ class LocalController:
                 channel=client.get_channel(p.get('channel',cid))
                 progress.append(dict(channel=channel.name if channel else '허용된 채널',stage=STAGES.get(p['stage'],p['stage']),seconds=round(time.time()-p['started'],1)))
         preparing=bool(runtime and getattr(runtime,'changing_model',False))
+        try:
+            if runtime and cfg:budget=runtime.ledger.budget(cfg['daily_limit'])
+            elif cfg:
+                from datetime import datetime,timezone
+                path=self.settings.path.parent/'sent.sqlite3';used=0
+                if path.exists():
+                    with closing(sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True,timeout=.1)) as db:used=db.execute('SELECT COUNT(*) FROM sent WHERE day=?',(datetime.now(timezone.utc).date().isoformat(),)).fetchone()[0]
+                budget=dict(used=used,limit=cfg['daily_limit'],remaining=max(0,cfg['daily_limit']-used))
+            else:budget={}
+        except (OSError,sqlite3.Error):budget=dict(error=True);self.error='전송 한도 기록을 읽지 못했어요'
         snapshot=dict(phase='모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
                       model_preparing=preparing,
                       recent_reason=next((NO_RESPONSE.get(r['code'],'') for r in reversed(runtime.diagnostics) if r['code'] in NO_RESPONSE or r['code']=='response_sent'),'') if runtime else '',
                       scheduler=client.backend.scheduler.snapshot() if client and hasattr(client.backend,'scheduler') else {},
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
+                      companion_loading=getattr(self,'companion_loading',False),
+                      budget=budget,
+                      jobs=runtime.monitor() if runtime and hasattr(runtime,'monitor') else getattr(self,'last_jobs',[]),
                       memory_pending=runtime.memory_queue.qsize() if runtime else 0,
                       private_service=bool(runtime and runtime.service_task and not runtime.service_task.done()),
                       running=bool(self.job and not self.job.done()),
@@ -129,7 +153,7 @@ class LocalController:
         if self.loop:asyncio.run_coroutine_threadsafe(self.command(operation,**kwargs),self.loop)
 
     def known_guild(self,gid):
-        return gid in self.bootstrap['admin_guilds'] or any(g['id']==gid for g in getattr(self,'inventory',[])) or bool(self.client and self.client.is_ready() and self.client.get_guild(gid))
+        return gid in self.bootstrap['admin_guilds'] or gid in getattr(self,'record_guilds',[]) or any(g['id']==gid for g in getattr(self,'inventory',[])) or bool(self.client and self.client.is_ready() and self.client.get_guild(gid))
 
     async def refresh_inventory(self):
         """Metadata-only REST, available without loading the model or sending messages."""
@@ -147,6 +171,8 @@ class LocalController:
                 entries.extend(dict(id=t.id,label=parents.get(t.parent_id,'')+' / '+t.name,thread=True,parent=t.parent_id) for t in await guild.active_threads())
                 inventory.append(dict(id=guild.id,label=guild.name,channels=entries))
             self.inventory=inventory
+            from .settings import atomic_private_json
+            atomic_private_json(ROOT/'inventory.json',inventory)
         except Exception as exc:self.error='목록 갱신 실패 · '+type(exc).__name__
         finally:
             await reader.close();self.refreshing=False
@@ -183,7 +209,7 @@ class LocalController:
                 self.phase='정지'
             elif operation=='settings':
                 values=kwargs['values']
-                allowed={'enabled','text','reactions','vision','stickers','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours'}
+                allowed={'enabled','text','reactions','vision','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','daily_limit','command_sync_pending','web_search','summaries_auto'}
                 if set(values)-allowed:raise ValueError('Unknown GUI setting')
                 from .settings import validate
                 validate(dict(self.settings.get(),**values))
@@ -221,12 +247,14 @@ class LocalController:
                     if self.client:self.client.runtime.cancel_pending()
                 elif action=='affinity':
                     if not user:raise ValueError('Choose user')
-                    await asyncio.to_thread(store.set_affinity,gid,user,float(kwargs['value']))
+                    if not await asyncio.to_thread(store.automatic_allowed,gid,user,'relationships'):raise ValueError('본인의 친밀도 저장 동의가 필요해요')
+                    await asyncio.to_thread(store.set_affinity,gid,user,float(kwargs['value']),require_consent=True)
                 elif action=='member_alias':
                     if not user:raise ValueError('Choose user')
+                    if kwargs['status']!='deleted' and not await asyncio.to_thread(store.automatic_allowed,gid,user,'relationships'):raise ValueError('본인의 친밀도 저장 동의가 필요해요')
                     channel=int(kwargs['channel']);g=self.settings.get()['guilds'].get(str(gid),{})
                     if str(channel) not in g.get('channels',{}) and str(channel) not in g.get('threads',{}):raise ValueError('Choose configured source channel')
-                    await asyncio.to_thread(store.set_alias,gid,channel,user,kwargs['alias'],kwargs['status'])
+                    await asyncio.to_thread(store.set_alias,gid,channel,user,kwargs['alias'],kwargs['status'],require_consent=True)
                     if self.client:self.client.runtime.members.alias_cache.clear()
                 elif action=='forget_user':
                     if not user:raise ValueError('Choose user')
@@ -244,10 +272,11 @@ class LocalController:
                     expires=editor_timestamp(kwargs.get('expires',''),tz)
                     if action=='memory_add':
                         if not user:raise ValueError('Choose user')
+                        if not await asyncio.to_thread(store.automatic_allowed,gid,user,'memory'):raise ValueError('본인의 기억 저장 동의가 필요해요')
                         channel=int(kwargs['channel'])
                         g=self.settings.get()['guilds'].get(str(gid),{})
                         if str(channel) not in g.get('channels',{}) and str(channel) not in g.get('threads',{}):raise ValueError('Choose configured source channel')
-                        key=await asyncio.to_thread(store.add_memory,gid,user,channel,kwargs['summary'],kwargs.get('kind','explicit'),tz=tz,expires=expires,policy=self.settings.get())
+                        key=await asyncio.to_thread(store.add_memory,gid,user,channel,kwargs['summary'],kwargs.get('kind','explicit'),tz=tz,expires=expires,policy=self.settings.get(),require_consent=True)
                         if key is None:raise ValueError('Subject opted out or source deleted')
                     else:await asyncio.to_thread(store.edit_memory,gid,kwargs['key'],kwargs['summary'],expires,kwargs.get('status','active'))
                 elif action=='memory_delete':await asyncio.to_thread(store.delete_memory,gid,kwargs['key'])
@@ -264,6 +293,27 @@ class LocalController:
                 elif action!='refresh':raise ValueError('Unknown companion action')
                 await self.refresh_companion(gid,user,kwargs.get('query',''),kwargs.get('kind'))
                 self.notice='로컬 기록을 확인했어요' if action=='refresh' else '변경을 적용했어요'
+            elif operation=='visual_cache':
+                gid=int(kwargs['guild'])
+                if not self.known_guild(gid):raise PermissionError('Unknown guild')
+                from .vision import VisualCache,download
+                cache=self.client.cache if self.client else VisualCache(ROOT/'visual.sqlite3')
+                if not kwargs.get('refresh'):
+                    await asyncio.to_thread(cache.clear,gid);self.notice='선택한 서버의 시각 캐시를 비웠어요'
+                else:
+                    channel_id=int(kwargs['channel']);cfg=self.settings.get()
+                    if not self.client or not self.client.is_ready() or not cfg['vision']:raise ValueError('연결과 실험 시각 분석 활성화가 필요해요')
+                    channel=self.client.get_channel(channel_id)
+                    parent=getattr(channel,'parent_id',None)
+                    if not channel or channel.guild.id!=gid or scope(cfg,gid,channel_id,parent)=='silent':raise PermissionError('Allowed channel required')
+                    client=self.client;task=asyncio.current_task();client.owner_tasks.add(task)
+                    try:
+                        for asset in [*channel.guild.emojis,*channel.guild.stickers][:5]:
+                            current=self.settings.get()
+                            if self.client is not client or client.runtime.stopped or not current['vision'] or scope(current,gid,channel_id,parent)=='silent':break
+                            await cache.analyze(gid,('emoji:' if hasattr(asset,'animated') else 'sticker:')+str(asset.id),await download(str(asset.url)),client.backend,force=True)
+                    finally:client.owner_tasks.discard(task)
+                    self.notice='실험 시각 캐시를 최대 5개 다시 분석했어요'
             elif operation=='diagnostics':
                 from .settings import atomic_private_json
                 from .telemetry import summarize
@@ -304,24 +354,33 @@ class LocalController:
                             if thread.parent_id==cid:self.client.runtime.invalidate(thread.id)
             else:raise ValueError('Unknown operation')
             if operation in {'settings','scope','guild'}:self.notice='설정 저장 완료'
-        except Exception as exc:self.error=type(exc).__name__
+        except Exception as exc:
+            safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요'}
+            self.error=str(exc) if str(exc) in safe else type(exc).__name__
         self._publish()
 
     async def refresh_companion(self,guild,user=None,query='',kind=None):
         self.companion_request=getattr(self,'companion_request',0)+1;request=self.companion_request
+        self.companion_loading=True;self._publish()
         def read():
             store=self.companion
             memories=store.memories(guild,user,query=query,kind=kind)
             reminders=store.reminders(guild,user)
             people={r['user']:dict(r) for r in store.users(guild)}
+            for uid in store.consent_users(guild):people.setdefault(uid,dict(user=uid,affinity=50,interactions=0,last_at=0))
             aliases=store.aliases(guild,user=user)
             for row in aliases:people.setdefault(row['user'],dict(user=row['user'],affinity=50,interactions=0,last_at=0))
             for row in [*store.memories(guild),*store.reminders(guild)]:
                 uid=row.get('user',row.get('requester'))
                 people.setdefault(uid,dict(user=uid,affinity=50,interactions=0,last_at=0))
-            return dict(guild=guild,user=user,people=list(people.values()),aliases=aliases,memories=memories,reminders=reminders,query=query,kind=kind,history=store.relationship_history(guild,user) if user else [])
-        view=await asyncio.to_thread(read)
+            for person in people.values():person['consent']=store.consent(guild,int(person['user']))
+            return dict(guild=guild,user=user,people=list(people.values()),aliases=aliases,memories=memories,reminders=reminders,query=query,kind=kind,history=store.relationship_history(guild,user) if user else [],summaries=store.summaries(guild,int(user)) if user else [])
+        try:view=await asyncio.to_thread(read)
+        except Exception:
+            if request==self.companion_request:self.companion_loading=False;self.companion_view=dict(guild=guild,user=user,load_error=True)
+            raise
         if request!=self.companion_request:return
+        self.companion_loading=False
         self.companion_view=view
         names=getattr(self.client,'user_names',{}) if self.client else {}
         if self.client:
@@ -358,6 +417,9 @@ class LocalController:
                 except Exception as exc:self.error="Shutdown"+type(exc).__name__
                 finally:
                     self.client=None
+                    try:
+                        self.last_jobs=client.runtime.monitor();self.last_budget=client.runtime.ledger.budget(self.settings.get()['daily_limit'])
+                    except (AttributeError,OSError,sqlite3.Error):pass
                     try:atomic_private_json(ROOT/'desktop-performance.json',client.backend.metrics)
                     except OSError:self.error='PerformanceWriteError'
             self.phase='정지'

@@ -1,5 +1,65 @@
 # 릴리즈 QA — 2026-10-19
 
+## 2026-10-19 최신 — 단일 동의·오프라인 관리·출력 정책 릴리즈 후보
+
+공개47파일 staged 검토: 비공개 추적0·실제 bootstrap 민감 리터럴0·개인 경로0·문서 상대 링크 오류0, `git diff --cached --check` 통과. 운영4파일 해시 동일. 최신 구현 커밋은 후속 문서 기록을 참고한다.
+
+기준 d1b2d6a, 초기407검사를 보존했다. 최종 **436검사 OK39.186초**(`tests-publish.log`)는 단위/임시 SQLite/모의 Discord SDK/숨긴 Windows Tk를 포함한다. 실제 Discord 연결·명령 등록/동기화·송수신, 사용자 데스크톱 조작은 **미실행**이다. 전체 실사용 릴리즈 판정은 **NOT VERIFIED**다. 자세한 연결 감사는 [RELEASE-CANDIDATE](RELEASE-CANDIDATE.md), 동의 안내·저장/삭제 경계는 [PRIVACY-COMMANDS](PRIVACY-COMMANDS.md)를 따른다.
+
+### 실행 증거
+
+| 검증 | 결과 | 해석 범위 |
+| --- | --- | --- |
+| 전체 회귀 | 436/436, 39.186초 | 실제 SQLite·SDK 모의 객체·숨긴 Tk 포함. 실서버 아님 |
+| 본인 동의/기본 OFF/독립 세 항목/구버전 보존 | 통과 | 타인/소유자 대리 동의 거부, 철회 직전 쓰기 및 삭제 선택 경합 포함 |
+| 앱 OFF 관계·호칭·기억·예약 조회 | 통과 | 로컬 자료/빈 상태/오류/늦은 결과 배제, 3단계 DPI 검사 |
+| 실제 SDK reaction mock | 통과 | 직접/자율 반응, 원본/답장 대상, 권한 철회, 일시 오류 복구. HTTP는 메모리 경계 |
+| GPU 연속 호출 | 18/18, 중복0 | 1/2/5초 독립·큐 대기·보충 병합·중복, 세 모드 각6개 |
+| GPU 최종 실행 경로 | 18/18 | 세 모드 각 코드 안내/직접 반응/계산/공유 반응2/타인 침묵. 무작위 기회만 강제하며 의미·권한 검증 유지 |
+| GPU 기존 실패 대화 회귀 | 12/12 | 핀잔→새 화자 이름 호출→평가 순서, 원본 대상·공유 conversation ID 유지 |
+| 공식 공개 API 실제 조회 | 5/5 검증된 형태 | 0.046~0.266초의 단회 관찰. 범용 검색/사실 정확성 연구 아님 |
+| 운영 파일 보존 | 4/4 SHA256 동일 | 설정/인증 설정/관계 DB/전송 ledger. 원문·키·해시는 공개하지 않음 |
+| 실제 Windows 사용자 조작/장기 GPU soak/사람 말투 평가 | 미실행 | 숨긴 Tk·소규모 GPU를 이 검증으로 바꾸어 쓰지 않음 |
+
+### 생성 정책 A/B (모델 속도 개선 시험과 구분)
+
+기본/개인/성인 정책 각6개 독립 합성 문항을 old/new 교대 순서로 실행했다. 같은 가중치·greedy·최대768토큰, 워밍업2회 제외다. 이 시험은 정책 변경 효과이며 가중치 학습 비교가 아니다. 성인 선택은 여전히 기본 가중치+정책 fallback이다. 코드 요청3/개념 설명2/공감1의 작은 집합이며 사람 블라인드 품질/일반화 인증은 아니다.
+
+| 모드 | 생성 p50초 old→new | p95초 old→new | TTFT p50초 old→new | 새 정책 최대 할당 MiB | 새 정책 중앙 tokens/s |
+| --- | --- | --- | --- | --- | --- |
+| 기본 | 7.836→9.891 | 9.488→12.101 | 0.547→0.633 | 7913 | 7.57 |
+| 개인 말투 | 5.735→10.883 | 14.633→12.270 | 0.453→0.500 | 7912 | 5.80 |
+| 성인 정책 | 8.969→9.430 | 11.395→22.071 | 0.485→0.562 | 8001 | 8.27 |
+
+새 정책은 일부 더 느렸다. 출력 길이와 재생성도 다르므로 엔진 속도 향상이라고 부르지 않는다. 양쪽18/18 반환·모든 내부 호출 정상 종료, 추가 호출 각각1회였다. 코드 요청9개에서 old9/new0 코드 출력, 전체 새18개도 최종 강화된 검사로 재검사해0개였다. 개념 설명의 제한된 핵심 문자열은 양쪽6/6이나 포괄적인 사실성/설명 품질 점수가 아니다. 프로세스 RAM 관찰 최대 약1859MiB, CUDA 할당 최대 약8001MiB이며 다른 프로그램/드라이버 VRAM은 포함하지 않는다. 장시간 누수 검증은 아니다.
+
+이 A/B 이후 스티커 관련 지시 삭제/출력 검사 보강이 있었고 기존 결과에 최종 guard를 재적용했다. 모든 변경을 동일 GPU 생성 A/B로 재측정했다고 주장하지 않는다. 최종 공통 실행 경로의 별도 GPU 검사에서 명확한 프로그램 작성 요청과 직접 reaction은 **GPU 호출0회·모의 전송 완료 약0.015~0.031초**였다. 계산은1회 약0.968~1.797초, 자율 reaction은 의미+행동2회 약3.219~3.484초였다. 각각 단회·합성/메모리 전송이며 실제 Discord end-to-end 지연이나 일반 응답 속도 보장이 아니다. 일일 한도 차단도 GPU 이전이며 기존 안전 상한을 제거하지 않았다.
+
+### 발견/수정 및 실패 보존
+
+- 운영 진단은 당일100건 전송/100건 한도 소진을 확인했다. 생성 후 일반 veto 대신 사전 검사·명확한 이유/사용량/앱 변경을 제공한다. 기존 상한100과 ledger를 유지한다.
+- 개인정보를 켤 때 진행 요청을 취소하던 경로, 확인 중 삭제 종류 변경 경합, 철회와 기억 쓰기 경합, 봇 OFF 자료 조회/늦은 스냅샷, 모델 종료 실패 후 Gateway 정리 누락을 보강했다.
+- 자율 반응 최초 GPU는 특정 타인과 채널 공유를 혼동해9/12였다. 정의 보강 뒤 시험용 난수 객체 choice 누락을 발견했고 이를 수정했다. 별도 공유 문항을 추가한 pipeline3은18/18이다. 개발 문항을 튜닝 후 최종 블라인드로 부르지 않는다.
+- 권한/네트워크 실패를 모든 emoji의 영구 무효로 처리하던 경로를 실제 unknown-emoji 오류로 한정했다. 불명확 송신 예약은 재전송하지 않는다.
+- 초기 httpx 미설치 경로는 기존 aiohttp로 교체했고, 과거 동의/스티커 테스트 계약과 synthetic timestamp/카탈로그 오류는 구분하여 고쳤다. 실패 로그를 삭제하지 않았다.
+- 범용 웹 검색은 미구현이다. 고정 공식 버전5주제만 지원하며 뉴스/법률/가격 등은 확인 불가로 안내한다. 요약도 본인 발췌이며 추상적 다자 요약은 미구현이다. 코드 검사는 알려진 주요 구문으로 모든 언어/난독화를 보장하지 않는다.
+
+### 재현/보존
+
+비공개 결과는 `local_data/release-qa-20261019/` 아래에만 둔다: tests-publish.log, gpu-policy(개발), gpu-final(독립 생성), gpu-bursts, gpu-pipeline/2(실패)/3, gpu-semantic, public-source-live.json, preservation-before/after.json. 원문/응답/소스 스냅샷/DB/weights/토큰을 커밋하지 않는다. GPU 도구는 단일 모델을 순차 로딩하고 실제 Discord transport가 없다.
+
+```powershell
+$env:PYTHONPATH='src'
+.venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q
+# 아래 output은 존재하지 않는 local_data 하위 새 폴더를 지정한다.
+.venv-gemma4/Scripts/python.exe tools/verify_release_gpu.py --fixtures local_data/release-qa-20261019/gpu-final-protocol-private.json --output local_data/release-qa-recheck/generation
+.venv-gemma4/Scripts/python.exe tools/verify_release_pipeline_gpu.py --output local_data/release-qa-recheck/pipeline
+.venv-gemma4/Scripts/python.exe tools/verify_direct_bursts.py --output local_data/release-qa-recheck/bursts
+.venv-gemma4/Scripts/python.exe tools/verify_semantic_gpu.py --fixtures local_data/semantic-qa-20261019/sequence-fixtures-private.json --output local_data/release-qa-recheck/semantic --skip-moods
+```
+
+새 실행 전 기존 앱/다른 EchoMate GPU 프로세스가 없음을 확인한다. 이 명령은 실제 Discord 접속 허가가 아니다. 기존 private fixture가 없으면 임의의 과거 발언으로 복원하지 말고 별도의 합성 프로토콜을 작성한다.
+
 ## 2026-10-19 최신 — 서버 구성원 호칭과 대상 이해
 
 기준 `5697cbd`, 상세 [MEMBER-ADDRESSING](MEMBER-ADDRESSING.md). 실제 Discord 접속/송신은 하지 않았다. 새 가중치·학습·최종 모델 승격은 없다. 같은 기존 모델을 한 번 로딩하여 이전 Runtime/분류 프롬프트와 수정 경로를 교대로 비교했다. GPU 평가 원문/설정/응답은 `local_data/member-qa-20261019/`에만 보관한다.

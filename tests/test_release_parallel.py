@@ -20,6 +20,7 @@ class SourceGuards(unittest.IsolatedAsyncioTestCase):
     async def test_source_edit_without_gateway_notification_vetoes_send(self):
         current=SimpleNamespace(content='수정한 메시지',reply=AsyncMock())
         transport=DiscordTransport(SimpleNamespace(user=SimpleNamespace(id=999)))
+        transport._permissions=AsyncMock(return_value=dict(view=True,send=True,react=True))
         transport.channel=lambda event:SimpleNamespace(fetch_message=AsyncMock(return_value=current))
         event=replace(self.event(),target_content_hash=hashlib.sha256('원본'.encode()).hexdigest())
         with self.assertRaises(ValueError):await transport.execute(event,Action(Kind.TEXT,'답변'),None,AsyncMock(return_value=True))
@@ -29,7 +30,8 @@ class SourceGuards(unittest.IsolatedAsyncioTestCase):
         root=SimpleNamespace(content='원본',reply=AsyncMock())
         changed=SimpleNamespace(content='다른 내용')
         channel=SimpleNamespace(fetch_message=AsyncMock(side_effect=[root,changed]))
-        transport=DiscordTransport(SimpleNamespace(user=SimpleNamespace(id=999)));transport.channel=lambda event:channel
+        transport=DiscordTransport(SimpleNamespace(user=SimpleNamespace(id=999)))
+        transport._permissions=AsyncMock(return_value=dict(view=True,send=True,react=True));transport.channel=lambda event:channel
         event=replace(self.event(id=11),response_to=10,target_content_hash=hashlib.sha256('원본'.encode()).hexdigest(),source_content_hash=hashlib.sha256('보충'.encode()).hexdigest())
         with self.assertRaises(ValueError):await transport.execute(event,Action(Kind.TEXT,'답변'),None,AsyncMock(return_value=True))
         root.reply.assert_not_awaited();self.assertEqual([c.args[0] for c in channel.fetch_message.call_args_list],[10,11])
@@ -42,7 +44,7 @@ class StoreAudit(unittest.TestCase):
         with self.store.db() as db:db.execute('DROP TABLE memory_flows');db.execute('DROP TABLE subject_consents');db.execute('PRAGMA user_version=1')
         migrated=CompanionStore(self.path)
         self.assertIsNone(migrated.error);self.assertEqual(migrated.memories(2,4)[0]['memory_id'],key)
-        with migrated.db() as db:self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],4)
+        with migrated.db() as db:self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],5)
         plan=migrated.add_memory(2,4,3,'나는 내일 오후 3시에 모임 약속이 있어','plan',conversation_id='one')
         migrated.delete_memory(2,plan)
         with migrated.db() as db:self.assertEqual(db.execute('SELECT COUNT(*) FROM memory_flows').fetchone()[0],0)

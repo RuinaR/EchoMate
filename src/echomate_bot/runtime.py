@@ -51,6 +51,8 @@ class Event:
     member_mentions:tuple=()
     reply_author:int|None=None
     member_roles:object=None
+    member_seconds:float=0.
+    name_result:str='none'
 
 
 class Ledger:
@@ -66,6 +68,15 @@ class Ledger:
         return row[0] or 0
     def contains(self,event):
         with self.db() as db:return db.execute('SELECT 1 FROM sent WHERE event=?',(str(event.response_to or event.id),)).fetchone() is not None
+    def budget(self,limit):
+        day=datetime.now(timezone.utc).date().isoformat()
+        with self.db() as db:used=db.execute('SELECT COUNT(*) FROM sent WHERE day=?',(day,)).fetchone()[0]
+        return dict(day=day,used=used,limit=limit,remaining=max(0,limit-used),reset='UTC 00:00 / 한국 09:00')
+    def block_reason(self,event,limit,cooldown):
+        if self.contains(event):return 'duplicate_request'
+        if self.budget(limit)['remaining']==0:return 'daily_limit_reached'
+        if time.time()-self.last(event.channel)<cooldown:return 'response_cooldown'
+        return None
     def reserve(self,event,limit,cooldown):
         now=time.time();day=datetime.now(timezone.utc).date().isoformat()
         with self.db() as db:
@@ -102,6 +113,21 @@ class Runtime:
         self.gateway_available=True
         from .members import MemberDirectory
         self.members=MemberDirectory()
+        from .research import PublicResearch
+        self.research=PublicResearch()
+        self.job_records={}
+
+    def monitor(self):
+        from .scheduler import request_context
+        scheduler=getattr(self.backend,'scheduler',None)
+        gpu=scheduler.details() if scheduler else []
+        rows=[];now=time.monotonic()
+        for job in reversed(list(self.job_records.values())):
+            row=dict(job,seconds=round((job.get('finished') or now)-job['created'],2),stages=dict(job.get('stages',{})))
+            match=next((r for r in gpu if r['source']==job['source'] and r['guild']==job['guild']),None)
+            if match:row.update(gpu=match)
+            rows.append(row)
+        return rows[:100]
 
     async def member_evidence(self,event):
         """After scope/permission checks; no server-wide lookup or GPU call."""
@@ -120,6 +146,8 @@ class Runtime:
                 cached=self.members.alias_cache.get(key)
                 if not cached or self.members.clock()-cached[0]>60:
                     aliases=await asyncio.to_thread(self.companion.aliases,*key)
+                    permitted=await asyncio.to_thread(self.companion.consenting_users,event.guild,'relationships')
+                    aliases=[a for a in aliases if int(a['user']) in permitted]
                     self.members.alias_cache[key]=(self.members.clock(),aliases)
                 else:aliases=cached[1]
             except (OSError,sqlite3.Error,RuntimeError):self.note('member_cache_unavailable')
@@ -146,7 +174,7 @@ class Runtime:
             uid,alias,kind=evidence
             if uid!=self.transport.bot_id and await self.automatic_subject_allowed(event.guild,uid):
                 try:
-                    await asyncio.to_thread(self.companion.observe_alias,event.guild,event.channel,uid,alias,event.id,event.author,kind)
+                    await asyncio.to_thread(self.companion.observe_alias,event.guild,event.channel,uid,alias,event.id,event.author,kind,observed=event.timestamp.timestamp())
                     self.members.alias_cache.pop(key,None)
                 except (ValueError,OSError,sqlite3.Error,RuntimeError):self.note('member_evidence_unavailable')
         if roles.ambiguous:self.note('member_ambiguous')
@@ -181,9 +209,8 @@ class Runtime:
         active=self.activity_changed();pending=getattr(self.backend,'pending',0)
         return ACTIVITY[cfg['activity']]/(1+.5*active+.5*pending)
 
-    async def automatic_subject_allowed(self,guild,user):
-        if user==self.settings.owner_id:return True  # owner explicitly requested personal adaptation
-        try:return await asyncio.to_thread(self.companion.automatic_allowed,guild,user)
+    async def automatic_subject_allowed(self,guild,user,category='relationships'):
+        try:return await asyncio.to_thread(self.companion.automatic_allowed,guild,user,category)
         except (OSError,RuntimeError,sqlite3.Error):self.note('subject_consent_unavailable');return False
 
     def end_conversation(self,flow,author):
@@ -221,6 +248,20 @@ class Runtime:
         if self.companion and (not self.service_task or self.service_task.done()):
             self.service_task=asyncio.create_task(self._services(),name='echomate-private-services')
 
+    def privacy_changed(self,guild,user,category,deleted):
+        self.members.clear(guild,user=user)
+        for key,(event,request) in list(self.requests.items()):
+            roles=event.member_roles
+            if event.guild==guild and category=='relationships' and roles and any(c.user==user for c in roles.candidates):
+                task=self.tasks.get(key)
+                if task:task.cancel()
+        for key,flow in list(self.conversations.flows.items()):
+            if flow.guild!=guild or user not in flow.participants:continue
+            if deleted:self._drop_flow(key)
+            elif key in self.requests and self.requests[key][0].author==user:
+                task=self.tasks.get(key)
+                if task:task.cancel()
+
     async def _services(self):
         try:
             try:await asyncio.to_thread(self.companion.recover)
@@ -230,7 +271,7 @@ class Runtime:
                 try:
                     for _ in range(min(8,self.memory_queue.qsize())):
                         event,revision=self.memory_queue.get_nowait();cfg=self.settings.get()
-                        if revision==self.settings.revision and cfg['memory_auto'] and scope(cfg,event.guild,event.channel,event.parent)!='silent' and await self.automatic_subject_allowed(event.guild,event.author):
+                        if revision==self.settings.revision and cfg['memory_auto'] and scope(cfg,event.guild,event.channel,event.parent)!='silent' and await self.automatic_subject_allowed(event.guild,event.author,'memory'):
                             tz=cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul')
                             await asyncio.to_thread(self.companion.extract,event,tz,policy=cfg)
                     if time.monotonic()-cleaned>=60:
@@ -273,6 +314,8 @@ class Runtime:
                 except (OSError,RuntimeError,sqlite3.Error):self.note('reminder_store_failed')
 
     async def message_changed(self,guild,channel,message,content=None):
+        for job in self.job_records.values():
+            if job['guild']==guild and job['channel']==channel and job['source']==message:job.update(source_attached=content is not None,source_changed=True)
         self.members.alias_cache.pop((guild,channel),None)
         known=False
         for key,state in list(self.states.items()):
@@ -342,6 +385,8 @@ class Runtime:
         except OSError:self.stopped=True
 
     def stage(self,event,name,started):
+        job=self.job_records.get(str(event.id))
+        if job:job['stage']=name
         trace=active_trace.get()
         if trace:trace.stage(name)
         self.progress[self.key(event)]=dict(stage=name,started=started,updated=time.time(),channel=event.channel)
@@ -379,7 +424,8 @@ class Runtime:
         if not (await self.transport.permissions(event)).get("view",False):self.note('permission_denied');return
         if self.stopped or scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':return
         if event.id in self.seen:return
-        event=await self.member_evidence(event)
+        if self.ledger.budget(cfg['daily_limit'])['remaining']==0:self.note('daily_limit_reached');return
+        member_started=time.monotonic();event=await self.member_evidence(event)
         if scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':
             self.members.clear(event.guild,channel=event.channel);self.note('scope_denied');return
         self.seen[event.id]=time.time()
@@ -390,6 +436,7 @@ class Runtime:
         name_evidence=name_address(event.content,guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True),
                                    self.members.names(event.guild,event.channel,self.transport.bot_id))
         if name_evidence=='direct' and event.member_roles.bot_collision:name_evidence='ambiguous'
+        event=replace(event,member_seconds=time.monotonic()-member_started,name_result=name_evidence)
         self.note('name_direct_accepted' if name_evidence=='direct' else 'name_ambiguous' if name_evidence=='ambiguous' else 'name_not_recognized')
         explicit=mentions_bot(event.content,self.transport.bot_id) or name_evidence!='none'
         verified_reply=False
@@ -539,6 +586,10 @@ class Runtime:
 
     async def process(self,event,state,request_content=None):
         trace=Trace(event.received_at);token=active_trace.set(trace)
+        trace.stages['member_resolution']=event.member_seconds
+        self.job_records[str(event.id)]=dict(id=str(event.id),source=event.response_to or event.id,guild=event.guild,channel=event.channel,
+            created=event.received_at,stage='conversation_wait',status='running',flow=event.conversation_id or '',source_attached=True,name_result=event.name_result)
+        while len(self.job_records)>100:self.job_records.pop(next(iter(self.job_records)))
         memory_revision=self.settings.revision
         from .scheduler import request_context
         flow=self.conversations.flows.get(self.key(event))
@@ -568,7 +619,9 @@ class Runtime:
                 memory_revision==self.settings.revision and trace.outcome!='cancelled' and hasattr(self.backend,'assess_dialogue')):
                 try:self.memory_queue.put_nowait((replace(event,conversation_id=flow.conversation_id),memory_revision))
                 except asyncio.QueueFull:self.note('memory_queue_full')
-            self.traces.append(trace.finish());self.traces=self.traces[-1000:]
+            record=trace.finish();self.traces.append(record);self.traces=self.traces[-1000:]
+            job=self.job_records.get(str(event.id))
+            if job:job.update(finished=time.monotonic(),status=record['outcome'],stages=dict(record['stages']),codes=list(record['codes']),flow=flow.conversation_id if flow else '')
             active_trace.reset(token)
             request_context.reset(request_token)
             # Numeric only. Disk failure must not turn a successful send into a retry.
@@ -662,6 +715,7 @@ class Runtime:
                 facts=dict(bot_user_id=str(self.transport.bot_id),current_author_id=str(event.author),
                     last_bot_reply_recipient=last_recipient,reply_to_current_author=last_recipient==str(event.author),
                     explicit_name_evidence=name_evidence,reply_to=str(event.reply_to) if event.reply_to else None)
+                facts['reaction_available']=bool(cfg['reactions'] and scope(cfg,event.guild,event.channel,event.parent,action='reaction')!='silent' and (await self.transport.permissions(event)).get('react',False))
                 if roles:facts['member_roles']=roles.facts()
                 intent=await self.backend.assess_dialogue(semantic_context,facts=facts)
                 from .naming import address_forms
@@ -768,7 +822,9 @@ class Runtime:
                 from .companion import handle_request,request_kind
                 self.stage(event,'private_request' if request_kind(event.content) else 'memory_lookup',started)
                 if request_kind(event.content):
-                    try:command_answer=await asyncio.to_thread(handle_request,self.companion,event,cfg,self.transport.bot_id)
+                    try:
+                        _,recent=state.snapshot(channel_id=event.channel,thread_id=None)
+                        command_answer=await asyncio.to_thread(handle_request,self.companion,event,cfg,self.transport.bot_id,recent=recent)
                     except asyncio.CancelledError:
                         await asyncio.shield(asyncio.to_thread(self.companion.delete_source,event.guild,event.id));raise
                     except (OSError,RuntimeError,ValueError,sqlite3.Error):command_answer='처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
@@ -776,11 +832,22 @@ class Runtime:
                     try:
                         remembered=await asyncio.to_thread(self.companion.memories,event.guild,event.author,event.channel,event.content,
                             conversation_id=event.conversation_id,allow_user_archive=bool(re.search(r'내\s*(?:약속|일정|목표|취향|기억)',event.content)))
+                        if not await self.automatic_subject_allowed(event.guild,event.author,'memory'):remembered=[]
                         if remembered:
                             from .memory_context import memory_context
                             context.insert(max(0,len(context)-1),dict(role='user',content=memory_context(remembered,cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul'))))
                     except (OSError,RuntimeError,sqlite3.Error):self.note('memory_lookup_failed')
             visual=[]
+            from .output_policy import explicit_code_request,FALLBACK
+            if command_answer is None and speech_eligible and (direct or continuing) and explicit_code_request(event.content):
+                command_answer=FALLBACK;self.note('code_request_concept_only')
+            from .research import needed
+            research_result=None
+            if command_answer is None and speech_eligible and (direct or continuing) and needed(event.content):
+                self.stage(event,'research',started)
+                research_result=await self.research.lookup(event.content,cfg['web_search'])
+                if research_result:
+                    command_answer=research_result['answer'];self.note('research_'+research_result['status'])
             if cfg["vision"] and command_answer is None:
                 for asset,url in event.assets[:4]:
                     if not await self.fresh(event,state,version,revision):return
@@ -816,8 +883,15 @@ class Runtime:
             self.stage(event,'action',started)
             fast_text=(allowed==['SILENCE','TEXT'] or
                        ('TEXT' in allowed and assessment.has_useful_contribution and not catalog['media'] and not catalog['stickers']))
-            if command_answer is not None:proposed=Action(Kind.TEXT,command_answer)
-            elif getattr(self.backend,'fast_text_path',False) and fast_text:
+            from .reaction_requests import requested_reaction
+            reaction_request=requested_reaction(event.content) if direct else None
+            if reaction_request:
+                if not reaction_permitted or not cfg['reactions']:
+                    self.note('reaction_disabled');return
+                asset,reply_target=reaction_request
+                proposed=Action(Kind.REACTION,asset=asset,target=event.reply_to if reply_target else None)
+            elif command_answer is not None:proposed=Action(Kind.TEXT,command_answer)
+            elif getattr(self.backend,'fast_text_path',False) and fast_text and (direct or not catalog['reactions']):
                 # The semantic participation gate already approved this reply.
                 # Useful text takes priority over optional decorative reactions.
                 proposed=Action(Kind.TEXT)
@@ -855,7 +929,14 @@ class Runtime:
                 finally:
                     if indicator:
                         indicator.cancel();await asyncio.gather(indicator,return_exceptions=True)
-                action=Action(action.kind,answer,action.asset)
+                from .output_policy import contains_code,invalid_urls,FALLBACK
+                self.stage(event,'output_check',started)
+                allowed_urls=set(research_result['urls'] if research_result else ())
+                for msg in context:
+                    if msg.get('role')=='user':allowed_urls.update(re.findall(r'https?://[^\s<>\])]+',msg.get('content','')))
+                if contains_code(answer):self.note('code_output_replaced');answer=FALLBACK
+                if invalid_urls(answer,allowed_urls):self.note('unverified_url_replaced');answer='확인하지 않은 출처 URL은 보내지 않을게. 검증 가능한 근거가 지금은 없어.'
+                action=Action(action.kind,answer,action.asset,action.target)
             if (event.guild,action.asset) in self.blocked_assets:
                 self.note('blocked_asset_veto');return
             permissions=await self.transport.permissions(event)
@@ -879,11 +960,14 @@ class Runtime:
                 if not await self.fresh(event,state,version,revision):return
                 # Conservative at-most-once reservation: ambiguous HTTP failures are never replayed.
                 if not self.ledger.reserve(event,cfg["daily_limit"],reply_cooldown):
-                    self.note('duplicate_or_rate_veto');return
+                    self.note(self.ledger.block_reason(event,cfg['daily_limit'],reply_cooldown) or 'reservation_conflict');return
                 try:
                     self.stage(event,'sending',started)
-                    sent=await self.transport.execute(event,action,self.library,
-                        lambda:self.fresh(event,state,version,revision,require_adult=adult_for_turn))
+                    try:
+                        sent=await self.transport.execute(event,action,self.library,
+                            lambda:self.fresh(event,state,version,revision,require_adult=adult_for_turn))
+                    except Exception:
+                        self.note('send_failed');raise
                     self.ledger.completed(event,"sent")
                     self.pending_mentions.pop(self.key(event),None)
                     bot_content=action.text
@@ -903,14 +987,23 @@ class Runtime:
                             datetime.now(timezone.utc),is_bot=True,reply_to=str(event.response_to or event.id),context_metadata=json.dumps(output_metadata,ensure_ascii=False) if output_metadata else None))
                     active_trace.get().outcome="sent"
                     self.note('response_sent')
+                    if self.companion and cfg['summaries_auto'] and await self.automatic_subject_allowed(event.guild,event.author,'summaries'):
+                        roles=event.member_roles
+                        if not any(uid not in (event.author,self.transport.bot_id) for uid in event.member_mentions) and not (roles and any(c.user not in (event.author,self.transport.bot_id) for c in roles.candidates)):
+                            try:
+                                consent_version=await asyncio.to_thread(self.companion.consent_version,event.guild,event.author,'summaries')
+                                summary_text=re.sub(r'<@!?'+str(self.transport.bot_id)+r'>','',event.content).strip()
+                                await asyncio.to_thread(self.companion.save_summary,event,summary_text,consent_version)
+                            except (OSError,RuntimeError,sqlite3.Error):self.note('summary_save_failed')
                     self.failures=0;self.flow_failures.pop(self.key(event),None)
                     if self.companion and cfg['relations_auto'] and await self.automatic_subject_allowed(event.guild,event.author):
-                        try:await asyncio.to_thread(self.companion.relationship,event.guild,event.author,'reply:'+str(event.id),'reaction' if action.kind==Kind.REACTION else 'conversation')
+                        try:await asyncio.to_thread(self.companion.relationship,event.guild,event.author,'reply:'+str(event.id),'reaction' if action.kind==Kind.REACTION else 'conversation',observed=event.timestamp.timestamp())
                         except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_update_failed')
                     self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
-                except Exception:
+                except Exception as exc:
                     self.ledger.completed(event,"failed_or_uncertain")
-                    if action.asset:self.blocked_assets.add((event.guild,action.asset))
+                    # Transient failures do not make a Unicode emoji invalid.
+                    if action.asset and getattr(exc,'code',None)==10014:self.blocked_assets.add((event.guild,action.asset))
                     raise
         except asyncio.CancelledError:
             active_trace.get().outcome="cancelled"

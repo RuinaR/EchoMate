@@ -13,7 +13,7 @@ MOODS=['평온','기쁨','신남','우울','화남','피곤함','부끄러움']
 ACTIVITY={'조용함':'quiet','보통':'normal','활발함':'active','매우 활발함':'very_active'}
 MODES={'대답하지 않기':'silent','멘션·이어지는 대화만':'mention','자연스럽게 대화에 참여':'autonomous'}
 REACTION_MODES={'반응하지 않기':'silent','대화 중에만 반응':'mention','어울릴 때 가볍게 반응':'autonomous'}
-STAGES={'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석','action':'행동 선택','text':'답변 작성','sending':'전송'}
+STAGES={'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석','action':'행동 선택','text':'답변 작성','sending':'전송','research':'인터넷 근거 확인','output_check':'출력 검사','conversation_wait':'앞선 대화 기다림','member_resolution':'호칭·대상 근거 확인'}
 
 
 def rounded(canvas,x,y,w,h,fill,r=12,outline=''):
@@ -35,7 +35,12 @@ class SelectionList(tk.Canvas):
         self.bind('<FocusIn>',lambda e:self.redraw());self.bind('<FocusOut>',lambda e:self.redraw())
     def set_items(self,items):
         if items==self.items:return
+        anchor=self.items[self.offset]['id'] if self.items and self.offset<len(self.items) and self.offset>0 else None
+        focused=self.items[self.index]['id'] if self.items and self.index<len(self.items) else None
         self.items=items;self.selected.intersection_update({x['id'] for x in items})
+        positions={item['id']:i for i,item in enumerate(items)}
+        if anchor in positions:self.offset=positions[anchor]
+        if focused in positions:self.index=positions[focused]
         visible=max(1,self.winfo_height()//52)
         self.offset=min(self.offset,max(0,len(items)-visible))
         self.index=min(self.index,max(0,len(items)-1));self.redraw()
@@ -85,7 +90,11 @@ class SelectionList(tk.Canvas):
                 while label and self.label_font.measure(label+'…')>w-35:label=label[:-1]
                 label+='…'
             self.create_text(13,y+15,text=label,anchor='w',fill=FG if selected else '#c2cddd',font=('맑은 고딕',10,'bold' if selected else 'normal'))
-            self.create_text(13,y+35,text=item.get('hint',''),anchor='w',fill=ACCENT if selected else MUTED,font=('맑은 고딕',8))
+            hint=item.get('hint','')
+            if self.label_font.measure(hint)>w-35:
+                while hint and self.label_font.measure(hint+'…')>w-35:hint=hint[:-1]
+                hint+='…'
+            self.create_text(13,y+35,text=hint,anchor='w',fill=ACCENT if selected else MUTED,font=('맑은 고딕',8))
         if not self.items:self.create_text(14,26,text=getattr(self,'empty_hint','연결 후 목록이 표시돼'),anchor='w',fill=MUTED,font=('맑은 고딕',10))
         if len(self.items)*52>h and h>1:
             thumb=max(25,h*h/(len(self.items)*52));top=self.offset/max(1,len(self.items))*h
@@ -102,6 +111,7 @@ class DesktopApp(CompanionViews):
         self.server_list=SelectionList(self.canvas,self.select_guild)
         self.channel_list=SelectionList(self.canvas,self.select_channels,True)
         self.setup_records()
+        self.job_id=None;self.job_list=SelectionList(self.canvas,self.select_job)
         root.title('EchoMate');root.geometry('1180x820');root.minsize(1040,740);root.configure(bg=BG)
         try:
             import ctypes
@@ -267,13 +277,13 @@ class DesktopApp(CompanionViews):
         label='응답 재개' if connected and cfg and not cfg['enabled'] else '실행 중' if connected else '준비 중' if running else '봇 켜기'
         self.button(w-190,23,78,36,label,lambda:self.controller.submit('start'),primary=True,enabled=not running or bool(connected and cfg and not cfg['enabled']))
         self.button(w-102,23,78,36,'봇 끄기',lambda:self.controller.submit('stop'),enabled=running)
-        error=' · 설정이나 실행을 확인해 주세요' if s and s['error'] else ''
+        error=' · '+s['error'] if s and s['error'] else ''
         phase=s['phase'] if s else '저장된 설정을 읽고 있어요'
         if phase.startswith('정지'):phase='채널을 고른 뒤 ‘봇 켜기’를 누르면 대화를 시작해요'
         self.text(226,76,phase+error,10,MUTED)
         if cfg and connected:self.toggle(w-200,78,'응답 허용',cfg['enabled'],lambda:self.set_value('enabled',not cfg['enabled']))
         self.server_list.place_forget();self.channel_list.place_forget()
-        self.people_list.place_forget();self.record_list.place_forget()
+        self.people_list.place_forget();self.record_list.place_forget();self.job_list.place_forget()
         if self.page=='spaces':self.draw_spaces(w,h,cfg)
         elif self.page=='outputs':self.draw_outputs(w,h,cfg)
         elif self.page=='character':self.draw_character(w,h,cfg)
@@ -335,50 +345,77 @@ class DesktopApp(CompanionViews):
         self.text(250,291,'새 대화에 먼저 참여하는 정도',12,bold=True)
         self.choices(250,321,list(ACTIVITY.items()),cfg['activity'],lambda v:self.set_value('activity',v),125)
         for index,(label,key,step,lo,hi) in enumerate([('다정함','warmth',5,0,100),('귀여움','cuteness',5,0,100),('장난기','playfulness',5,0,100),
-             ('먼저 말할 때 최소 간격','cooldown',10,2,3600),('문맥 보관 시간','engagement_seconds',60,3600,86400)]):
+             ('먼저 말할 때 최소 간격','cooldown',10,2,3600),('대화 지속 판단의 유휴 기준','engagement_seconds',60,10,86400)]):
             self.number(250,382+index*34,label,key,max(lo,cfg[key]),step,lo,hi)
         self.text(250,559,'답변 모델',10,MUTED)
         self.choices(250,583,[('개인 말투 · 잠정','persona'),('기본 Gemma 4','base'),('성인 유머 · 자유로운 표현','adult')],cfg['model'],lambda v:self.set_value('model',v),220,
                      enabled=not bool(self.snapshot and self.snapshot.get('model_preparing')))
         self.text(250,635,'성인 유머: 기존 Gemma 4 + 전용 정책 · 연령 제한 채널에서만 사용',9,ACCENT if cfg['model']=='adult' else MUTED,width=w-290)
+    def select_job(self,ids):self.job_id=next(iter(ids),None);self.render()
+    def edit_budget(self):
+        cfg=self.snapshot['cfg']
+        self.form('하루 전송 한도',[('limit','대화 응답·반응 예약 · 1~1000건 (알림 별도)',cfg['daily_limit'])],lambda v:self.set_value('daily_limit',int(v['limit'])),'한국 오전9시에 새 한도가 시작돼요. 전송 여부가 불명확한 예약도 포함해요. 기존 기록은 지우지 않으며 한도 도달 시 생성 전에 멈춰요.')
+    def approve_commands(self):
+        def save(v):
+            if v['confirm']!='동의로 교체':raise ValueError()
+            self.set_value('command_sync_pending',True)
+        self.form('다음 연결의 명령 정리 승인',[('confirm','동의로 교체 라고 입력','')],save,'이 봇의 글로벌 명령과 등록 관리 서버의 기존 명령을 정리해 /동의 하나만 남겨요. 사용자 자료는 삭제하지 않아요. 지금 연결·동기화하지 않아요.')
     def draw_status(self,w,h,s):
         if not s:return
         width=(w-282)/3
-        for index,(label,value) in enumerate([('처리 중이거나 기다리는 요청',str(s['pending'])),('진행 중인 대화',str(s['contexts'])),('최근 답변에 걸린 시간',str(s['latency'])+'초' if s['latency'] is not None else '아직 없음')]):
-            x=226+index*(width+15);rounded(self.canvas,x,143,width,113,PANEL)
-            self.text(x+20,160,label,10,MUTED);self.text(x+20,192,value,25,bold=True)
-        rounded(self.canvas,226,277,w-252,h-344,PANEL);self.text(248,297,'진행 중인 작업',13,bold=True)
-        if not s['progress']:self.text(248,348,'새 메시지를 기다리고 있어요' if s['connected'] else '봇을 켜면 여기에서 처리 과정을 볼 수 있어요',12,MUTED)
-        self.button(w-430,291,180,32,'개인정보 없는 진단 저장',lambda:self.controller.submit('diagnostics'))
-        for i,p in enumerate(s['progress'][:max(1,(h-520)//48)]):
-            y=344+i*48;self.text(248,y,p['channel'],11);self.text(510,y,p['stage'],11,ACCENT);self.text(w-120,y,str(p['seconds'])+'초',11,MUTED)
-        q=s.get('scheduler',{})
-        if s['pending']>1 or s['contexts']>1:
-            counts=q.get('counts',{});self.text(248,h-157,f"GPU 실행 {q.get('running',0)} · 대기 {q.get('waiting',0)} · 최장 대기 {q.get('oldest_seconds',0)}초 · 취소 {counts.get('cancelled',0)} · 실패 {counts.get('failed',0)}",9,MUTED)
-        self.text(248,h-130,f"기억 정리 대기 {s.get('memory_pending',0)}건 · 알림 확인 {'동작 중' if s.get('private_service') else '봇 연결 후 시작'}",9,MUTED)
-        self.text(248,h-107,'최근 판단: '+s['recent_reason'] if s.get('recent_reason') else '대화 내용은 이 화면에 표시하지 않아요.',9,MUTED,width=w-300)
+        for index,(label,value) in enumerate([('처리 중인 요청',str(s['pending'])),('진행 중인 대화',str(s['contexts'])),('최근 응답 시간',str(s['latency'])+'초' if s['latency'] is not None else '아직 없음')]):
+            x=226+index*(width+15);rounded(self.canvas,x,143,width,100,PANEL)
+            self.text(x+16,158,label,10,MUTED);self.text(x+16,191,value,24,bold=True)
+        q=s.get('scheduler',{});budget=s.get('budget',{})
+        self.text(242,264,f"GPU 실행 {q.get('running',0)} · 대기 {q.get('waiting',0)} · 오늘 전송·예약 {budget.get('used',0)}/{budget.get('limit',(s.get('cfg') or {}).get('daily_limit',100))}",10,MUTED)
+        self.button(w-430,252,180,30,'개인정보 없는 진단 저장',lambda:self.controller.submit('diagnostics'))
+        jobs=s.get('jobs',[])
+        states={'running':'처리 중','sent':'전송 완료','silence':'침묵','failed':'실패','cancelled':'취소'}
+        self.job_list.empty_hint='아직 처리한 요청이 없어요'
+        self.job_list.set_items([dict(id=j['id'],label=states.get(j['status'],j['status'])+' · '+STAGES.get(j['stage'],j['stage']),hint=str(j['seconds'])+'초 · 대화 '+j.get('flow','')[:8]) for j in jobs])
+        self.job_list.place(x=240,y=300,width=270,height=max(100,h-445));self.job_list.selected={self.job_id} if self.job_id else set()
+        selected=next((j for j in jobs if j['id']==self.job_id),None)
+        if selected:
+            self.text(535,302,'선택한 작업 · 원본 '+('연결됨' if selected['source_attached'] else '없음'),11,bold=True)
+            gpu=selected.get('gpu',{})
+            self.text(535,335,f"GPU {gpu.get('status','완료 또는 아직 요청 전')} · 우선 {gpu.get('priority','-')} · 대기 {gpu.get('wait_seconds',0)}초 · 처리 {gpu.get('processing_seconds',0)}초",9,MUTED,width=w-575)
+            phases=('member_resolution','conversation_wait','assessment','memory_lookup','research','action','text','output_check','sending')
+            for n,phase in enumerate(phases):
+                seconds=selected.get('stages',{}).get(phase)
+                value=f'{seconds:.3f}초' if seconds is not None else '진행 중' if selected['status']=='running' and selected['stage']==phase else '아직 실행 전 / 생략'
+                self.text(535,372+n*23,STAGES.get(phase,phase)+' · '+value,9,MUTED,width=w-575)
+            from .desktop import NO_RESPONSE
+            reason=next((NO_RESPONSE[c] for c in reversed(selected.get('codes',[])) if c in NO_RESPONSE),'전송 완료' if selected['status']=='sent' else '실행 중 / 상세 진단 파일 참고')
+            self.text(535,h-150,'판단: '+reason,8,MUTED,width=w-575)
+        else:self.text(535,310,'작업을 선택하면 실제 단계별 결과를 볼 수 있어요.',11,MUTED,width=w-580)
+        self.text(242,h-107,'최근 판단: '+s['recent_reason'] if s.get('recent_reason') else '원문 메시지와 AI 비공개 추론은 표시하지 않아요.',9,MUTED,width=w-300)
     def draw_outputs(self,w,h,cfg):
         if not cfg:return
         rounded(self.canvas,226,143,w-252,h-210,PANEL)
         self.text(250,168,'어떤 방식으로 답할까요?',18,bold=True)
         self.text(250,215,'대화할 채널에서 사용할 응답 방식을 골라 주세요. 변경하면 바로 적용돼요.',11,MUTED,width=w-310)
-        for i,(key,label,hint) in enumerate([('text','글로 답하기','질문에 답하거나 대화를 이어가요.'),('reactions','이모지로 가볍게 반응하기','추가 설명이 필요 없을 때 Unicode 이모지로 반응해요.'),('stickers','Discord 기본 스티커 사용하기','상황에 맞는 공식 스티커가 있을 때만 사용해요.')]):
-            y=285+i*100;self.toggle(250,y,label,cfg[key],lambda k=key:self.set_value(k,not cfg[k]));self.text(300,y+36,hint,10,MUTED,width=w-355)
-        self.text(250,619,'서버 전용 이모지·스티커와 등록 이미지/GIF는 보내지 않아요.',10,MUTED,width=w-300)
+        for i,(key,label,hint) in enumerate([('text','글로 답하기','질문에 답하거나 대화를 이어가요.'),('reactions','이모지로 가볍게 반응하기','허용 범위에서 실제 메시지 반응을 추가해요. 직접 요청도 적용돼요.'),('web_search','공식 인터넷 정보 확인','Python·discord.py·Transformers·마인크래프트·롤의 버전만 확인해요. 원문은 전송하지 않아요.')]):
+            y=285+i*90;self.toggle(250,y,label,cfg[key],lambda k=key:self.set_value(k,not cfg[k]));self.text(300,y+36,hint,10,MUTED,width=w-355)
+        self.button(250,h-205,165,30,'하루 전송 한도',self.edit_budget)
+        self.button(430,h-205,180,30,'Discord 명령 정리 승인',self.approve_commands)
+        self.text(250,h-155,'명령 변경: '+('다음 연결에서 동의 하나로 교체 예정' if cfg['command_sync_pending'] else '승인 전 · 자동 동기화하지 않음'),9,MUTED,width=w-300)
     def draw_labs(self,w,h,cfg):
         if not cfg:return
         rounded(self.canvas,226,143,w-252,h-210,PANEL)
         rounded(self.canvas,250,168,92,26,'#3a2c1c',7);self.text(262,172,'시험 중인 기능',8,'#efba75',True)
         self.text(250,221,'시각 인식 · 분석',19,bold=True)
-        self.text(250,267,'사진·GIF·서버 전용 이모지와 스티커의 내용을 이미지로 분석해요.\n기본은 꺼져 있어요. 켜면 답변이 더 오래 걸릴 수 있어요.\n이 기능을 켜도 서버 전용 에셋이나 등록 미디어를 보내지는 않아요.',11,MUTED,width=w-310)
+        self.text(250,267,'사진·GIF·시각 에셋의 내용을 이미지로 분석해요.\n기본은 꺼져 있어요. 켜면 답변이 더 오래 걸릴 수 있어요.\n이 기능을 켜도 서버 전용 에셋이나 등록 미디어를 보내지는 않아요.',11,MUTED,width=w-310)
         self.toggle(250,363,'이미지 내용 분석을 시험해 보기',cfg['vision'],lambda:self.set_value('vision',not cfg['vision']))
+        self.button(250,h-190,180,30,'이 서버 캐시 비우기',lambda:self.controller.submit('visual_cache',guild=self.guild_id,refresh=False),enabled=bool(self.guild_id))
+        self.button(445,h-190,210,30,'선택 범위 다시 분석 · 최대5개',lambda:self.controller.submit('visual_cache',guild=self.guild_id,channel=next(iter(self.channel_ids)),refresh=True),enabled=bool(self.guild_id and self.channel_ids and self.snapshot.get('connected') and cfg['vision']))
         self.text(250,444,'평소에는 꺼 두는 것을 권장해요',13,bold=True)
-        self.text(250,485,'일반 대화와 기본 이모지·스티커는 이 기능을 켜지 않아도 사용할 수 있어요.\n실험 결과는 틀릴 수 있으며, Lottie 형식의 이미지 분석은 아직 지원하지 않아요.',11,MUTED,width=w-310)
+        self.text(250,485,'일반 대화와 Unicode 이모지는 이 기능을 켜지 않아도 사용할 수 있어요.\n실험 결과는 틀릴 수 있으며, Lottie 형식의 이미지 분석은 아직 지원하지 않아요.',11,MUTED,width=w-310)
     def poll(self):
         if self.disposed:return
         try:
             while True:self.snapshot=self.controller.updates.get_nowait()
         except queue.Empty:pass
+        self.refresh_lists()
         if self.page in PAGES:
             import time
             if time.monotonic()-getattr(self,'_records_refreshed_at',0)>5:self.refresh_records()

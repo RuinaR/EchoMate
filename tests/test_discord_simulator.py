@@ -120,6 +120,53 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(body['allowed_mentions']['replied_user'])
         self.assertTrue(body['flags'] & 4)
 
+    async def test_direct_unicode_request_calls_real_sdk_reaction_not_text(self):
+        self.settings.set(1,'reactions',True)
+        mid=discord.utils.time_snowflake(datetime.now(timezone.utc))
+        await self.client.on_message(self.message(mid=mid,content='<@999> 이 메시지에 👍 달아줘'))
+        await asyncio.wait_for(asyncio.gather(*list(self.client.runtime.tasks.values())),5)
+        self.assertEqual(self.http.reactions,[(3,mid,'👍')]);self.assertFalse(self.http.sends);self.assertFalse(self.client.backend.calls)
+
+    async def test_permission_cache_reuses_reads_and_forces_final_send_check(self):
+        self.message();transport=self.client.runtime.transport
+        with patch.object(self.http,'get_member',wraps=self.http.get_member) as read:
+            for _ in range(5):await transport.permissions(self.event())
+            self.assertEqual(read.await_count,1)
+            await transport.execute(self.event(),Action(Kind.TEXT,'합성 응답'),None,AsyncMock(return_value=True))
+            self.assertEqual(read.await_count,2)
+
+    async def test_reaction_reply_target_and_permission_revocation(self):
+        self.message();self.message(mid=99)
+        from dataclasses import replace
+        event=replace(self.event(),reply_to=99)
+        await self.client.runtime.transport.execute(event,Action(Kind.REACTION,asset='👍',target=99),None,AsyncMock(return_value=True))
+        self.assertEqual(self.http.reactions,[(3,99,'👍')]);self.assertFalse(self.http.sends)
+        with patch.object(self.client.runtime.transport,'_permissions',AsyncMock(return_value=dict(view=True,send=True,react=False))):
+            with self.assertRaises(PermissionError):await self.client.runtime.transport.execute(event,Action(Kind.REACTION,asset='👍'),None,AsyncMock(return_value=True))
+        self.assertEqual(len(self.http.reactions),1)
+
+    async def test_autonomous_reaction_uses_sdk_and_keeps_other_addressee_silent(self):
+        from echomate_bot.dialogue_intent import DialogueIntent
+        import random
+        class Opportunity(random.Random):
+            def random(self):return 0
+        self.settings.set_activity_scope(1,2,3,'silent','autonomous');self.settings.set(1,'reactions',True)
+        runtime=self.client.runtime;runtime.rng=Opportunity();runtime.autonomy_idle_since-=1000
+        self.client.backend.assess_dialogue=AsyncMock(return_value=DialogueIntent('information','group','new',True));self.client.backend.action='REACTION'
+        await self.client.on_message(self.message(content='여러분 준비하던 행사를 무사히 마쳤어'))
+        await asyncio.gather(*list(runtime.tasks.values()))
+        self.assertEqual(self.http.reactions,[(3,100,'👍')]);self.assertFalse(self.http.sends);self.assertFalse(self.client.backend.calls)
+        await self.client.on_message(self.message(mid=101,content='<@5> 아까 말한 건 너한테만 얘기할게'))
+        await asyncio.gather(*list(runtime.tasks.values()))
+        self.assertEqual(len(self.http.reactions),1)
+
+    async def test_gateway_resources_close_even_if_model_shutdown_fails(self):
+        original=self.client.runtime.close
+        await original()
+        self.client.runtime.close=AsyncMock(side_effect=RuntimeError('Synthetic shutdown failure'))
+        with self.assertRaises(RuntimeError):await self.client.close()
+        self.assertTrue(self.client.is_closed())
+
     async def test_member_payload_and_actual_reply_metadata_without_members_intent(self):
         captured=AsyncMock();self.client.runtime.ingest=captured
         mid=discord.utils.time_snowflake(datetime.now(timezone.utc))
@@ -181,14 +228,8 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
         async def fresh(): return True
         await transport.execute(event, Action(Kind.REACTION, asset='👍'), None, fresh)
         self.assertEqual(self.http.reactions, [(30, 100, '👍')])
-        sticker = discord.StandardSticker(state=self.client._connection, data=dict(id='77', name='synthetic',
-            description='synthetic', format_type=1, sort_value=0, pack_id='7', tags='hello'))
-        self.client.standard_stickers[77] = sticker
-        await transport.execute(event, Action(Kind.STICKER, asset='77'), None, fresh)
-        channel, body = self.http.sends[0]
-        self.assertEqual(channel, 30)
-        self.assertEqual(body['sticker_ids'], [77])
-        self.assertEqual(int(body['message_reference']['message_id']), 100)
+        with self.assertRaises(ValueError):await transport.execute(event,Action(Kind.STICKER,asset='77'),None,fresh)
+        self.assertFalse(self.http.sends)
         self.guild.get_thread(30).archived = True
         self.assertEqual(await transport.permissions(event), {})
 

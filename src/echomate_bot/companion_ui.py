@@ -16,6 +16,7 @@ class CompanionViews:
         self.record_list=SelectionList(self.canvas,self.select_record)
 
     def refresh_records(self):
+        if not self.guild_id:return
         self._records_refreshed_at=time.monotonic()
         if self.guild_id:self.controller.submit('companion',action='refresh',guild=self.guild_id,user=self.record_user,query=self.record_search,kind=self.record_kind)
 
@@ -138,7 +139,11 @@ class CompanionViews:
         self.server_list.place(x=240,y=230,width=200,height=max(100,h-480))
         data=(self.snapshot or {}).get('companion',{})
         if data.get('guild')!=self.guild_id:data={}
-        self.people_list.set_items([dict(id=r['user'],label=r.get('label','사용자 '+r['user']),hint=f"친밀도 {r['affinity']:.1f} · 교류 {r['interactions']}회") for r in data.get('people',[])])
+        def relationship_hint(r):
+            consent=r.get('consent',{}).get('relationships',False)
+            state='동의 필요' if not consent else '자동 갱신 켜짐' if cfg['relations_auto'] else '앱 자동 갱신 꺼짐'
+            return f"{state} · {r['affinity']:.1f} · {r['interactions']}회"
+        self.people_list.set_items([dict(id=r['user'],label=r.get('label','사용자 '+r['user']),hint=relationship_hint(r)) for r in data.get('people',[])])
         self.people_list.place(x=456,y=230,width=200,height=max(100,h-480))
         self.people_list.selected={self.record_user} if self.record_user else set()
         rows=data.get('memories' if self.page=='memories' else 'reminders',[]) if self.page!='relations' else data.get('people',[])
@@ -157,6 +162,10 @@ class CompanionViews:
             aliases=[r for r in data.get('aliases',[]) if r['user']==self.record_user]
             items=[dict(id='alias:'+r['channel']+':'+r['alias'],label=r['alias']+' · '+{'confirmed':'소유자 확인','candidate':'확인 전 후보','deleted':'삭제됨'}[r['status']],hint=f"채널 {r['channel']} · 근거 {r['observations']}건 / {r['witnesses']}명 · 근거점수 {r['confidence']:.0%}") for r in aliases] if self.record_user else [dict(id=r['user'],label=r.get('label','사용자 '+r['user']),hint='사람을 선택하면 호칭 후보를 확인할 수 있어요') for r in rows]
         self.record_list.set_items(items);self.record_list.place(x=674,y=230,width=max(210,w-714),height=max(100,h-480))
+        loading=(self.snapshot or {}).get('companion_loading',False)
+        self.people_list.empty_hint='자료를 읽고 있어요' if loading else '저장된 사람 자료가 없어요'
+        self.record_list.empty_hint='조회에 실패했어요 · 새로고침' if data.get('load_error') else '로컬 자료를 읽고 있어요' if loading else '사람을 먼저 선택해 주세요' if not self.record_user and self.page!='relations' else '이 범위에 저장된 자료가 없어요'
+        self.people_list.redraw();self.record_list.redraw()
         self.record_list.selected={self.record_key} if self.record_key else set()
         y=h-226
         self.button(246,y,120,30,'전체 사용자',lambda:(setattr(self,'record_user',None),self.refresh_records()))
@@ -168,7 +177,9 @@ class CompanionViews:
         elif self.page=='reminders':
             self.button(506,y,120,30,self.record_status,lambda:self.cycle_record_status())
             self.button(636,y,120,30,'유예 시간',lambda:self.form('늦어진 알림 처리',[('seconds','재시작 뒤 허용 지연 · 0~86400초',cfg['reminder_grace'])],lambda v:self.set_value('reminder_grace',int(v['seconds']))))
-        elif self.page=='relations':self.button(506,y,120,30,'호칭 추가·관리',self.member_alias_editor,enabled=bool(self.record_user))
+        elif self.page=='relations':
+            self.button(506,y,120,30,'호칭 추가·관리',self.member_alias_editor,enabled=bool(self.record_user))
+            self.button(636,y,120,30,'발언 요약 보기',self.show_summaries,enabled=bool(self.record_user))
         if self.page in ('memories','reminders'):
             self.button(246,y+40,120,30,'선택 삭제' if self.page=='memories' else '예약 취소',self.remove_record,enabled=bool(self.record_key))
         else:self.button(246,y+40,120,30,'별명·시간대',self.server_options)
@@ -178,12 +189,16 @@ class CompanionViews:
         if self.page=='memories':
             self.button(246,y+80,164,28,'일시 문맥 지우기',lambda:self.record_action('clear_context'))
             self.toggle(436,y+82,'이전 관련 발췌 사용',cfg['context_excerpts'],lambda:self.set_value('context_excerpts',not cfg['context_excerpts']))
-            self.button(758,y+80,164,28,'기억 만료 기본값',lambda:self.memory_defaults(cfg))
+            self.button(758,y+80,164,28,'보관·요약 설정',lambda:self.memory_defaults(cfg))
         elif self.page=='relations':
             history=data.get('history',[])[:2]
             text=' / '.join(('대화' if r['kind']=='conversation' else '반응')+f" {r['delta']:+.2f}"+(' · 취소됨' if not r['active'] else '') for r in history)
             self.text(246,y+84,'최근 변화: '+(text or '선택한 사람의 새 교류가 아직 없어요'),9,MUTED,width=w-310)
-        hint='자동 기억 기본 꺼짐 · 다른 구성원은 /내기억에서 본인 자동 저장을 허용해야 해요.' if self.page=='memories' else '알림은 본인에게만 · GPU 생성과 별개로 처리 · 완료 기록은 7일 후 정리해요.' if self.page=='reminders' else '표현용 친밀도예요 · 다른 구성원의 자동 갱신은 /내기억에서 본인 동의가 필요해요.'
+            person=next((p for p in data.get('people',[]) if p['user']==self.record_user),{})
+            choices=person.get('consent',{})
+            status=' · '.join(k+(' 동의' if choices.get(v) else ' 미동의') for k,v in (('친밀도','relationships'),('기억','memory'),('요약','summaries')))
+            self.text(246,y+108,status+' · 동의는 본인의 /동의에서만 변경해요',8,MUTED,width=w-310)
+        hint='자동 기억 기본 꺼짐 · 본인이 /동의에서 장기 기억 저장을 켜야 해요.' if self.page=='memories' else '알림은 본인에게만 · GPU 생성과 별개로 처리 · 완료 기록은 7일 후 정리해요.' if self.page=='reminders' else '표현용 친밀도예요 · 자동 갱신은 본인의 /동의에서 친밀도 저장 동의가 필요해요.'
         if (self.snapshot or {}).get('companion_error'):hint='기억 저장소 오류 · 일반 대화는 계속 사용할 수 있어요. 로컬 진단을 확인해 주세요.'
         self.text(246,h-94,hint,9,MUTED,width=w-300)
 
@@ -193,12 +208,18 @@ class CompanionViews:
     def memory_defaults(self,cfg):
         def save(v):
             values=dict(memory_plan_grace=int(v['plan'])*60,memory_date_grace=int(v['date'])*60,memory_state_hours=int(v['state']))
+            values['summaries_auto']={'켜기':True,'끄기':False}[v['summaries']]
             if not 0<=values['memory_plan_grace']<=86400 or not 0<=values['memory_date_grace']<=86400 or not 1<=values['memory_state_hours']<=72:raise ValueError()
             self.controller.submit('settings',values=values)
         self.form('새 기억의 기본 만료 기간',[
             ('plan','시각이 있는 약속 · 지난 뒤 보관할 분 (0~1440)',cfg['memory_plan_grace']//60),
             ('date','날짜만 있는 약속 · 날짜 종료 후 보관할 분 (0~1440)',cfg['memory_date_grace']//60),
-            ('state','기간 없는 일시 상태 · 보관할 시간 (1~72)',cfg['memory_state_hours'])],save,'새로 저장할 기억에 적용돼요. 기존 기억은 선택 수정에서 만료 시각을 바꿔 주세요.')
+            ('state','기간 없는 일시 상태 · 보관할 시간 (1~72)',cfg['memory_state_hours']),
+            ('summaries','동의한 본인 발언 요약 · 켜기 / 끄기','켜기' if cfg['summaries_auto'] else '끄기')],save,'새 기억에 적용돼요. 요약은 별도 본인 동의가 있어야 저장하며 30일 후 만료해요.')
+
+    def show_summaries(self):
+        rows=(self.snapshot or {}).get('companion',{}).get('summaries',[])[:4]
+        self.form('선택한 사람의 발언 요약 · 로컬 조회',[(str(i),'출처 '+r['source']+' · 채널 '+r['channel'],r['summary']) for i,r in enumerate(rows)] or [('empty','조회 결과','저장된 요약 자료가 없어요')],lambda v:None,'본인 발언만 선별 발췌해 30일 보관해요. 동의는 본인의 /동의에서만 바꿀 수 있어요. 이 창은 읽기용이에요.')
 
     def cycle_record_status(self):
         values=['전체','사용 중','곧 만료','잠시 끔','확인 필요'] if self.page=='memories' else ['전체','예약 중','실패']

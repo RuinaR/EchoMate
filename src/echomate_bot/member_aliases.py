@@ -25,22 +25,26 @@ class MemberAliases:
                 r.update(observations=n,witnesses=w,confidence=1.0 if r['status']=='confirmed' else min(.89,.35+.08*n+.05*w),evidence='owner' if r['status']=='confirmed' else 'mention/reply/self-report')
         return rows
 
-    def set_alias(self,guild,channel,user,alias,status='confirmed'):
+    def set_alias(self,guild,channel,user,alias,status='confirmed',*,require_consent=False):
         for value in (guild,channel,user):positive_id(value)
         if status not in ('confirmed','candidate','deleted'):raise ValueError('Invalid alias status')
         alias=alias_key(alias)
         with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if require_consent and status!='deleted' and not db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='relationships' AND enabled=1",(str(guild),str(user))).fetchone():raise ValueError('본인의 친밀도 저장 동의가 필요해요')
             if status!='deleted' and self.opted_out(db,guild,user):raise ValueError('Subject opted out')
             if db.execute('SELECT COUNT(*) FROM member_aliases').fetchone()[0]>=3000 and not db.execute('SELECT 1 FROM member_aliases WHERE guild=? AND channel=? AND user=? AND alias=?',tuple(map(str,(guild,channel,user)))+(alias,)).fetchone():raise ValueError('Alias limit')
             db.execute('INSERT INTO member_aliases VALUES(?,?,?,?,?,?) ON CONFLICT(guild,channel,user,alias) DO UPDATE SET status=excluded.status,updated=excluded.updated',tuple(map(str,(guild,channel,user)))+(alias,status,self.clock()))
             if status=='deleted':db.execute('DELETE FROM alias_evidence WHERE guild=? AND channel=? AND user=? AND alias=?',tuple(map(str,(guild,channel,user)))+(alias,))
 
-    def observe_alias(self,guild,channel,user,alias,source,witness,kind):
+    def observe_alias(self,guild,channel,user,alias,source,witness,kind,*,observed=None):
         for value in (guild,channel,user,source,witness):positive_id(value)
         if kind not in ('mention','reply','self-report'):raise ValueError('Invalid evidence')
         alias=alias_key(alias);key=tuple(map(str,(guild,channel,user)))+(alias,)
         with self.db() as db:
             if self.opted_out(db,guild,user):return
+            consent=db.execute("SELECT enabled,at FROM consent_choices WHERE guild=? AND user=? AND category='relationships'",(str(guild),str(user))).fetchone()
+            if not consent or not consent[0] or observed is not None and observed<consent[1]:return
             if db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(str(guild),str(source))).fetchone():return
             row=db.execute('SELECT status FROM member_aliases WHERE guild=? AND channel=? AND user=? AND alias=?',key).fetchone()
             if row and row[0]=='deleted':return

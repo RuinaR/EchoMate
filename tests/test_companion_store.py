@@ -46,6 +46,7 @@ class PrivateRecords(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(dir='local_data');self.now=datetime(2026,10,19,10,tzinfo=zone('Asia/Seoul')).timestamp()
         self.path=Path(self.tmp.name)/'records.sqlite3';self.store=CompanionStore(self.path,clock=lambda:self.now)
+        self.store.resume_subject(2,4)
         self.cfg=dict(DEFAULTS,guilds={'2':dict(enabled=True,channels={'3':dict(mode='mention',inherit=False)},threads={})})
     def tearDown(self):self.tmp.cleanup()
     def event(self,text,id=100,user=4,guild=2,channel=3):return SimpleNamespace(id=id,guild=guild,channel=channel,author=user,parent=None,content=text,timestamp=datetime.fromtimestamp(self.now,timezone.utc))

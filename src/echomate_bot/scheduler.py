@@ -123,6 +123,13 @@ class GPUScheduler:
                     active_type=self.active[0].request_type if self.active else None,
                     counts=dict(self.counts),recent=list(self.recent)[-5:])
 
+    def details(self):
+        # Owner UI in RAM only. Numeric public diagnostics use snapshot().
+        rows=[e[0] for e in self.waiting]+self.admissions+([self.active[0]] if self.active else [])
+        return [dict(id=r.request_id,source=r.target_message_id,guild=r.guild_id,type=r.request_type,status=r.status,priority=r.priority,
+            wait_seconds=round(max(0,getattr(r,'started_at',self.clock())-r.created_at),2),
+            processing_seconds=round(max(0,self.clock()-getattr(r,'started_at',self.clock())),2)) for r in rows]
+
     async def close(self):
         self.closed=True
         self.capacity_changed.set()

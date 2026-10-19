@@ -1,5 +1,19 @@
 # 작업 로그
 
+## 2026-10-19 — 단일 개인정보 동의·Windows 관리 통합·릴리즈 후보 감사
+
+공개47파일 staged 검토: 비공개 추적0·실제 bootstrap 민감 리터럴0·개인 경로0·문서 상대 링크 오류0, `git diff --cached --check` 통과. 운영4파일 해시 동일. 최신 구현 커밋은 후속 문서 기록을 참고한다.
+
+시작 main/d1b2d6a, fetch한 origin/main과0/0, 기존 미커밋 변경 없음. README/정의/구조/인수인계/로그·기존 구현/비공개 진단을 확인했다. private 운영4파일의 작업 전후 SHA256 동일, 가중치/기존 실험은 보존했다. 실제 Discord 연결/송신/명령 동기화·사용자 화면 조작 없음.
+
+변경: privacy/consent_ui 추가, CompanionStore 스키마5·독립 본인 동의/개인 발췌·철회/삭제/쓰기 경합 처리. discord_app 관리자 명령 제거와 단일 /동의/다음 연결 승인 동기화, sticker 송신/UI 제거, settings 서명 후 보존 마이그레이션. desktop/desktop_ui/companion_ui의 OFF 조회·동의 상태·조회 경합·작업 상세·한도/진단/캐시 관리·쉬운 한국어 안내. runtime/action/inference/character 공통 코드·URL 경계, reaction_requests의 실제 Unicode 실행·일시 실패 복구, 한도 사전 차단, 의미 라우터의 공유/타인 구분. scheduler/telemetry 실제 큐 상세. research는 기존 aiohttp를 사용하는 기본 OFF 공식 버전5주제 조회이며 범용 검색으로 주장하지 않는다. __main__의 잔존 /echo 안내 제거. 새 평가 도구 verify_release_gpu/verify_release_pipeline_gpu와 회귀 검사를 추가했다.
+
+진단 근거: 운영 성공 전송100/한도100, 마지막 요청이 생성 후 rate veto였다. 임의 상한 해제/ledger 삭제 없이 GPU 이전 검사와 이유·사용량·소유자 앱 변경을 제공했다. 관계 DB의 구본인 동의0건도 확인해 UI 갱신 장애와 동의상 정상 침묵을 구분했다. 세부 개인정보 원문은 공개하지 않는다.
+
+검증 명령: PYTHONPATH=src .venv-gemma4/Scripts/python.exe -m unittest discover -s tests -q. 최종 tests-publish.log **436검사 OK39.186초**. GPU 연속18/18·중복0, 공통 실행18/18, 기존 실패 순서12/12. 독립 생성 old/new18쌍은 코드9→0, 제한된 개념 문자열6/6 양쪽, 새 정책은 일부 더 느려 엔진 개선으로 보고하지 않는다. 모의 API·격리 SQLite·숨긴 Tk DPI 및 실제 공개 공식 API5/5를 구별했다. 초기 실패/수정/수치/전체 재현은 RELEASE-QA 최신 절, 전체 기능 연결 감사는 RELEASE-CANDIDATE, 본인 안내는 PRIVACY-COMMANDS에 기록했다.
+
+남음: 실제 명령 등록/삭제·원격 Discord 송수신/통신 장애·실제 사용자 Windows 조작·장시간 GPU/RAM·사람 블라인드 품질 미검증. 범용 검색/추상적 다자 요약 미구현. 전체 릴리즈는 NOT VERIFIED이며 새 학습/모델 승격은 없다. 공개 소스·비식별 문서만 검토 후 커밋한다. 원본은 local_data/release-qa-20261019/에 보관한다.
+
 ## 2026-10-19 — 서버 구성원 호칭·청자 근거 계층
 
 구현·검증 커밋 **e5cf00f**. 공개26파일 staged 검사: 비공개 파일·실제 bootstrap 민감 값·개인 경로 포함0, 문서 상대 링크 오류0, diff check 통과. 후속 문서 커밋에 실제 구현 해시를 기록한다. 비공개 평가·DB·설정·어댑터는 제외했다.

@@ -78,6 +78,7 @@ class MemberRecognition(unittest.TestCase):
 class AliasStore(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(dir='local_data');self.path=Path(self.temp.name)/'companion.sqlite3';self.store=CompanionStore(self.path)
+        for uid in (4,5,6):self.store.resume_subject(2,uid)
     def tearDown(self):self.temp.cleanup()
     def test_progressive_evidence_deduplicates_and_owner_can_confirm_remove(self):
         self.store.observe_alias(2,3,5,'반짝',10,4,'mention');first=self.store.aliases(2,3)[0]
@@ -138,7 +139,7 @@ class MemberRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(facts['speaker'],'4');self.assertIsNone(facts['addressee']);self.assertEqual(len(self.transport.sent),2)
     async def test_confirmed_alias_does_not_read_other_subject_memory(self):
         self.configure();store=CompanionStore(Path(self.temp.name)/'members.sqlite3');self.runtime.companion=store
-        store.set_alias(2,3,5,'반짝');store.add_memory(2,5,3,'나는 체스를 좋아해')
+        store.set_consent(2,5,'relationships',True);store.set_alias(2,3,5,'반짝');store.add_memory(2,5,3,'나는 체스를 좋아해')
         await self.runtime.ingest(self.event(content='다온아 반짝의 기억 알려줘'));await self.settle()
         self.assertTrue(self.backend.calls);self.assertFalse(any('체스' in str(c) for c in self.backend.calls))
     async def test_progressive_learning_requires_subject_consent_and_never_changes_affinity(self):
@@ -146,7 +147,7 @@ class MemberRuntime(unittest.IsolatedAsyncioTestCase):
         e=replace(self.event(content='반짝아 <@5>'),member_mentions=(5,))
         await self.runtime.ingest(e);await self.settle();self.assertFalse(store.aliases(2))
         store.resume_subject(2,5)
-        await self.runtime.ingest(replace(e,id=20));await self.settle()
+        await self.runtime.ingest(replace(e,id=20,timestamp=datetime.now(timezone.utc)));await self.settle()
         self.assertEqual(store.aliases(2)[0]['status'],'candidate');self.assertEqual(store.users(2),[])
     async def test_ambiguous_people_are_given_to_semantics_without_selecting_identity(self):
         self.configure();self.runtime.members.observe(2,3,6,('가온beta',))
@@ -157,7 +158,7 @@ class MemberRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(facts['ambiguous']);self.assertIsNone(facts['addressee']);self.assertEqual(len(self.transport.sent),1)
     async def test_owner_human_alias_colliding_with_bot_is_not_a_guaranteed_invitation(self):
         self.configure();store=CompanionStore(self.root/'members.sqlite3');self.runtime.companion=store
-        store.set_alias(2,3,5,'다온')
+        store.set_consent(2,5,'relationships',True);store.set_alias(2,3,5,'다온')
         self.backend.assess_dialogue.return_value=DialogueIntent('other','uncertain','new',False)
         await self.runtime.ingest(self.event(content='다온아'));await self.settle()
         self.assertFalse(self.transport.sent);self.backend.assess_dialogue.assert_awaited_once()
@@ -165,6 +166,7 @@ class MemberRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.transport.sent),1)
     async def test_restart_looks_up_only_matching_approved_subject_and_caches_failures(self):
         self.configure();store=CompanionStore(self.root/'members.sqlite3');self.runtime.companion=store
+        store.set_consent(2,8,'relationships',True);store.set_consent(2,9,'relationships',True)
         store.set_alias(2,3,8,'별빛');store.set_alias(2,3,9,'미확인','candidate')
         self.transport.member_lookup=AsyncMock(return_value=[(8,('새별mk2',))])
         for i in range(2):
@@ -184,7 +186,7 @@ class AliasOwnerControls(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory(dir='local_data') as folder:
             c=LocalController.__new__(LocalController);c.settings=Settings(1,secrets.token_hex(32),Path(folder)/'settings.json');c.settings.set_scope(1,2,3,'mention')
             c.bootstrap=dict(owner_id=1,admin_guilds=[2]);c.client=None;c.job=None;c.phase='test';c.error='';c.updates=queue.Queue(maxsize=8)
-            c.companion=CompanionStore(Path(folder)/'members.sqlite3')
+            c.companion=CompanionStore(Path(folder)/'members.sqlite3');c.companion.set_consent(2,5,'relationships',True)
             await c.command('companion',action='member_alias',guild=2,user='5',channel='3',alias='반짝',status='confirmed')
             self.assertFalse(c.error);self.assertEqual(c.companion.aliases(2,3)[0]['status'],'confirmed')
             await c.command('companion',action='member_alias',guild=2,user='5',channel='8',alias='새별',status='confirmed')

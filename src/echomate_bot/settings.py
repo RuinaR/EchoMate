@@ -17,9 +17,10 @@ MODELS={'base','persona','adult'}
 DEFAULTS = dict(enabled=False, text=True, reactions=False, stickers=False, media=False,
                 vision=False, mood="평온", warmth=75, cuteness=40, playfulness=20,
                 auto_mood=False, activity="normal", cooldown=60, engagement_seconds=600,
-                media_probability=0., daily_limit=100, model="persona", guilds={},asset_policy=2,gender='neutral',
+                media_probability=0., daily_limit=100, model="persona", guilds={},asset_policy=3,gender='neutral',
                 memory_auto=False,relations_auto=True,context_excerpts=True,reminders_enabled=True,reminder_grace=900,
-                memory_plan_grace=3600,memory_date_grace=86400,memory_state_hours=6)
+                memory_plan_grace=3600,memory_date_grace=86400,memory_state_hours=6,
+                command_sync_pending=False,web_search=False,summaries_auto=False)
 
 
 def private_path(value):
@@ -56,8 +57,8 @@ def positive_id(value):
 def validate(cfg):
     if set(cfg) != set(DEFAULTS):
         raise ValueError("Unknown settings; owner identity cannot be configured here")
-    if cfg['asset_policy']!=2 or cfg['media'] or cfg['media_probability']!=0:raise ValueError('Registered media is removed')
-    for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood",'memory_auto','relations_auto','context_excerpts','reminders_enabled'):
+    if cfg['asset_policy']!=3 or cfg['media'] or cfg['media_probability']!=0 or cfg['stickers']:raise ValueError('Media and sticker output removed')
+    for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood",'memory_auto','relations_auto','context_excerpts','reminders_enabled','command_sync_pending','web_search','summaries_auto'):
         if type(cfg[key]) is not bool:
             raise ValueError("Boolean required")
     if cfg["mood"] not in MOODS or cfg["activity"] not in ACTIVITY or cfg["model"] not in MODELS or cfg['gender'] not in GENDERS:
@@ -140,9 +141,11 @@ class Settings:
             if 'asset_policy' not in verified:
                 # Authenticate first; previous QA vision opt-in must not enable the new experiment.
                 verified=dict(verified,asset_policy=2,vision=False,media=False,media_probability=0.)
+            if verified['asset_policy'] not in (2,3):raise ValueError('Unsupported asset policy')
+            verified=dict(verified,asset_policy=3,stickers=False)
             # Migrate only after verifying the original signature; never auto-enable adult mode.
             if 'gender' not in verified:verified=dict(verified,gender='neutral')
-            for key in ('memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours'):
+            for key in ('memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','command_sync_pending','web_search','summaries_auto'):
                 if key not in verified:verified=dict(verified,**{key:deepcopy(DEFAULTS[key])})
             self._cfg = validate(verified)
 

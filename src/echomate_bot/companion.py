@@ -7,24 +7,40 @@ from .temporal import parse_when,duration,display_time
 def request_kind(text):
     from .routing import prose
     text=prose(text)
+    from .output_policy import explicit_code_request
+    if explicit_code_request(text):return None
+    if re.search(r'대화.*요약|요약.*대화',text):return 'summary'
     timed=bool(re.search(r'(?:\d+|한|두|세|네|반)\s*(?:분|시간|일)\s*(?:후|뒤|있다가|더|전)|\d+\s*시(?!간)',text))
     if re.search(r'알림|불러\s*줘|깨워\s*줘',text) or timed and re.search(r'알려\s*줘|라고\s*해\s*줘|늦춰|미뤄|취소',text):return 'reminder'
     if re.search(r'(?:내|나의).*(?:기억|정보).*(?:삭제|지워|잊어|목록|보여)|기억해\s*줘',text):return 'memory'
     return None
 
 
-def handle_request(store,event,cfg,bot_id):
+def handle_request(store,event,cfg,bot_id,*,recent=None):
     text=re.sub(r'<@!?'+str(bot_id)+r'>','',event.content).strip()
     kind=request_kind(text)
     if not kind:return None
     tz=cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul')
+    if kind=='summary':
+        ids=[int(x) for x in re.findall(r'(?<!\d)\d{5,20}(?!\d)',text)]
+        ids.extend(getattr(event,'member_mentions',()))
+        if any(uid not in (event.author,bot_id) for uid in ids):return '다른 사람의 대화 자료를 공개할 조회 권한은 없어. 교류한 적이 없다는 뜻은 아니야.'
+        if not ids and not re.search(r'내|나(?:와|랑|하고)',text):return '본인의 자료라면 나와 대화한 내용이라고 말해 줘. 불명확한 이름으로 다른 사람의 자료를 선택하지 않을게.'
+        rows=store.summaries(event.guild,event.author,event.channel)
+        if rows:return '이 채널에 저장된 네 발언 요약(발췌)이야.\n'+'\n'.join(r['summary'] for r in rows[:4])
+        excerpts=[t.content[:160] for t in (recent or ()) if t.author_id==str(event.author) and t.message_id!=str(event.id) and safe_subject_text(t.content)]
+        if excerpts:return '이번 실행 중 이 채널에서 확인한 네 발언만 발췌하면:\n'+'\n'.join(excerpts[-3:])+'\n재시작 후 보존되는 요약과는 달라.'
+        counts=store.data_counts(event.guild,event.author)
+        if counts['relationships']:return '교류 기록은 있지만 지금 확인할 수 있는 대화 요약 자료는 없어. 대화를 나눈 적이 없다는 뜻은 아니야.'
+        return '지금 확인할 수 있는 저장된 대화 요약 자료가 없어. /동의에서 대화 요약 저장 여부를 직접 선택할 수 있어.'
     if kind=='memory':
         if re.search(r'삭제|지워|잊어',text):
             store.forget_memories(event.guild,event.author)
             return '이 서버에서 네 기억을 지웠어. 다시 자동 저장하지 않도록 막아 뒀어.'
         if re.search(r'목록|보여',text):
             rows=store.memories(event.guild,event.author,event.channel)
-            return '이 채널에서 사용할 수 있는 네 기억이 없어.' if not rows else '\n'.join(r['summary'] for r in rows[:5])
+            return '이 채널에서 사용할 수 있는 네 기억이 없어.' if not rows else '이 채널의 네 기억 중 최대 3개야.\n'+'\n'.join(r['summary'] for r in rows[:3])
+        if not store.automatic_allowed(event.guild,event.author,'memory'):return '/동의에서 장기 기억 저장을 직접 켠 다음 부탁해 줘. 다른 항목의 동의와는 별개야.'
         key=store.extract(event,tz,text=text,policy=cfg)
         return '네가 직접 말한 내용을 이 채널에서 참고하도록 저장했어.' if key else '민감한 정보나 다른 사람의 정보는 저장하지 않아. 네가 기억시키려는 내용을 명확하게 알려 줘.'
     if not cfg.get('reminders_enabled',True):return '지금은 알림 예약 기능이 꺼져 있어.'
