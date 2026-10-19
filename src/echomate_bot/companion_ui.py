@@ -24,11 +24,25 @@ class CompanionViews:
 
     def select_record(self,ids):
         self.record_key=next(iter(ids),None)
-        if self.page=='relations':self.record_user=self.record_key;self.refresh_records()
+        if self.page=='relations' and self.record_key and not self.record_key.startswith('alias:'):self.record_user=self.record_key;self.refresh_records()
         self.render()
 
     def record_action(self,action,**values):
         if self.guild_id:self.controller.submit('companion',action=action,guild=self.guild_id,user=self.record_user,query=self.record_search,kind=self.record_kind,**values)
+
+    def member_alias_editor(self):
+        if not self.record_user:return
+        data=(self.snapshot or {}).get('companion',{})
+        rows=[r for r in data.get('aliases',[]) if r['user']==self.record_user]
+        row=next((r for r in rows if 'alias:'+r['channel']+':'+r['alias']==self.record_key),{})
+        g=self.snapshot['cfg']['guilds'].get(str(self.guild_id),{})
+        channel=row.get('channel',next(iter(g.get('channels',{})),next(iter(g.get('threads',{})),'')))
+        def save(v):self.record_action('member_alias',channel=v['channel'],alias=v['alias'],status={'확정':'confirmed','후보':'candidate','삭제':'deleted'}[v['status']])
+        self.form('이 사람의 호칭 관리',[
+            ('channel','호칭을 사용할 허용 채널 / 스레드 ID',channel),
+            ('alias','호칭 · 변경하려면 이전 호칭을 삭제한 뒤 새로 추가',row.get('alias','')),
+            ('status','처리 · 확정 / 후보 / 삭제','확정')],save,
+            '이 채널에서만 사용해요. 후보는 반복되어도 자동 확정하지 않아요. 같은 호칭을 가진 사람이 여럿이면 보류해요. 기억·알림 대상 권한은 바뀌지 않아요.')
 
     def form(self,title,fields,submit,help_text=''):
         from .desktop_ui import PANEL,CARD,FG,MUTED,ACCENT,BG,rounded
@@ -139,7 +153,9 @@ class CompanionViews:
             if self.record_status=='실패':rows=[r for r in rows if r['status']=='failed']
             elif self.record_status=='예약 중':rows=[r for r in rows if r['status']=='scheduled']
             items=[dict(id=r['reminder_id'],label=display_time(r['due_at'],tz)+' · '+STATES[r['status']],hint=f"{r['text'][:40]} · {max(0,int((r['due_at']-time.time())/60))}분 남음") for r in rows]
-        else:items=[dict(id=r['user'],label=r.get('label','사용자 '+r['user']),hint='마지막 교류 '+(display_time(r['last_at']) if r['last_at'] else '아직 없음')) for r in rows]
+        else:
+            aliases=[r for r in data.get('aliases',[]) if r['user']==self.record_user]
+            items=[dict(id='alias:'+r['channel']+':'+r['alias'],label=r['alias']+' · '+{'confirmed':'소유자 확인','candidate':'확인 전 후보','deleted':'삭제됨'}[r['status']],hint=f"채널 {r['channel']} · 근거 {r['observations']}건 / {r['witnesses']}명 · 근거점수 {r['confidence']:.0%}") for r in aliases] if self.record_user else [dict(id=r['user'],label=r.get('label','사용자 '+r['user']),hint='사람을 선택하면 호칭 후보를 확인할 수 있어요') for r in rows]
         self.record_list.set_items(items);self.record_list.place(x=674,y=230,width=max(210,w-714),height=max(100,h-480))
         self.record_list.selected={self.record_key} if self.record_key else set()
         y=h-226
@@ -152,6 +168,7 @@ class CompanionViews:
         elif self.page=='reminders':
             self.button(506,y,120,30,self.record_status,lambda:self.cycle_record_status())
             self.button(636,y,120,30,'유예 시간',lambda:self.form('늦어진 알림 처리',[('seconds','재시작 뒤 허용 지연 · 0~86400초',cfg['reminder_grace'])],lambda v:self.set_value('reminder_grace',int(v['seconds']))))
+        elif self.page=='relations':self.button(506,y,120,30,'호칭 추가·관리',self.member_alias_editor,enabled=bool(self.record_user))
         if self.page in ('memories','reminders'):
             self.button(246,y+40,120,30,'선택 삭제' if self.page=='memories' else '예약 취소',self.remove_record,enabled=bool(self.record_key))
         else:self.button(246,y+40,120,30,'별명·시간대',self.server_options)

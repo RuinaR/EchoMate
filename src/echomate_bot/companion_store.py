@@ -13,6 +13,7 @@ import time
 from .settings import private_path,positive_id
 from .context import terms
 from .temporal import parse_when
+from .member_aliases import MemberAliases,SCHEMA as ALIAS_SCHEMA
 
 SENSITIVE=re.compile(r'비밀번호|패스워드|토큰|인증번호|주민번호|계좌|주소|전화|연락처|이메일|생년|성생활|성관계|섹스|병원|진단|처방|질병|질환|복용|약\s*먹|비밀|DM|디엠|https?://|\b\d{3}[- ]\d{3,4}[- ]\d{4}\b',re.I)
 
@@ -22,14 +23,14 @@ def safe_subject_text(text):
             and not re.search(r'<@|@everyone|@here|```|["“”]',text))
 
 
-class CompanionStore:
+class CompanionStore(MemberAliases):
     def __init__(self,path,clock=time.time):
         self.path=private_path(path);self.clock=clock;self.lock=threading.RLock();self.error=None
         try:
             self.path.parent.mkdir(parents=True,exist_ok=True)
             with self.db() as db:
                 version=db.execute('PRAGMA user_version').fetchone()[0]
-                if version>3:raise ValueError('Newer companion schema')
+                if version>4:raise ValueError('Newer companion schema')
                 db.executescript('''
 BEGIN IMMEDIATE;
 CREATE TABLE IF NOT EXISTS relationships(guild TEXT,user TEXT,affinity REAL DEFAULT 50,interactions INTEGER DEFAULT 0,last_at REAL DEFAULT 0,day TEXT,delta REAL DEFAULT 0,PRIMARY KEY(guild,user));
@@ -45,7 +46,8 @@ CREATE TABLE IF NOT EXISTS reminders(reminder_id TEXT PRIMARY KEY,guild TEXT,cha
 CREATE INDEX IF NOT EXISTS reminders_due ON reminders(status,due_at);
 CREATE TABLE IF NOT EXISTS memory_flows(memory_id TEXT PRIMARY KEY REFERENCES memories(memory_id) ON DELETE CASCADE,conversation_id TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS subject_consents(guild TEXT,user TEXT,at REAL,PRIMARY KEY(guild,user));
-PRAGMA user_version=3;
+'''+ALIAS_SCHEMA+'''
+PRAGMA user_version=4;
 COMMIT;
 ''')
             self.cleanup()
@@ -163,9 +165,10 @@ COMMIT;
 
     def delete_source(self,guild,source,*,known=True):
         with self.db() as db:
-            if not known and not db.execute('SELECT 1 FROM memories WHERE guild=? AND source=? UNION SELECT 1 FROM reminders WHERE guild=? AND source=?',(str(guild),str(source),str(guild),str(source))).fetchone():return
+            if not known and not db.execute('SELECT 1 FROM memories WHERE guild=? AND source=? UNION SELECT 1 FROM reminders WHERE guild=? AND source=? UNION SELECT 1 FROM alias_evidence WHERE guild=? AND source=?',(str(guild),str(source),str(guild),str(source),str(guild),str(source))).fetchone():return
             db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(guild),str(source)))
             db.execute('DELETE FROM memories WHERE guild=? AND source=?',(str(guild),str(source)))
+            db.execute('DELETE FROM alias_evidence WHERE guild=? AND source=?',(str(guild),str(source)))
             db.execute("UPDATE reminders SET status='cancelled',text='' WHERE guild=? AND source=? AND status IN ('scheduled','processing')",(str(guild),str(source)))
 
     def delete_memory(self,guild,key):
@@ -187,14 +190,15 @@ COMMIT;
     def forget(self,guild,user=None):
         g=str(guild)
         with self.db() as db:
-            subjects=[str(user)] if user is not None else [r[0] for r in db.execute('SELECT user FROM memories WHERE guild=? UNION SELECT user FROM relationships WHERE guild=? UNION SELECT requester FROM reminders WHERE guild=? UNION SELECT user FROM subject_consents WHERE guild=?',(g,g,g,g))]
+            subjects=[str(user)] if user is not None else [r[0] for r in db.execute('SELECT user FROM memories WHERE guild=? UNION SELECT user FROM relationships WHERE guild=? UNION SELECT requester FROM reminders WHERE guild=? UNION SELECT user FROM subject_consents WHERE guild=? UNION SELECT user FROM member_aliases WHERE guild=?',(g,g,g,g,g))]
             for u in subjects:
                 db.execute('INSERT OR IGNORE INTO optouts VALUES(?,?)',(g,u))
                 db.execute('INSERT INTO memory_cutoffs VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(g,u,self.clock()))
-                for table in ('memories','relationships','relationship_events'):db.execute(f'DELETE FROM {table} WHERE guild=? AND user=?',(g,u))
+                for table in ('memories','relationships','relationship_events','member_aliases','alias_evidence'):db.execute(f'DELETE FROM {table} WHERE guild=? AND user=?',(g,u))
                 db.execute('INSERT OR IGNORE INTO tombstones SELECT guild,source FROM reminders WHERE guild=? AND requester=?',(g,u))
                 db.execute('DELETE FROM reminders WHERE guild=? AND requester=?',(g,u))
                 db.execute('DELETE FROM subject_consents WHERE guild=? AND user=?',(g,u))
+                db.execute('DELETE FROM alias_evidence WHERE guild=? AND witness=?',(g,u))
         # No data backups are restored automatically. WAL checkpoint is best effort.
         with self.db() as db:db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
 
@@ -298,6 +302,8 @@ COMMIT;
     def cleanup(self):
         now=self.clock()
         with self.db() as db:
+            db.execute('DELETE FROM alias_evidence WHERE at<?',(now-90*86400,))
+            db.execute("DELETE FROM member_aliases WHERE status!='confirmed' AND updated<?",(now-90*86400,))
             db.execute('DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at<=?',(now,))
             db.execute("UPDATE memories SET status='uncertain' WHERE kind='goal' AND status='active' AND last_confirmed_at<?",(now-90*86400,))
             db.execute("DELETE FROM reminders WHERE status IN ('cancelled','expired','failed','delivered') AND created_at<?",(now-7*86400,))

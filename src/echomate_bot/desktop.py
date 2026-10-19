@@ -22,6 +22,7 @@ NO_RESPONSE = {
     'followup_not_linked':'이어지는 대화 근거가 부족해요', 'continuation_rejected':'대상이나 종료 판단에 따라 답하지 않았어요',
     'autonomy_cooldown':'새 자율 참여의 대기 시간 또는 부하 제한이에요', 'scope_denied':'허용된 대화 범위가 아니에요',
     'permission_denied':'채널을 볼 권한이 없어요',
+    'member_other_addressee':'다른 구성원에게 한 말로 확인했어요',
     'queue_rejected':'작업 대기 한도에 도달했어요', 'request_expired':'요청의 최대 대기 시간이 지났어요',
     'stale_context':'생성 중 대화나 설정이 바뀌었어요', 'generation_failed':'AI 처리 중 오류가 났어요',
     'action_silence':'현재 문맥에서는 침묵을 선택했어요', 'send_failed':'Discord 전송을 확인하지 못했어요',
@@ -221,10 +222,19 @@ class LocalController:
                 elif action=='affinity':
                     if not user:raise ValueError('Choose user')
                     await asyncio.to_thread(store.set_affinity,gid,user,float(kwargs['value']))
+                elif action=='member_alias':
+                    if not user:raise ValueError('Choose user')
+                    channel=int(kwargs['channel']);g=self.settings.get()['guilds'].get(str(gid),{})
+                    if str(channel) not in g.get('channels',{}) and str(channel) not in g.get('threads',{}):raise ValueError('Choose configured source channel')
+                    await asyncio.to_thread(store.set_alias,gid,channel,user,kwargs['alias'],kwargs['status'])
+                    if self.client:self.client.runtime.members.alias_cache.clear()
                 elif action=='forget_user':
                     if not user:raise ValueError('Choose user')
                     await asyncio.to_thread(store.forget,gid,user)
-                elif action=='forget_guild':await asyncio.to_thread(store.forget,gid)
+                    if self.client:self.client.runtime.members.clear(gid,user=user)
+                elif action=='forget_guild':
+                    await asyncio.to_thread(store.forget,gid)
+                    if self.client:self.client.runtime.members.clear(gid)
                 elif action in ('memory_reset','relationship_reset','reminder_reset'):
                     area={'memory_reset':'memories','relationship_reset':'relationships','reminder_reset':'reminders'}[action]
                     await asyncio.to_thread(store.clear_records,gid,area,user)
@@ -304,14 +314,19 @@ class LocalController:
             memories=store.memories(guild,user,query=query,kind=kind)
             reminders=store.reminders(guild,user)
             people={r['user']:dict(r) for r in store.users(guild)}
+            aliases=store.aliases(guild,user=user)
+            for row in aliases:people.setdefault(row['user'],dict(user=row['user'],affinity=50,interactions=0,last_at=0))
             for row in [*store.memories(guild),*store.reminders(guild)]:
                 uid=row.get('user',row.get('requester'))
                 people.setdefault(uid,dict(user=uid,affinity=50,interactions=0,last_at=0))
-            return dict(guild=guild,user=user,people=list(people.values()),memories=memories,reminders=reminders,query=query,kind=kind,history=store.relationship_history(guild,user) if user else [])
+            return dict(guild=guild,user=user,people=list(people.values()),aliases=aliases,memories=memories,reminders=reminders,query=query,kind=kind,history=store.relationship_history(guild,user) if user else [])
         view=await asyncio.to_thread(read)
         if request!=self.companion_request:return
         self.companion_view=view
         names=getattr(self.client,'user_names',{}) if self.client else {}
+        if self.client:
+            for (g,ch,uid),(observed,at) in self.client.runtime.members.people.items():
+                if g==guild and str(uid) not in {p['user'] for p in view['people']}:view['people'].append(dict(user=str(uid),affinity=50,interactions=0,last_at=0))
         for person in self.companion_view['people']:person['label']=names.get((guild,int(person['user'])),f"사용자 {person['user']}")
 
     async def _run_bot(self):

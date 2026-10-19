@@ -30,5 +30,14 @@ class RecordLayout(unittest.TestCase):
                     for item in app.canvas.find_withtag('button_label'):
                         bounds=app.canvas.bbox(item)
                         self.assertGreaterEqual(bounds[0],0);self.assertLessEqual(bounds[2],1040)
+                app.page='relations';app.record_user='4'
+                app.snapshot['companion']['aliases']=[dict(user='4',channel='3',alias='구름',status='candidate',observations=2,witnesses=2,confidence=.6)]
+                app.record_key='alias:3:구름';app.render();root.update_idletasks()
+                self.assertTrue(all(y+height<=740 for x,y,width,height,callback in app.hits))
+                # Inspect the dialog contract without opening or operating a UI.
+                captured=[];app.form=lambda *args:captured.append(args)
+                app.member_alias_editor();self.assertEqual(captured[0][0],'이 사람의 호칭 관리')
+                captured[0][2](dict(channel='3',alias='구름',status='확정'))
+                self.assertEqual(controller.submit.call_args.kwargs['status'],'confirmed')
             finally:
                 app.destroy();app=None;root=None;gc.collect()

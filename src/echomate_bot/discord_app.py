@@ -53,7 +53,25 @@ class DiscordTransport:
         return names
 
     def other_names(self,event):
-        return [name for (guild,uid),name in self.client.user_names.items() if guild==event.guild and uid!=self.bot_id]
+        return self.client.runtime.members.names(event.guild,event.channel,self.bot_id)
+
+    async def member_lookup(self,event,users):
+        guild=self.client.get_guild(event.guild);channel=guild.get_channel_or_thread(event.channel) if guild else None
+        if not channel:return ()
+        rows=[]
+        for uid in users[:4]:
+            try:member=guild.get_member(uid) or await asyncio.wait_for(guild.fetch_member(uid),2)
+            except discord.NotFound:
+                self.client.runtime.members.clear(event.guild,user=uid)
+                await asyncio.to_thread(self.client.companion.clear_aliases,event.guild,uid)
+                continue
+            except (discord.HTTPException,asyncio.TimeoutError):
+                self.client.runtime.note('member_lookup_unavailable');continue
+            if member.bot or not channel.permissions_for(member).view_channel:continue
+            if isinstance(channel,discord.Thread) and channel.type==discord.ChannelType.private_thread and not channel.get_member(uid) and not member.guild_permissions.manage_threads:continue
+            names=tuple(dict.fromkeys(n for n in (member.nick,member.display_name,member.global_name,member.name) if n))
+            rows.append((uid,names));self.client.user_names[(event.guild,uid)]=member.display_name[:80]
+        return rows
 
     async def deliver_reminder(self,row,fresh):
         if not self.client.is_ready():raise ValueError('Disconnected')
@@ -294,6 +312,7 @@ class EchoClient(discord.Client):
             await i.response.defer(ephemeral=True)
             if action=='전체삭제':
                 await asyncio.to_thread(self.companion.forget,i.guild_id,i.user.id)
+                self.runtime.members.clear(i.guild_id,user=i.user.id)
                 result='네 기억·관계·예약 기록을 삭제하고 자동 저장을 막았어.'
             elif action=='기억삭제':
                 await asyncio.to_thread(self.companion.forget_memories,i.guild_id,i.user.id)
@@ -357,7 +376,10 @@ class EchoClient(discord.Client):
         standard=tuple(dict(id=str(s.id),official_description=(s.description or '')[:180],official_tags=s.tags[:12]) for item in message.stickers if (s:=self.standard_stickers.get(item.id)))
         await self.runtime.ingest(Event(message.id,message.guild.id,message.channel.id,message.author.id,
             message.content,message.created_at,parent=parent,reply_to=message.reference.message_id if message.reference else None,
-            assets=assets_from_message(message) if cfg['vision'] else (),standard_stickers=standard,received_at=received))
+            assets=assets_from_message(message) if cfg['vision'] else (),standard_stickers=standard,received_at=received,
+            member_names=tuple((u.id,tuple(dict.fromkeys(n for n in (getattr(u,'nick',None),u.display_name,getattr(u,'global_name',None),u.name) if n))) for u in (message.author,*message.mentions) if not u.bot),
+            member_mentions=tuple(u.id for u in message.mentions),
+            reply_author=(target.author.id if message.reference and isinstance((target:=message.reference.resolved),discord.Message) and target.channel.id==message.channel.id and target.guild and target.guild.id==message.guild.id else None)))
 
     async def on_raw_message_delete(self,payload):
         if payload.guild_id:await self.runtime.message_changed(payload.guild_id,payload.channel_id,payload.message_id)
@@ -375,14 +397,32 @@ class EchoClient(discord.Client):
         if not member.bot:await self.runtime.reaction_event(guild.id,payload.channel_id,member.id,payload.message_id,str(payload.emoji),remove=remove,parent=parent)
     async def on_raw_reaction_add(self,payload):await self._reaction_event(payload,False)
     async def on_raw_reaction_remove(self,payload):await self._reaction_event(payload,True)
-    async def on_guild_channel_update(self,before,after):self.runtime.invalidate(after.id)
-    async def on_guild_channel_delete(self,channel):self.runtime.invalidate(channel.id)
-    async def on_guild_role_update(self,before,after):self.runtime.invalidate_guild(after.guild.id)
-    async def on_guild_role_delete(self,role):self.runtime.invalidate_guild(role.guild.id)
-    async def on_thread_update(self,before,after):self.runtime.invalidate(after.id)
-    async def on_thread_delete(self,thread):self.runtime.invalidate(thread.id)
-    async def on_raw_thread_delete(self,payload):self.runtime.invalidate(payload.thread_id)
-    async def on_guild_remove(self,guild):self.runtime.invalidate_guild(guild.id);self.cache.clear(guild.id)
+    async def on_guild_channel_update(self,before,after):self.runtime.invalidate(after.id);self.runtime.members.clear(after.guild.id,channel=after.id)
+    async def on_guild_channel_delete(self,channel):
+        self.runtime.invalidate(channel.id);self.runtime.members.clear(channel.guild.id,channel=channel.id)
+        await asyncio.to_thread(self.companion.clear_aliases,channel.guild.id,channel=channel.id)
+    async def on_guild_role_update(self,before,after):self.runtime.invalidate_guild(after.guild.id);self.runtime.members.clear(after.guild.id)
+    async def on_guild_role_delete(self,role):self.runtime.invalidate_guild(role.guild.id);self.runtime.members.clear(role.guild.id)
+    async def on_thread_update(self,before,after):self.runtime.invalidate(after.id);self.runtime.members.clear(after.guild.id,channel=after.id)
+    async def on_thread_delete(self,thread):
+        self.runtime.invalidate(thread.id);self.runtime.members.clear(thread.guild.id,channel=thread.id)
+        await asyncio.to_thread(self.companion.clear_aliases,thread.guild.id,channel=thread.id)
+    async def on_raw_thread_delete(self,payload):
+        self.runtime.invalidate(payload.thread_id);self.runtime.members.clear(payload.guild_id,channel=payload.thread_id)
+        await asyncio.to_thread(self.companion.clear_aliases,payload.guild_id,channel=payload.thread_id)
+    async def on_member_update(self,before,after):
+        # Events available without bulk member fetching. MESSAGE_CREATE refreshes
+        # observed members even when Discord does not send this privileged event.
+        keys=[k for k in self.runtime.members.people if k[0]==after.guild.id and k[2]==after.id]
+        for _,channel,_ in keys:self.runtime.members.observe(after.guild.id,channel,after.id,(after.display_name,after.name))
+        self.user_names[(after.guild.id,after.id)]=after.display_name[:80]
+    async def on_member_remove(self,member):
+        self.runtime.members.clear(member.guild.id,user=member.id);self.user_names.pop((member.guild.id,member.id),None)
+        await asyncio.to_thread(self.companion.clear_aliases,member.guild.id,member.id)
+    async def on_guild_remove(self,guild):
+        self.runtime.invalidate_guild(guild.id);self.cache.clear(guild.id);self.runtime.members.clear(guild.id)
+        self.user_names={k:v for k,v in self.user_names.items() if k[0]!=guild.id}
+        await asyncio.to_thread(self.companion.clear_aliases,guild.id)
     async def on_guild_emojis_update(self,guild,before,after):
         self.cache.retain(guild.id,set(),"emoji:");self.runtime.invalidate_guild(guild.id)
     async def on_guild_stickers_update(self,guild,before,after):

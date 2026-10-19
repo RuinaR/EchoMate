@@ -120,6 +120,39 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(body['allowed_mentions']['replied_user'])
         self.assertTrue(body['flags'] & 4)
 
+    async def test_member_payload_and_actual_reply_metadata_without_members_intent(self):
+        captured=AsyncMock();self.client.runtime.ingest=captured
+        mid=discord.utils.time_snowflake(datetime.now(timezone.utc))
+        original=payload(mid-1,content='앞선 실제 메시지',author=5)
+        data=payload(mid,content='가온아 <@5> 이거 봐',author=4)
+        data['mentions']=[dict(user(5),username='gaon',member=dict(nick='가온mk2',roles=[],flags=0))]
+        data['message_reference']=dict(message_id=str(mid-1),channel_id='3',guild_id='2')
+        data['referenced_message']=original
+        message=self.client._connection.create_message(channel=self.guild.get_channel(3),data=data)
+        await self.client.on_message(message)
+        e=captured.call_args.args[0]
+        self.assertEqual(e.reply_author,5);self.assertEqual(e.reply_to,mid-1);self.assertEqual(e.member_mentions,(5,))
+        self.assertIn('가온mk2',dict(e.member_names)[5]);self.assertFalse(self.client.intents.members)
+        self.assertFalse(self.http.sends)
+
+    async def test_member_cache_cleared_on_scope_permission_change_and_guild_departure(self):
+        self.client.runtime.members.observe(2,3,4,('가온',))
+        await self.client.on_guild_channel_update(self.guild.get_channel(3),self.guild.get_channel(3))
+        self.assertFalse(self.client.runtime.members.people)
+        self.client.companion.set_alias(2,3,4,'구름')
+        await self.client.on_guild_remove(self.guild)
+        self.assertFalse(self.client.companion.aliases(2))
+
+    async def test_approved_alias_lookup_fetches_only_requested_member_and_handles_departure(self):
+        transport=self.client.runtime.transport
+        with patch.object(self.http,'get_member',wraps=self.http.get_member) as fetch:
+            rows=await transport.member_lookup(self.event(),[5])
+        self.assertEqual(rows[0][0],5);fetch.assert_awaited_once_with(2,5)
+        self.client.companion.set_alias(2,3,5,'별빛')
+        missing=discord.NotFound(SimpleNamespace(status=404,reason='Not Found'),dict(code=10007,message='Unknown Member'))
+        with patch.object(self.http,'get_member',side_effect=missing):self.assertFalse(await transport.member_lookup(self.event(),[5]))
+        self.assertFalse(self.client.companion.aliases(2,3))
+
     async def test_blocked_channel_and_bot_events_never_reach_inference_or_http(self):
         await self.client.on_message(self.message(channel=8))
         await self.client.on_message(self.message(mid=101, author=999))
