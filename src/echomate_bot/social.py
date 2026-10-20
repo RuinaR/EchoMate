@@ -158,6 +158,11 @@ class SocialRouter:
             if row['speaker']==str(event.author) and row['addressee'] not in (None,str(event.author),str(bot_id)) or row['addressee']==str(event.author) and row['speaker'] not in (str(event.author),str(bot_id)):
                 pending=dict(source=row['id'],speaker=row['speaker'],addressee=row['addressee']);break
         text=event.content[:2000];subjects=[]
+        utterance_clipped=len(event.raw_parts)>1 and len(event.content)>2000
+        if utterance_clipped:
+            # Keep the actual current question at the tail, without enlarging
+            # the judge's existing window or inventing a summary of the middle.
+            text=event.content[:900]+'\n[중간 원문 생략 / 구성 원본은 별도 보존]\n'+event.content[-1000:]
         # Discord mention syntax attracts address interpretations even when a
         # Korean case particle makes it a third-person subject/object. Normalize
         # only this classifier view; keep the original event/source and IDs.
@@ -172,6 +177,10 @@ class SocialRouter:
             reply=str(event.reply_to) if event.reply_to else None,roles=event.member_roles.facts() if event.member_roles else {}),
             frames=frames,surrounding=prefix[-4:],current_peer_frames=[str(i) for i,(f,v) in enumerate(selected) if event.author in f.direct_peers],
             pending_human_exchange=pending,candidates_truncated=len(relevant)>4)
+        if len(event.raw_parts)>1:
+            packet['current']['sources']=[dict(id=str(p.id),speaker=str(p.author),reply=str(p.reply_to) if p.reply_to else None) for p in event.raw_parts]
+            packet['current']['utterance_id']=event.utterance_id
+            if utterance_clipped:packet['current']['text_clipped']=True
         if subjects:packet['subject_reference_ids']=subjects;packet['mention_surface_normalized']=True
         return packet,selected
 

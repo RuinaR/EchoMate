@@ -14,7 +14,7 @@ MOODS=['평온','기쁨','신남','우울','화남','피곤함','부끄러움']
 ACTIVITY={'조용함':'quiet','보통':'normal','활발함':'active','매우 활발함':'very_active'}
 MODES={'대답하지 않기':'silent','멘션·이어지는 대화만':'mention','자연스럽게 대화에 참여':'autonomous'}
 REACTION_MODES={'반응하지 않기':'silent','대화 중에만 반응':'mention','어울릴 때 가볍게 반응':'autonomous'}
-STAGES={'social':'실제 청자·대화 흐름 판정','summary':'대화 요약 확인·압축', 'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석','action':'행동 선택','text':'답변 작성','sending':'전송','research':'인터넷 근거 확인','output_check':'출력 검사','conversation_wait':'앞선 대화 기다림','member_resolution':'호칭·대상 근거 확인'}
+STAGES={'utterance_wait':'메시지 보충 대기','social':'실제 청자·대화 흐름 판정','summary':'대화 요약 확인·압축', 'memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석','action':'행동 선택','text':'답변 작성','sending':'전송','research':'인터넷 근거 확인','output_check':'출력 검사','conversation_wait':'앞선 대화 기다림','member_resolution':'호칭·대상 근거 확인'}
 
 
 def rounded(canvas,x,y,w,h,fill,r=12,outline=''):
@@ -632,7 +632,7 @@ class DesktopApp(CompanionViews):
         self.text(242,282,f"이번 실행 처리 {totals.get('finished',0)} · 실패/불확실 전송 {statistics.get('uncertain',0)} · 취소 {q.get('counts',{}).get('cancelled',0)} · 만료 {q.get('counts',{}).get('expired',0)} · 기존 종류 미기록 {statistics.get('legacy_today',0)}",8,MUTED,width=w-300)
         self.button(w-430,252,180,30,'개인정보 없는 진단 저장',lambda:self.controller.submit('diagnostics'))
         jobs=s.get('jobs',[])
-        states={'running':'처리 중','sent':'전송 완료','completed':'완료','silence':'침묵·보관 생략','failed':'실패','cancelled':'취소'}
+        states={'waiting':'보충 대기','running':'처리 중','sent':'전송 완료','completed':'완료','silence':'침묵·보관 생략','failed':'실패','cancelled':'취소'}
         self.job_list.empty_hint='아직 처리한 요청이 없어요'
         flows=s.get('conversations',[])
         flow_labels={'active':'대화 중','idle':'잠시 쉬는 중','ended':'종료'}
@@ -640,7 +640,7 @@ class DesktopApp(CompanionViews):
         self.job_list.place(x=240,y=300,width=270,height=max(100,h-445));self.job_list.selected={self.job_id} if self.job_id else set()
         selected=next((j for j in jobs if j['id']==self.job_id),None)
         if selected:
-            self.text(535,302,'선택한 작업 · 원본 '+('연결됨' if selected['source_attached'] else '없음'),11,bold=True)
+            self.text(535,302,'선택한 작업 · 원본 '+('연결됨' if selected['source_attached'] else '없음')+' · '+str(selected.get('source_count',1))+'개',11,bold=True)
             gpu=selected.get('gpu',{})
             self.text(535,335,f"GPU {gpu.get('status','완료 또는 아직 요청 전')} · 우선 {gpu.get('priority','-')} · 대기 {gpu.get('wait_seconds',0)}초 · 처리 {gpu.get('processing_seconds',0)}초",9,MUTED,width=w-575)
             social=selected.get('social',{})

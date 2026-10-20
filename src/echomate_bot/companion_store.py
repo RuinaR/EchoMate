@@ -32,7 +32,7 @@ class CompanionStore(MemberAliases,PrivacyStore,SummaryStore):
             self.path.parent.mkdir(parents=True,exist_ok=True)
             with self.db() as db:
                 version=db.execute('PRAGMA user_version').fetchone()[0]
-                if version>6:raise ValueError('Newer companion schema')
+                if version>7:raise ValueError('Newer companion schema')
                 db.executescript('''
 BEGIN IMMEDIATE;
 CREATE TABLE IF NOT EXISTS relationships(guild TEXT,user TEXT,affinity REAL DEFAULT 50,interactions INTEGER DEFAULT 0,last_at REAL DEFAULT 0,day TEXT,delta REAL DEFAULT 0,PRIMARY KEY(guild,user));
@@ -41,6 +41,8 @@ CREATE INDEX IF NOT EXISTS relationship_history ON relationship_events(guild,use
 CREATE TABLE IF NOT EXISTS optouts(guild TEXT,user TEXT,PRIMARY KEY(guild,user));
 CREATE TABLE IF NOT EXISTS memory_optouts(guild TEXT,user TEXT,PRIMARY KEY(guild,user));
 CREATE TABLE IF NOT EXISTS tombstones(guild TEXT,source TEXT,PRIMARY KEY(guild,source));
+CREATE TABLE IF NOT EXISTS source_parts(guild TEXT,source TEXT,part TEXT,PRIMARY KEY(guild,source,part));
+CREATE INDEX IF NOT EXISTS source_part_lookup ON source_parts(guild,part);
 CREATE TABLE IF NOT EXISTS memory_cutoffs(guild TEXT,user TEXT,at REAL,PRIMARY KEY(guild,user));
 CREATE TABLE IF NOT EXISTS memories(memory_id TEXT PRIMARY KEY,guild TEXT,user TEXT,kind TEXT,summary TEXT,source TEXT,channel TEXT,created_at REAL,updated_at REAL,observed_at REAL,last_confirmed_at REAL,event_start_at REAL,event_end_at REAL,expires_at REAL,timezone TEXT,temporal_precision TEXT,temporal_confidence REAL,confidence REAL,status TEXT,access_scope TEXT,expiration_policy TEXT,UNIQUE(guild,source,kind));
 CREATE INDEX IF NOT EXISTS memories_lookup ON memories(guild,user,channel,status,expires_at);
@@ -52,7 +54,7 @@ CREATE TABLE IF NOT EXISTS subject_consents(guild TEXT,user TEXT,at REAL,PRIMARY
 '''+PRIVACY_SCHEMA+SUMMARY_SCHEMA+'''
 INSERT OR IGNORE INTO consent_choices SELECT s.guild,s.user,'relationships',1,1,s.at FROM subject_consents s WHERE NOT EXISTS(SELECT 1 FROM optouts o WHERE o.guild=s.guild AND o.user=s.user);
 INSERT OR IGNORE INTO consent_choices SELECT s.guild,s.user,'memory',1,1,s.at FROM subject_consents s WHERE NOT EXISTS(SELECT 1 FROM optouts o WHERE o.guild=s.guild AND o.user=s.user) AND NOT EXISTS(SELECT 1 FROM memory_optouts o WHERE o.guild=s.guild AND o.user=s.user);
-PRAGMA user_version=6;
+PRAGMA user_version=7;
 COMMIT;
 ''')
             self.cleanup()
@@ -108,7 +110,7 @@ COMMIT;
             if require_consent and not db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='relationships' AND enabled=1",(str(guild),str(user))).fetchone():raise ValueError('본인의 친밀도 저장 동의가 필요해요')
             db.execute('INSERT INTO relationships(guild,user,affinity) VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET affinity=excluded.affinity',(str(guild),str(user),value))
 
-    def add_memory(self,guild,user,channel,summary,kind='explicit',*,source=None,observed=None,tz='Asia/Seoul',expires=None,status='active',policy=None,conversation_id=None,require_consent=False):
+    def add_memory(self,guild,user,channel,summary,kind='explicit',*,source=None,observed=None,tz='Asia/Seoul',expires=None,status='active',policy=None,conversation_id=None,require_consent=False,source_event=None):
         positive_id(guild);positive_id(user);positive_id(channel)
         if kind not in ('plan','state','goal','preference','explicit') or status not in ('active','disabled','uncertain'):raise ValueError('Invalid memory kind/status')
         if not safe_subject_text(summary):raise ValueError('Sensitive, third-party or unsupported memory')
@@ -133,6 +135,7 @@ COMMIT;
             if self.opted_out(db,g,u) or db.execute('SELECT 1 FROM memory_optouts WHERE guild=? AND user=?',(g,u)).fetchone() or db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(g,source)).fetchone():return None
             cutoff=db.execute("SELECT MAX(at) FROM memory_cutoffs WHERE guild=? AND user IN (?, '*')",(g,u)).fetchone()[0]
             if not source.startswith('manual:') and cutoff is not None and observed<=cutoff:return None
+            if source_event is not None and not self.register_source_parts(db,source_event):return None
             old=db.execute('SELECT memory_id FROM memories WHERE guild=? AND source=? AND kind=?',(g,source,kind)).fetchone()
             if old:return old[0]
             if db.execute('SELECT COUNT(*) FROM memories WHERE guild=? AND user=?',(g,u)).fetchone()[0]>=100 or db.execute('SELECT COUNT(*) FROM memories').fetchone()[0]>=5000:raise ValueError('Memory limit')
@@ -141,11 +144,26 @@ COMMIT;
             if conversation_id:db.execute('INSERT INTO memory_flows VALUES(?,?)',(key,conversation_id))
             return key
 
+    def register_source_parts(self,db,event):
+        parts=getattr(event,'raw_parts',())
+        if len(parts)<2:return True
+        if any((p.guild,p.channel,p.author)!=(event.guild,event.channel,event.author) for p in parts):raise ValueError('Mixed source identity')
+        g=str(event.guild);source=str(event.id)
+        if any(db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(g,str(p.id))).fetchone() for p in parts):return False
+        db.executemany('INSERT OR IGNORE INTO source_parts VALUES(?,?,?)',[(g,source,str(p.id)) for p in parts])
+        return True
+
+    @staticmethod
+    def prune_source_parts(db):
+        db.execute('''DELETE FROM source_parts WHERE NOT EXISTS(SELECT 1 FROM memories m WHERE m.guild=source_parts.guild AND m.source=source_parts.source)
+            AND NOT EXISTS(SELECT 1 FROM reminders r WHERE r.guild=source_parts.guild AND r.source=source_parts.source AND r.status IN ('scheduled','processing'))''')
+
     def extract(self,event,tz,*,text=None,policy=None):
         if not self.automatic_allowed(event.guild,event.author,'memory'):return None
+        observed=min(p.timestamp.timestamp() for p in (getattr(event,'raw_parts',()) or (event,)))
         with self.db() as db:
             consent_at=db.execute("SELECT at FROM consent_choices WHERE guild=? AND user=? AND category='memory'",(str(event.guild),str(event.author))).fetchone()
-            if consent_at and event.timestamp.timestamp()<consent_at[0]:return None
+            if consent_at and any(p.timestamp.timestamp()<consent_at[0] for p in (getattr(event,'raw_parts',()) or (event,))):return None
         text=(event.content if text is None else text).strip()
         if not safe_subject_text(text) or not re.search(r'나는|난\s|저는|내\s|기억해\s*줘',text):return None
         if re.search(r'친구|걔|그 사람|누가|농담|인용|아마|일지도|할까|하자|좋아한다고|선호한다고|라고\s*했|들었',text):return None
@@ -158,7 +176,7 @@ COMMIT;
             if re.search(r'취소|완료|끝났',text):
                 with self.db() as db:
                     db.execute('BEGIN IMMEDIATE')
-                    if not db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='memory' AND enabled=1 AND at<=?",(str(event.guild),str(event.author),event.timestamp.timestamp())).fetchone():return None
+                    if not db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='memory' AND enabled=1 AND at<=?",(str(event.guild),str(event.author),observed)).fetchone():return None
                     db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(event.guild),row['source']))
                     db.execute('DELETE FROM memories WHERE memory_id=?',(row['memory_id'],))
                 return row['memory_id']
@@ -166,12 +184,13 @@ COMMIT;
             if not when.start:return None
             with self.db() as db:
                 db.execute('BEGIN IMMEDIATE')
-                if not db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='memory' AND enabled=1 AND at<=?",(str(event.guild),str(event.author),event.timestamp.timestamp())).fetchone():return None
+                if not db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='memory' AND enabled=1 AND at<=?",(str(event.guild),str(event.author),observed)).fetchone():return None
+                if not self.register_source_parts(db,event):return None
                 db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(event.guild),row['source']))
                 grace=(policy or {}).get('memory_date_grace',86400) if when.precision=='date' else (policy or {}).get('memory_plan_grace',3600)
                 db.execute('UPDATE memories SET summary=?,source=?,observed_at=?,last_confirmed_at=?,updated_at=?,event_start_at=?,event_end_at=?,expires_at=?,timezone=?,temporal_precision=? WHERE memory_id=?',(text[:300],str(event.id),event.timestamp.timestamp(),event.timestamp.timestamp(),self.clock(),when.start.timestamp(),when.end.timestamp(),when.end.timestamp()+grace,tz,when.precision,row['memory_id']))
             return row['memory_id']
-        return self.add_memory(event.guild,event.author,event.channel,text[:300],kind,source=event.id,observed=event.timestamp.timestamp(),tz=tz,policy=policy,conversation_id=getattr(event,'conversation_id',None),require_consent=True)
+        return self.add_memory(event.guild,event.author,event.channel,text[:300],kind,source=event.id,observed=observed,tz=tz,policy=policy,conversation_id=getattr(event,'conversation_id',None),require_consent=True,source_event=event)
 
     def memories(self,guild,user=None,channel=None,query='',kind=None,*,conversation_id=None,allow_user_archive=False,include_expired=False):
         now=self.clock();sql='SELECT * FROM memories WHERE guild=?';args=[str(guild)]
@@ -190,20 +209,25 @@ COMMIT;
 
     def delete_source(self,guild,source,*,known=True):
         with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            dependencies=[r[0] for r in db.execute('SELECT source FROM source_parts WHERE guild=? AND part=?',(str(guild),str(source)))]
             if db.execute('SELECT 1 FROM summary_sources WHERE guild=? AND source=?',(str(guild),str(source))).fetchone():known=True
-            if not known and not db.execute('SELECT 1 FROM memories WHERE guild=? AND source=? UNION SELECT 1 FROM reminders WHERE guild=? AND source=? UNION SELECT 1 FROM alias_evidence WHERE guild=? AND source=? UNION SELECT 1 FROM conversation_summaries WHERE guild=? AND source=?',(str(guild),str(source))*4).fetchone():return
-            db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(guild),str(source)))
-            db.execute('DELETE FROM dialogue_summaries WHERE id IN (SELECT id FROM summary_sources WHERE guild=? AND source=?)',(str(guild),str(source)))
-            db.execute('DELETE FROM memories WHERE guild=? AND source=?',(str(guild),str(source)))
-            db.execute('DELETE FROM alias_evidence WHERE guild=? AND source=?',(str(guild),str(source)))
-            db.execute('DELETE FROM conversation_summaries WHERE guild=? AND source=?',(str(guild),str(source)))
-            db.execute("UPDATE reminders SET status='cancelled',text='' WHERE guild=? AND source=? AND status IN ('scheduled','processing')",(str(guild),str(source)))
+            if not known and not dependencies and not db.execute('SELECT 1 FROM memories WHERE guild=? AND source=? UNION SELECT 1 FROM reminders WHERE guild=? AND source=? UNION SELECT 1 FROM alias_evidence WHERE guild=? AND source=? UNION SELECT 1 FROM conversation_summaries WHERE guild=? AND source=?',(str(guild),str(source))*4).fetchone():return
+            for source in set([str(source),*dependencies]):
+                db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(guild),str(source)))
+                db.execute('DELETE FROM dialogue_summaries WHERE id IN (SELECT id FROM summary_sources WHERE guild=? AND source=?)',(str(guild),str(source)))
+                db.execute('DELETE FROM memories WHERE guild=? AND source=?',(str(guild),str(source)))
+                db.execute('DELETE FROM alias_evidence WHERE guild=? AND source=?',(str(guild),str(source)))
+                db.execute('DELETE FROM conversation_summaries WHERE guild=? AND source=?',(str(guild),str(source)))
+                db.execute("UPDATE reminders SET status='cancelled',text='' WHERE guild=? AND source=? AND status IN ('scheduled','processing')",(str(guild),str(source)))
+            self.prune_source_parts(db)
 
     def delete_memory(self,guild,key):
         with self.db() as db:
             row=db.execute('SELECT source FROM memories WHERE guild=? AND memory_id=?',(str(guild),key)).fetchone()
             if row:db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(guild),row[0]))
             db.execute('DELETE FROM memories WHERE guild=? AND memory_id=?',(str(guild),key))
+            self.prune_source_parts(db)
 
     def edit_memory(self,guild,key,summary,expires,status):
         if not safe_subject_text(summary) or status not in ('active','disabled','uncertain'):raise ValueError('Invalid memory edit')
@@ -232,6 +256,7 @@ COMMIT;
                 db.execute('DELETE FROM alias_evidence WHERE guild=? AND witness=?',(g,u))
                 db.execute('DELETE FROM conversation_summaries WHERE guild=? AND user=?',(g,u))
                 db.execute('UPDATE consent_choices SET enabled=0,version=version+1,at=? WHERE guild=? AND user=?',(self.clock(),g,u))
+            self.prune_source_parts(db)
         # No data backups are restored automatically. WAL checkpoint is best effort.
         with self.db() as db:db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
 
@@ -241,6 +266,7 @@ COMMIT;
             db.execute('INSERT OR IGNORE INTO memory_optouts VALUES(?,?)',(str(guild),str(user)))
             db.execute('INSERT INTO memory_cutoffs VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(str(guild),str(user),self.clock()))
             db.execute('DELETE FROM memories WHERE guild=? AND user=?',(str(guild),str(user)))
+            self.prune_source_parts(db)
 
     def users(self,guild):
         with self.db() as db:return [dict(r) for r in db.execute('SELECT * FROM relationships WHERE guild=? ORDER BY last_at DESC LIMIT 100',(str(guild),))]
@@ -281,7 +307,7 @@ COMMIT;
             if existing:
                 if existing['status']!='scheduled':raise ValueError('Request already closed')
                 return dict(existing)
-            if db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(g,str(event.id))).fetchone():raise ValueError('Request withdrawn')
+            if not self.register_source_parts(db,event) or db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(g,str(event.id))).fetchone():raise ValueError('Request withdrawn')
             if db.execute("SELECT COUNT(*) FROM reminders WHERE guild=? AND requester=? AND status IN ('scheduled','processing')",(g,u)).fetchone()[0]>=10:raise ValueError('Active reminder limit')
             if db.execute('SELECT COUNT(*) FROM reminders WHERE guild=? AND requester=? AND created_at>?',(g,u,now-86400)).fetchone()[0]>=30:raise ValueError('Daily reminder limit')
             if db.execute("SELECT COUNT(*) FROM reminders WHERE status IN ('scheduled','processing')").fetchone()[0]>=1000:raise ValueError('Global reminder limit')
@@ -344,5 +370,6 @@ COMMIT;
             db.execute('DELETE FROM alias_evidence WHERE at<?',(now-90*86400,))
             db.execute("DELETE FROM member_aliases WHERE status!='confirmed' AND updated<?",(now-90*86400,))
             db.execute('DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at<=?',(now,))
+            self.prune_source_parts(db)
             db.execute("UPDATE memories SET status='uncertain' WHERE kind='goal' AND status='active' AND last_confirmed_at<?",(now-90*86400,))
             db.execute("DELETE FROM reminders WHERE status IN ('cancelled','expired','failed','delivered') AND created_at<?",(now-7*86400,))

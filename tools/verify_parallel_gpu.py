@@ -35,7 +35,11 @@ class Borrowed:
     async def close(self):pass
 
 async def settle(runtime,backend):
-    while runtime.tasks:await asyncio.gather(*list(runtime.tasks.values()),return_exceptions=True)
+    utterances=getattr(runtime,'utterances',None)
+    while runtime.tasks or utterances and (utterances.pending or utterances.emitting):
+        tasks=list(runtime.tasks.values())
+        if utterances:tasks += [r.task for r in utterances.pending.values()]+list(utterances.emitting)
+        await asyncio.gather(*tasks,return_exceptions=True)
     deadline=time.monotonic()+100
     while backend.pending:
         if time.monotonic()>deadline:raise TimeoutError('GPU did not drain')

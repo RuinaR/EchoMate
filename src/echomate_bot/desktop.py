@@ -17,9 +17,11 @@ import tkinter as tk
 
 from .settings import ROOT,Settings,MOODS,ACTIVITY
 
-STAGES={'social':'실제 청자·대화 흐름 판정','member_resolution':'호칭·답장 근거 확인','summary':'대화 요약 확인·압축', 'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
+STAGES={'utterance_wait':'메시지 보충 대기','social':'실제 청자·대화 흐름 판정','member_resolution':'호칭·답장 근거 확인','summary':'대화 요약 확인·압축', 'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
         'action':'행동 선택','text':'답변 작성','sending':'Discord 전송','research':'인터넷 원문·근거 확인','output_check':'출력 정책 검사'}
 NO_RESPONSE = {
+    'utterance_waiting':'미완성 발언의 보충을 잠시 기다려요', 'utterance_combined':'같은 작성자의 이어지는 조각을 결합했어요',
+    'utterance_separated':'독립 발언 또는 출처 경계로 나눴어요', 'utterance_invalidated':'원본 변경이나 접근 범위 변경으로 발언을 중단했어요',
     'resource_stop_commit':'Windows 가상 메모리 여유가 부족해요. 다른 작업을 마친 뒤 다시 준비해 주세요',
     'social_human_exchange_pending':'다른 사람과 주고받는 순서라 끼어들지 않았어요', 'social_candidate_capacity':'여러 대화의 연결이 불명확해 기다려요',
     'social_other_addressee':'다른 사람에게 한 말이라 참여하지 않았어요', 'social_broadcast':'채널 전체를 향한 말이라 먼저 답하지 않았어요',

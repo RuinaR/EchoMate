@@ -4,6 +4,8 @@
 
 EchoMate 소스는 [MIT](LICENSE) 라이선스입니다. 모델·번들 의존성은 [각 라이선스](docs/THIRD-PARTY-NOTICES.md)를 따릅니다.
 
+분할 메시지는 실제 원본을 따로 보존한 발언 뷰로 처리합니다. 교차 화자·생성 중 보충·수정/삭제·원본 답장을 검증했으며, 애매한 의미 경계와 사회적 판단의 릴리즈 차단은 남아 있습니다. [분할 발언 계약과 검증](docs/MULTI-MESSAGE-UTTERANCES.md).
+
 표현 고급 설정은 슬라이더와 선택 버튼으로 조절하며, 적용 전에는 저장되지 않습니다. 버튼·목록의 누름·선택·포커스 상태도 구분합니다. [입력과 인터랙션 QA](docs/UI-INTERACTION-GUIDE.md).
 
 최신 [사회적 판단 정밀 QA](docs/PRECISION-SOCIAL-QA.md)와 [UI 동작 QA](docs/UI-ACTION-QA.md)에서도 정식 릴리즈는 **BLOCKED**입니다. 운영 자료를 건드리지 않고 창과 설정을 직접 확인하려면 `EchoMate-Check.vbs`를 사용하세요. 가상 정보와 별도 저장소로 실행하며 실제 Discord 연결을 차단합니다. [10~15분 사용자 확인](docs/USER-MANUAL-QA.md)은 아직 사용자가 완료한 결과가 아닙니다.

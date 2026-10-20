@@ -249,7 +249,12 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(.01)
             mid=discord.utils.time_snowflake(datetime.now(timezone.utc));sources.append(mid)
             await self.client.on_message(self.message(mid=mid,content=text))
-            await asyncio.wait_for(asyncio.gather(*list(self.client.runtime.tasks.values())),5)
+            # A completed bare call may wait for a bounded supplement; settle
+            # that logical utterance before testing a distinct later follow-up.
+            runtime=self.client.runtime
+            while runtime.utterances.pending or runtime.utterances.emitting or runtime.tasks:
+                waits=[r.task for r in runtime.utterances.pending.values()]+list(runtime.utterances.emitting)+list(runtime.tasks.values())
+                await asyncio.wait_for(asyncio.gather(*waits),5)
         self.assertEqual([int(b['message_reference']['message_id']) for _,b in self.http.sends],sources)
         self.client.backend.assess_dialogue.assert_awaited_once()
 

@@ -149,12 +149,19 @@ class DiscordTransport:
         channel=self.channel(event)
         if not channel or not await fresh():raise ValueError("Stale output")
         current=await channel.fetch_message(event.response_to or event.id)
+        verified_sources={event.response_to or event.id:current}
         if event.target_content_hash:
             import hashlib
             if hashlib.sha256(current.content.encode()).hexdigest()!=event.target_content_hash:raise ValueError('Original message changed')
             if event.response_to and event.response_to!=event.id and event.source_content_hash:
                 latest=await channel.fetch_message(event.id)
+                verified_sources[event.id]=latest
                 if hashlib.sha256(latest.content.encode()).hexdigest()!=event.source_content_hash:raise ValueError('Supplement changed')
+        for part in event.raw_parts:
+            source=verified_sources.get(part.id)
+            if source is None:source=await channel.fetch_message(part.id)
+            if (source.author.id!=part.author or source.channel.id!=part.channel or source.content!=part.content):
+                raise ValueError('Utterance source changed')
         if not await fresh():raise ValueError("Stale output")
         sent=None
         if action.kind in {Kind.TEXT,Kind.TEXT_REACTION}:

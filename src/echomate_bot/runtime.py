@@ -58,6 +58,9 @@ class Event:
     name_result:str='none'
     reaction_target:int|None=None
     reaction_target_hash:str|None=None
+    raw_parts:tuple=()
+    utterance_id:str|None=None
+    utterance_version:int=0
 
 
 from .ledger import Ledger
@@ -90,6 +93,8 @@ class Runtime:
         from .research import PublicResearch
         self.research=PublicResearch()
         self.job_records={}
+        from .utterances import Utterances
+        self.utterances=Utterances(self.ingest,self.note)
 
     def monitor(self):
         from .scheduler import request_context
@@ -101,7 +106,10 @@ class Runtime:
             match=next((r for r in gpu if r['source']==job['source'] and r['guild']==job['guild']),None)
             if match:row.update(gpu=match)
             rows.append(row)
-        return rows[:100]
+        waiting=[dict(id=r.uid,source=r.parts[0].response_to or r.parts[0].id,guild=r.parts[0].guild,channel=r.parts[0].channel,
+            seconds=round(now-r.started,2),created=r.started,stage='utterance_wait',status='waiting',flow='',
+            source_attached=True,source_count=len(r.parts),stages={}) for r in self.utterances.pending.values()]
+        return (waiting+rows)[:100]
 
     def social_monitor(self):
         rows={};now=self.activity_clock();lease=min(300,self.settings.get()['engagement_seconds'])
@@ -243,6 +251,7 @@ class Runtime:
             if state and not self.stopped and time.monotonic()<=event.received_at+180 and not self.ledger.contains(event):self._schedule(event,state,request)
 
     def invalidate_guild(self,guild):
+        self.utterances.discard(lambda p:p.guild==guild)
         self.social.clear(guild)
         for key,flow in list(self.conversations.flows.items()):
             if flow.guild==guild:self._drop_flow(key)
@@ -252,6 +261,7 @@ class Runtime:
             self.service_task=asyncio.create_task(self._services(),name='echomate-private-services')
 
     def privacy_changed(self,guild,user,category,deleted):
+        self.utterances.discard(lambda p:p.guild==guild and p.author==user)
         if deleted:self.social.clear(guild,user=user)
         if category=='summaries':
             for task in self.summary_tasks:task.cancel()
@@ -361,6 +371,7 @@ class Runtime:
                 except (OSError,RuntimeError,sqlite3.Error):self.note('reminder_store_failed')
 
     async def message_changed(self,guild,channel,message,content=None):
+        self.utterances.changed(guild,channel,message)
         self.social.change(guild,channel,message,content)
         for job in self.job_records.values():
             if job['guild']==guild and job['channel']==channel and job['source']==message:job.update(source_attached=content is not None,source_changed=True)
@@ -452,6 +463,7 @@ class Runtime:
         self.activity_changed()
 
     def invalidate(self,channel):
+        self.utterances.discard(lambda p:p.channel==channel)
         for guild,cid in list(self.social.places):
             if cid==channel:self.social.clear(guild,channel=channel)
         for key in list(self.states):
@@ -459,6 +471,7 @@ class Runtime:
             if key==channel or flow and flow.channel==channel:self._drop_flow(key)
 
     def invalidate_all(self):
+        self.utterances.discard(lambda p:True)
         self.social.places.clear()
         for key in list(self.states):self._drop_flow(key)
 
@@ -475,6 +488,27 @@ class Runtime:
         async with lock:await self._ingest(event)
 
     async def _ingest(self,event):
+        if not event.raw_parts:
+            if event.id in self.seen:return
+            if not (await self.transport.permissions(event)).get('view',False):self.note('permission_denied');return
+            event=await self.member_evidence(event)
+            cfg=self.settings.get();g=cfg['guilds'].get(str(event.guild),{})
+            aliases=list(g.get('aliases',()))
+            if hasattr(self.transport,'address_names'):aliases.extend(self.transport.address_names(event))
+            from .naming import address_forms
+            from .routing import prose
+            names=address_forms(guild_name(cfg,event.guild),aliases,g.get('partial_names',True))
+            clean=prose(event.content).strip().strip(' ,!.?~…:')
+            bare=clean in {f+suffix for f in names for suffix in ('','아','야','님')} or clean in ('<@'+str(self.transport.bot_id)+'>','<@!'+str(self.transport.bot_id)+'>')
+            direct=mentions_bot(event.content,self.transport.bot_id) or name_address(event.content,guild_name(cfg,event.guild),aliases,g.get('partial_names',True))=='direct'
+            human=bool(event.member_roles and (event.member_roles.addressee not in (None,self.transport.bot_id) or event.member_roles.ambiguous))
+            from .sessions import SUPPLEMENT,INDEPENDENT
+            own=[v[0] for v in self.requests.values() if (v[0].guild,v[0].channel,v[0].author)==(event.guild,event.channel,event.author)]
+            if len(own)==1 and not human and SUPPLEMENT.search(event.content) and not INDEPENDENT.search(event.content):
+                event=replace(event,response_to=own[0].response_to or own[0].id)
+            ready=self.utterances.offer(event,bare=bare,direct=direct,human=human)
+            for assembled in ready:await self._ingest(assembled)
+            return
         scope_started=time.monotonic()
         # New user work preempts optional background compression only.
         for task in self.summary_tasks:task.cancel()
@@ -482,14 +516,15 @@ class Runtime:
         if self.stopped or event.bot or event.opted_out or mode=="silent":return
         if not (await self.transport.permissions(event)).get("view",False):self.note('permission_denied');return
         if self.stopped or scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':return
-        if event.id in self.seen:return
+        if not self.utterances.valid(event):self.note("utterance_invalidated");return
+        if any(p.id in self.seen for p in event.raw_parts):return
         event=replace(event,scope_seconds=time.monotonic()-scope_started)
         member_started=time.monotonic();event=await self.member_evidence(event)
         if scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':
             self.members.clear(event.guild,channel=event.channel);self.note('scope_denied');return
-        self.seen[event.id]=time.time()
+        for part in event.raw_parts:self.seen[part.id]=time.time()
         self.seen={k:v for k,v in self.seen.items() if time.time()-v<3600}
-        if len(self.seen)>5000:self.seen.pop(next(iter(self.seen)))
+        while len(self.seen)>5000:self.seen.pop(next(iter(self.seen)))
         extra=list(cfg['guilds'].get(str(event.guild),{}).get('aliases',()))
         if hasattr(self.transport,'address_names'):extra.extend(self.transport.address_names(event))
         name_evidence=name_address(event.content,guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True),
@@ -498,7 +533,8 @@ class Runtime:
         event=replace(event,member_seconds=time.monotonic()-member_started,name_result=name_evidence)
         candidate_started=time.monotonic()
         social=hasattr(self.backend,'assess_social')
-        if social:self.social.observe(event)
+        if social:
+            for part in event.raw_parts:self.social.observe(part)
         self.note('name_direct_accepted' if name_evidence=='direct' else 'name_ambiguous' if name_evidence=='ambiguous' else 'name_not_recognized')
         from .social import direct_signal
         explicit=(direct_signal(event,self.transport.bot_id,name_evidence) if social else mentions_bot(event.content,self.transport.bot_id) or name_evidence!='none')
@@ -529,7 +565,7 @@ class Runtime:
                 bare_join=list({f.conversation_id:f for f in place if f.engaged and (f.last_bot or f.key in self.tasks)}.values())
         if len(bare_join)==1:flow,relation=bare_join[0],'reply'
         else:
-            pending_routes=self.tasks.keys()|self.deferred_events.keys()
+            pending_routes=self.tasks.keys()|self.deferred_events.keys()|{k for k,p in self.pending_mentions.items() if event.response_to==p[3]}
             if social and not explicit and not verified_reply and event.reply_author!=self.transport.bot_id:
                 roles=event.member_roles
                 human_target=bool(roles and roles.addressee not in (None,self.transport.bot_id) and not roles.ambiguous)
@@ -556,7 +592,7 @@ class Runtime:
             return
         # A second request in an explicitly shared flow must not overwrite its
         # current response. Fork its actual prefix, retaining the conversation ID.
-        prefix=None
+        prefix=None;segment_invited=False
         if relation=='reply' and flow.key in self.tasks:
             from .sessions import SUPPLEMENT,Conversation
             current=self.requests.get(flow.key)
@@ -568,6 +604,21 @@ class Runtime:
                                   direct_peers=set(flow.direct_peers),last_recipient=flow.last_recipient,status=flow.status)
                 self.conversations.flows[flow.key]=flow;relation='shared_request'
             else:relation='supplement'
+        pending=self.pending_mentions.get(flow.key)
+        if relation=='supplement' and pending and len(pending)>4 and sum(len(p.content)+128 for p in (*pending[4],*event.raw_parts))>self.utterances.budget:
+            # A byte/source budget boundary is not permission to cancel the
+            # existing request. Queue a source-preserving segment in its flow.
+            from .sessions import Conversation
+            import secrets
+            prefix=self.states[flow.key].snapshot(channel_id=event.channel,thread_id=None)[1]
+            flow=Conversation((event.guild,event.channel,secrets.token_hex(8)),event.guild,event.channel,event.parent,
+                conversation_id=flow.conversation_id,participants=set(flow.participants),engaged=flow.engaged,
+                direct_peers=set(flow.direct_peers),last_recipient=flow.last_recipient,status=flow.status)
+            self.conversations.flows[flow.key]=flow;relation='shared_request';segment_invited=True
+            import hashlib
+            event=replace(event,response_to=event.raw_parts[0].id if len(event.raw_parts)>1 else None,
+                target_content_hash=hashlib.sha256(event.raw_parts[0].content.encode()).hexdigest())
+            self.note('utterance_budget_segmented')
         prior=[f for f in self.conversations.flows.values() if f.key!=flow.key and f.guild==event.guild and f.channel==event.channel and event.author in f.participants and (f.key in self.tasks or f.engaged and not f.ended)]
         from .routing import prose
         ordinary=prose(event.content)
@@ -582,9 +633,9 @@ class Runtime:
         related_pending=bool(relation=='independent' and prior and ordinary.strip() and not other_target)
         if not social and related_pending and hasattr(self.backend,'assess_dialogue'):
             flow.candidate_key=prior[0].key;relation='group_candidate'
-        event=replace(event,flow_key=flow.key,conversation_id=flow.conversation_id,invited=bool(verified_reply or related_pending and not hasattr(self.backend,'assess_dialogue')))
+        event=replace(event,flow_key=flow.key,conversation_id=flow.conversation_id,invited=bool(segment_invited or verified_reply or related_pending and not hasattr(self.backend,'assess_dialogue')))
         import hashlib
-        event=replace(event,target_content_hash=hashlib.sha256(event.content.encode()).hexdigest(),source_content_hash=hashlib.sha256(event.content.encode()).hexdigest())
+        event=replace(event,target_content_hash=event.target_content_hash or hashlib.sha256(event.content.encode()).hexdigest(),source_content_hash=event.source_content_hash or hashlib.sha256(event.content.encode()).hexdigest())
         if not social:self.conversations.observe(flow,event)
         flow.last_at=self.activity_clock()
         if self.key(event) not in self.states and len(self.states)>=32:
@@ -634,19 +685,24 @@ class Runtime:
             g=cfg['guilds'].get(str(event.guild),{})
             details['bot_names']=sorted(address_forms(guild_name(cfg,event.guild),extra_names,g.get('partial_names',True)))
             metadata=json.dumps(details,ensure_ascii=False)
-        if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(event.id),str(event.author),event.content[:8000],event.timestamp,reply_to=str(event.reply_to) if event.reply_to else None,context_metadata=metadata)):
-            self.note('out_of_order_or_duplicate');return
+        for part in event.raw_parts:
+            if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(part.id),str(part.author),part.content[:8000],part.timestamp,reply_to=str(part.reply_to) if part.reply_to else None,context_metadata=metadata)):
+                self.note('out_of_order_or_duplicate');return
+            self.conversations.message_flow[(part.guild,part.channel,str(part.id))]=flow.key
+            flow.messages.add(str(part.id))
         if self.companion and cfg['memory_auto'] and not (flow.candidate_key is not None and hasattr(self.backend,'assess_dialogue')):
             try:self.memory_queue.put_nowait((event,self.settings.revision))
             except asyncio.QueueFull:self.note('memory_queue_full')
         request_content=None
         pending=self.pending_mentions.get(self.key(event))
-        if relation=='supplement' and pending and pending[0]==event.author and 0<=(event.timestamp-pending[1]).total_seconds()<=30:
+        if relation=='supplement' and pending and pending[0]==event.author and (len(pending)<5 or time.monotonic()<=pending[4][0].received_at+180):
             # Reprocess an actual unanswered call with newer same-author context.
             request_content=pending[2]
-            event=replace(event,response_to=pending[3],invited=True,target_content_hash=hashlib.sha256(pending[2].encode()).hexdigest())
+            parts=tuple({p.id:p for p in (*pending[4],*event.raw_parts)}.values()) if len(pending)>4 else event.raw_parts
+            event=replace(event,received_at=min(p.received_at for p in parts),utterance_id=pending[5] if len(pending)>5 else event.utterance_id,raw_parts=parts,content='\n'.join(p.content for p in parts),response_to=pending[3],invited=True,target_content_hash=hashlib.sha256(pending[2].encode()).hexdigest(),utterance_version=len(parts))
+            self.pending_mentions[self.key(event)]=(*pending[:4],parts,pending[5] if len(pending)>5 else event.utterance_id)
         elif mentions_bot(event.content,self.transport.bot_id) or explicit:
-            self.pending_mentions[self.key(event)]=(event.author,event.timestamp,event.content,event.id)
+            self.pending_mentions[self.key(event)]=(event.author,event.timestamp,event.raw_parts[0].content,event.response_to or event.id,event.raw_parts,event.utterance_id)
         else:self.pending_mentions.pop(self.key(event),None)
         if explicit or event.invited:flow.engaged=True;self.activity_changed()
         elif not flow.engaged and relation not in ('social_candidate','group_candidate','continue','reply') and not self.autonomy_allowed(event):
@@ -668,7 +724,10 @@ class Runtime:
         task.add_done_callback(done)
 
     async def fresh(self,event,state,version,revision,require_adult=False):
-        def current():return (not self.stopped and not self.changing_model and self.gateway_available and self.states.get(self.key(event)) is state and
+        def current():return (self.utterances.valid(event) and
+                not any(row.parts[0].response_to==(event.response_to or event.id) and
+                    (row.parts[0].guild,row.parts[0].channel,row.parts[0].author)==(event.guild,event.channel,event.author)
+                    for row in self.utterances.pending.values()) and not self.stopped and not self.changing_model and self.gateway_available and self.states.get(self.key(event)) is state and
                 state.is_current(channel_id=event.channel,thread_id=None,version=version) and
                 time.monotonic()<=event.received_at+180 and
                 self.settings.revision==revision and scope(self.settings.get(),event.guild,event.channel,event.parent)!="silent")
@@ -686,7 +745,7 @@ class Runtime:
         trace.stages['scope_check']=event.scope_seconds
         trace.stages['conversation_candidates']=event.candidate_seconds
         self.job_records[str(event.id)]=dict(id=str(event.id),source=event.response_to or event.id,guild=event.guild,channel=event.channel,
-            created=event.received_at,stage='conversation_wait',status='running',flow=event.conversation_id or '',source_attached=True,name_result=event.name_result)
+            created=event.received_at,stage='conversation_wait',status='running',flow=event.conversation_id or '',source_attached=True,name_result=event.name_result,source_count=len(event.raw_parts),utterance=event.utterance_id,utterance_version=event.utterance_version,reply_basis='first_verified_source')
         while len(self.job_records)>100:self.job_records.pop(next(iter(self.job_records)))
         memory_revision=self.settings.revision
         from .scheduler import request_context
@@ -1323,6 +1382,7 @@ class Runtime:
 
     async def close(self):
         self.stopped=True
+        await self.utterances.close()
         for task in self.summary_tasks:task.cancel()
         await asyncio.gather(*self.summary_tasks,return_exceptions=True)
         if self.service_task:

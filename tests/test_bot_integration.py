@@ -65,7 +65,9 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
     def event(self,id=10,channel=3,content='<@999> 안녕',parent=None):
         return Event(id,2,channel,4,content,datetime.now(timezone.utc),parent=parent)
     async def settle(self):
-        await asyncio.gather(*list(self.runtime.tasks.values()),return_exceptions=True)
+        while self.runtime.utterances.pending or self.runtime.utterances.emitting or self.runtime.tasks:
+            waits=[r.task for r in self.runtime.utterances.pending.values()]+list(self.runtime.utterances.emitting)+list(self.runtime.tasks.values())
+            await asyncio.gather(*waits,return_exceptions=True)
     async def test_actual_owner_ids_and_signed_storage(self):
         for user in (2,'1',True):
             with self.assertRaises(PermissionError):self.settings.set(user,'enabled',False)
