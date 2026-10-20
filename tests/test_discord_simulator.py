@@ -132,7 +132,9 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
         data=payload(second,content='그건 왜 그런 건데');data['mentions']=[]
         self.http.messages[3,second]=data
         message=self.client._connection.create_message(channel=self.guild.get_channel(3),data=data)
-        await self.client.on_message(message);await asyncio.gather(*list(runtime.tasks.values()))
+        await self.client.on_message(message)
+        while runtime.tasks or runtime.utterances.pending or runtime.utterances.emitting:
+            await asyncio.gather(*list(runtime.tasks.values()),*(r.task for r in runtime.utterances.pending.values()),*runtime.utterances.emitting,return_exceptions=True)
         self.assertEqual([int(body['message_reference']['message_id']) for channel,body in self.http.sends],[first,second])
         self.client.backend.assess_social.assert_awaited_once()
         self.settings.set(1,'reactions',True);await asyncio.sleep(.02)
@@ -156,6 +158,21 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(read.await_count,1)
             await transport.execute(self.event(),Action(Kind.TEXT,'합성 응답'),None,AsyncMock(return_value=True))
             self.assertEqual(read.await_count,2)
+
+    async def test_eleven_source_reads_are_unique_even_with_middle_reaction_target(self):
+        from dataclasses import replace
+        from echomate_bot.utterances import Utterances
+        parts=[]
+        for mid in range(100,111):
+            self.message(mid=mid)
+            parts.append(replace(self.event(mid),content='<@999> 안녕'))
+        event=replace(Utterances.compose(parts,'utt:sdk-eleven'),reaction_target=105)
+        with patch.object(self.http,'get_message',wraps=self.http.get_message) as read:
+            await self.client.runtime.transport.execute(event,Action(Kind.TEXT_REACTION,'합성 답변',asset='👍',target=105),None,AsyncMock(return_value=True))
+        self.assertEqual(read.await_count,11)
+        self.assertEqual({call.args for call in read.await_args_list},{(3,mid) for mid in range(100,111)})
+        self.assertEqual(int(self.http.sends[0][1]['message_reference']['message_id']),100)
+        self.assertEqual(self.http.reactions,[(3,105,'👍')])
 
     async def test_reaction_reply_target_and_permission_revocation(self):
         self.message();self.message(mid=99)

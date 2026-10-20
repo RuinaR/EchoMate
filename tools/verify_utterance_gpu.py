@@ -43,10 +43,38 @@ async def settle(runtime):
 
 
 class Transport(SocialTransport):
+    async def start_sdk(self):
+        # Reuse the SDK simulation fixture; no fallback to a live HTTP client.
+        import discord
+        from test_discord_simulator import MemoryHTTP,user
+        from echomate_bot.discord_app import DiscordTransport
+        self.sdk_client=discord.Client(intents=discord.Intents.none())
+        await self.sdk_client._async_setup_hook()
+        state=self.sdk_client._connection;state.user=discord.ClientUser(state=state,data=user(999))
+        self.http=MemoryHTTP();self.source_reads=[];original=self.http.get_message
+        async def read(channel,mid):
+            self.source_reads.append((channel,mid));return await original(channel,mid)
+        self.http.get_message=read;state.http=self.http
+        guild=discord.Guild(state=state,data=dict(id='2',name='Synthetic guild',owner_id='1',
+            roles=[dict(id='2',name='@everyone',permissions=str(discord.Permissions.all().value),position=0,color=0)],
+            members=[dict(user=user(999),roles=[],flags=0)],
+            channels=[dict(id='3',name='synthetic',type=0,position=0,permission_overwrites=[])]))
+        state._add_guild(guild);self.sdk=DiscordTransport(self.sdk_client)
+
+    def register(self,event):
+        if hasattr(self,'sdk'):
+            from test_discord_simulator import payload
+            self.http.messages[event.channel,event.id]=payload(event.id,event.channel,event.content,event.author)
+
     async def execute(self,event,action,library,fresh):
+        reads=len(self.source_reads) if hasattr(self,'sdk') else 0
+        if hasattr(self,'sdk'):await self.sdk.execute(event,action,library,fresh)
         result=await super().execute(event,action,library,fresh)
         self.sent[-1].update(parts=[p.id for p in event.raw_parts],last_fragment_seconds=time.monotonic()-event.raw_parts[-1].received_at,
-            utterance=event.utterance_id,version=event.utterance_version,conversation=event.conversation_id)
+            utterance=event.utterance_id,version=event.utterance_version,conversation=event.conversation_id,
+            sdk_source_reads=len(self.source_reads)-reads if hasattr(self,'sdk') else None)
+        if hasattr(self,'sdk') and action.kind.value!='REACTION':
+            self.sent[-1]['sdk_reply']=int(self.http.sends[-1][1]['message_reference']['message_id'])
         return result
 
 
@@ -70,7 +98,9 @@ async def run(args):
                 folder=root/case['name'];folder.mkdir()
                 settings=Settings(1,secrets.token_hex(32),folder/'settings.json');settings.set_scope(1,2,3,'mention');settings.set(1,'enabled',True)
                 settings.change(1,lambda c:c['guilds']['2'].update(name='라온봇'))
-                borrowed=Counting(backend);transport=Transport();runtime=Runtime(settings,borrowed,transport,None,None,ledger_path=folder/'sent.sqlite3')
+                borrowed=Counting(backend);transport=Transport()
+                if getattr(args,'sdk_mock',False):await transport.start_sdk()
+                runtime=Runtime(settings,borrowed,transport,None,None,ledger_path=folder/'sent.sqlite3')
                 runtime.direct_spam_window=0;runtime.direct_cooldown=0
                 began=time.monotonic()
                 try:
@@ -81,16 +111,27 @@ async def run(args):
                             while not any(r.get('stage')=='text' for r in runtime.progress.values()):
                                 if time.monotonic()>deadline:raise TimeoutError('No generation stage')
                                 await asyncio.sleep(.01)
-                        await runtime.ingest(Event(raw['id'],2,3,raw['user'],raw['text'],datetime.now(timezone.utc)-timedelta(seconds=raw.get('age',0)),reply_to=raw.get('reply'),received_at=time.monotonic()-raw.get('age',0),
-                            member_mentions=tuple(int(x) for x in __import__('re').findall(r'<@!?(\d+)>',raw['text']))))
-                        await asyncio.sleep(.04)
+                        event=Event(raw['id'],2,3,raw['user'],raw['text'],datetime.now(timezone.utc)-timedelta(seconds=raw.get('age',0)),reply_to=raw.get('reply'),reply_author=raw.get('reply_author'),received_at=time.monotonic()-raw.get('age',0),
+                            member_mentions=tuple(int(x) for x in __import__('re').findall(r'<@!?(\d+)>',raw['text'])))
+                        transport.register(event);await runtime.ingest(event)
+                        await asyncio.sleep(raw.get('pause',.04))
                     await settle(runtime)
                     roots=[r['source'] for r in transport.sent]
-                    row=dict(name=case['name'],passed=sorted(roots)==sorted(case['roots']),expected=case['roots'],actual=roots,
+                    by_root={str(s['source']):s for s in transport.sent}
+                    parts_ok=all(by_root.get(str(k),{}).get('parts')==v for k,v in case.get('parts',{}).items())
+                    same_ok=all(str(a) in by_root and str(b) in by_root and by_root[str(a)]['conversation']==by_root[str(b)]['conversation'] for a,b in case.get('same_flow',[]))
+                    different_ok=all(str(a) in by_root and str(b) in by_root and by_root[str(a)]['conversation']!=by_root[str(b)]['conversation'] for a,b in case.get('different_flow',[]))
+                    sdk_ok=all(s.get('sdk_reply',s['source'])==s['source'] and (s['sdk_source_reads'] is None or s['sdk_source_reads']==len(s['parts'])) for s in transport.sent)
+                    inference_ok=not any('error' in a for a in borrowed.assessments) and not any(
+                        t.get('outcome')=='failed' or any(c.get('outcome')=='failed' for c in t.get('calls',[])) for t in runtime.traces)
+                    row=dict(name=case['name'],passed=sorted(roots)==sorted(case['roots']) and parts_ok and same_ok and different_ok and sdk_ok and inference_ok,
+                        parts_ok=parts_ok,flow_ok=same_ok and different_ok,sdk_ok=sdk_ok,inference_ok=inference_ok,expected=case['roots'],actual=roots,
                         semantic_calls=borrowed.semantic_calls,elapsed=time.monotonic()-began,sent=transport.sent,traces=runtime.traces,
                         decisions=borrowed.assessments,pending=len(runtime.tasks)+len(runtime.utterances.pending))
                     traces.extend(runtime.traces);rows.append(row);atomic_private_json(folder/'result.json',row)
-                finally:await runtime.close()
+                finally:
+                    await runtime.close()
+                    if hasattr(transport,'sdk_client'):await transport.sdk_client.close()
                 atomic_private_json(root/'progress.json',dict(completed=len(rows),passed=sum(r['passed'] for r in rows)))
             summary.update(cases=len(rows),passed=sum(r['passed'] for r in rows),semantic_calls=sum(r['semantic_calls'] for r in rows),
                 pipeline=summarize(traces),last_fragment_seconds=distribution([s['last_fragment_seconds'] for r in rows for s in r['sent']]),
@@ -103,5 +144,6 @@ async def run(args):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--model',required=True);parser.add_argument('--protocol')
-    asyncio.run(run(parser.parse_args()))
+    parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--model',required=True);parser.add_argument('--protocol');parser.add_argument('--sdk-mock',action='store_true')
+    with patch('discord.http.HTTPClient.request',side_effect=AssertionError('Real Discord forbidden')),patch('aiohttp.ClientSession._request',side_effect=AssertionError('External HTTP forbidden')):
+        asyncio.run(run(parser.parse_args()))

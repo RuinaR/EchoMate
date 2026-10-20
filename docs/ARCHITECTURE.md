@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 2026-10-20 문장 완결과 차례 후보 분리
+
+기존 Utterances의 `Pending.context/incomplete`로 대화 근거와 문장 힌트를 분리한다. 확인된 reply/청자/직접 상대·진행 요청 보충·호칭 초대에만 짧은 차례 settling을 사용하고 후보가 응답 권한을 만들지 않는다. Runtime/SocialRouter의 청자·응답 계획·대화 연결·송신 직전 검증은 그대로 유지한다. 전체639회귀와 새GPU7시퀀스 통과 범위/한계는 [실행 계약](MULTI-MESSAGE-UTTERANCES.md)을 따른다.
+
 ## 2026-10-20 분할 발언·교차 화자 통합 — 사용자 검증 후보 / BLOCKED
 
 `Runtime.ingest → Utterances → 기존 Conversations/SocialRouter → 단일 공정 큐 → 원본별 SDK 검사`다. `Event.raw_parts`는 실제 입력, Event.content는 결합 뷰다. DialogueState에는 개별 실제 Turn만 저장한다. 내부 ID·버전·대표 원본·구성 ID를 분리하고 사회적 입력에는 구성 출처를 제공한다.

@@ -159,7 +159,9 @@ class DiscordTransport:
                 if hashlib.sha256(latest.content.encode()).hexdigest()!=event.source_content_hash:raise ValueError('Supplement changed')
         for part in event.raw_parts:
             source=verified_sources.get(part.id)
-            if source is None:source=await channel.fetch_message(part.id)
+            if source is None:
+                source=await channel.fetch_message(part.id)
+                verified_sources[part.id]=source
             if (source.author.id!=part.author or source.channel.id!=part.channel or source.content!=part.content):
                 raise ValueError('Utterance source changed')
         if not await fresh():raise ValueError("Stale output")
@@ -171,7 +173,9 @@ class DiscordTransport:
             if not await fresh():raise ValueError("Stale reaction")
             if action.target:
                 if action.target not in {event.id,event.response_to,event.reply_to,event.reaction_target}:raise ValueError('Unverified reaction target')
-                if action.target!=current.id:current=await channel.fetch_message(action.target)
+                if action.target!=current.id:
+                    current=verified_sources.get(action.target)
+                    if current is None:current=await channel.fetch_message(action.target)
                 if event.reaction_target_hash:
                     import hashlib
                     if hashlib.sha256(current.content.encode()).hexdigest()!=event.reaction_target_hash:raise ValueError('Reaction target changed')

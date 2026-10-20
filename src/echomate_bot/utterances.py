@@ -1,7 +1,7 @@
 """Bounded, transient source-preserving assembly; never grants response eligibility.
 
-Only an unfinished clause/bare invitation opens a buffer. Time closes that
-buffer, but is never evidence of audience or conversation membership.
+Sentence completion and turn completion are independent. Confirmed reply/peer
+contexts permit a short settling window, never response eligibility.
 """
 import asyncio
 from dataclasses import dataclass, field, replace
@@ -14,8 +14,9 @@ import time
 def unfinished(text, *, bare=False,direct=False):
     # Syntactic tails are assembly hints, not question/audience classification.
     text=text.strip()
+    text=text.rstrip('.?!。？！…~ ').strip()
     if bare:return True
-    if not text or text[-1:] in '.?!。？！':return False
+    if not text:return False
     if direct and re.search(r'(?:^|\s)(?:이|그|저)\s+[가-힣A-Za-z0-9]+$',text):return True
     return bool(re.search(r'(?:[,，]|(?:해서|하면|되면|인데|지만|거든|다가|면서|어서|아서|는데|은데|려고|려면|고|으로|로|부터|까지|걸로|말고|않게)|(?:일단은|아\s*근데))$',text)
         or re.search(r'\S+(?:이|가|을|를|도|은|는)\s*$',text) and len(text)<100)
@@ -28,13 +29,16 @@ class Pending:
     uid:str=field(default_factory=lambda:'utt:'+secrets.token_hex(12))
     task:object=None
     bare:bool=False
+    context:object=None
+    incomplete:bool=True
 
 
 class Utterances:
-    def __init__(self,emit,note,*,idle=.8,maximum=4.,budget=8000,capacity=64):
+    def __init__(self,emit,note,*,idle=.8,maximum=4.,budget=8000,capacity=64,settling=.3):
         self.emit=emit;self.note=note;self.idle=idle;self.maximum=maximum
         self.budget=budget;self.capacity=capacity;self.pending={};self.closed=False
         self.emitting=set();self.changes={}
+        self.settling=settling
 
     @staticmethod
     def key(event):return event.guild,event.channel,event.parent,event.author
@@ -45,6 +49,7 @@ class Utterances:
         return replace(last,content='\n'.join(p.content for p in parts),raw_parts=tuple(parts),
             utterance_id=uid,utterance_version=len(parts),response_to=(root.response_to or root.id) if len(parts)>1 else root.response_to,
             reply_to=root.reply_to,reply_author=root.reply_author,received_at=root.received_at,
+            member_mentions=tuple(dict.fromkeys(uid for p in parts for uid in p.member_mentions)),
             target_content_hash=hashlib.sha256(root.content.encode()).hexdigest(),
             source_content_hash=hashlib.sha256(last.content.encode()).hexdigest())
 
@@ -56,7 +61,8 @@ class Utterances:
 
     async def later(self,key,row):
         try:
-            await asyncio.sleep(max(0,min(self.idle,self.maximum-(time.monotonic()-row.started))))
+            delay=self.idle if row.incomplete else self.settling
+            await asyncio.sleep(max(0,min(delay,self.maximum-(time.monotonic()-row.started))))
             if self.pending.get(key) is row and not self.closed:
                 event=self.take(key)
                 # Keep ownership through permission checks, invalidation and shutdown.
@@ -65,25 +71,29 @@ class Utterances:
                 finally:self.emitting.discard(asyncio.current_task())
         except asyncio.CancelledError:raise
 
-    def offer(self,event,*,bare=False,direct=False,human=False):
+    def offer(self,event,*,bare=False,direct=False,human=False,context=None):
+        if bare and not human:context=('invitation',event.id)
         key=self.key(event);row=self.pending.get(key);ready=[]
         if row and any(p.id==event.id for p in row.parts):return []
         # Reply / explicit audience changes and independent requests are real
         # boundaries. A repeated bare call is not a new independent question.
-        from .sessions import INDEPENDENT,SUPPLEMENT
-        boundary=bool(row and (human or event.reply_to not in (None,row.parts[0].reply_to,row.parts[0].id)
+        from .sessions import INDEPENDENT,SUPPLEMENT,CANCEL,END
+        terminal=bool(CANCEL.fullmatch(event.content.strip()) or END.fullmatch(event.content.strip()))
+        boundary=bool(row and (human and context!=row.context or context is not None and context[0] not in ('peer','invitation') and row.context is not None and context!=row.context
+            or event.reply_to not in (None,row.parts[0].reply_to,row.parts[0].id)
             or direct and not bare and not row.bare and not SUPPLEMENT.search(event.content)
-            or INDEPENDENT.search(event.content)
+            or INDEPENDENT.search(event.content) or terminal
             or sum(len(p.content)+128 for p in row.parts)+len(event.content)+128>self.budget
             or time.monotonic()-row.started>=self.maximum))
         if boundary:ready.append(self.take(key));row=None;self.note('utterance_separated')
         if row:
             row.parts.append(event);row.bare=row.bare and bare
+            row.incomplete=unfinished(event.content,bare=bare,direct=direct)
             if row.task:row.task.cancel()
-            if not unfinished(event.content,bare=bare,direct=direct):ready.append(self.take(key))
+            if not row.context and not unfinished(event.content,bare=bare,direct=direct):ready.append(self.take(key))
             else:row.task=asyncio.create_task(self.later(key,row),name='echomate-fragment-wait')
-        elif not human and unfinished(event.content,bare=bare,direct=direct) and len(event.content)<=self.budget and len(self.pending)<self.capacity:
-            row=Pending([event],time.monotonic(),bare=bare);self.pending[key]=row
+        elif not terminal and (not human and unfinished(event.content,bare=bare,direct=direct) or context is not None and not direct and not INDEPENDENT.search(event.content)) and len(event.content)+128<=self.budget and len(self.pending)<self.capacity:
+            row=Pending([event],time.monotonic(),bare=bare,context=context,incomplete=unfinished(event.content,bare=bare,direct=direct));self.pending[key]=row
             row.task=asyncio.create_task(self.later(key,row),name='echomate-fragment-wait');self.note('utterance_waiting')
         else:ready.append(self.compose([event],'utt:'+secrets.token_hex(12)))
         return ready

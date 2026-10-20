@@ -17,6 +17,65 @@ class FragmentSequences(unittest.IsolatedAsyncioTestCase):
     event=base.BotIntegration.event
     settle=base.BotIntegration.settle
 
+    async def test_complete_peer_turn_waits_across_punctuation_and_other_speakers(self):
+        from echomate_bot.social import SocialDecision
+        self.backend.assess_social=AsyncMock(return_value=SocialDecision('bot','continue','0','question',True))
+        self.runtime.direct_cooldown=0
+        await self.runtime.ingest(self.event());await self.settle()
+        self.transport.sent.clear()
+        texts=['그 게임 해봤어.','생각보다 괜찮네!','처음에는 어려웠어?','지금은 익숙해졌어.','다른 방식도 궁금해.']
+        for i,text in enumerate(texts):
+            await self.runtime.ingest(self.event(id=100+i,content=text))
+            await self.runtime.ingest(replace(self.event(id=200+i,content='<@6> 너한테 하는 말이야.'),author=5,member_mentions=(6,)))
+        self.assertFalse(self.transport.sent)
+        self.assertTrue(self.runtime.utterances.pending)
+        await self.settle()
+        self.assertEqual(len(self.transport.sent),1)
+        event=self.transport.sent[0][0]
+        self.assertEqual([p.id for p in event.raw_parts],list(range(100,105)))
+        self.assertEqual(event.response_to,100)
+
+    async def test_complete_human_reply_turn_never_becomes_bot_invitation(self):
+        for i,text in enumerate(['<@5> 와 좋겠다.','오늘 생일이야?','정말 부럽다.']):
+            event=self.event(id=100+i,content=text)
+            if i==0:event=replace(event,member_mentions=(5,),reply_to=55,reply_author=5)
+            await self.runtime.ingest(event)
+        await self.settle()
+        self.assertFalse(self.transport.sent)
+        self.assertFalse(self.backend.calls)
+
+    async def test_new_direct_call_is_not_merged_into_complete_peer_turn(self):
+        from echomate_bot.social import SocialDecision
+        self.backend.assess_social=AsyncMock(return_value=SocialDecision('bot','new','none','question',True))
+        self.runtime.direct_cooldown=0
+        await self.runtime.ingest(self.event());await self.settle();self.transport.sent.clear()
+        await self.runtime.ingest(self.event(id=100,content='좋은 생각이네.'))
+        await self.runtime.ingest(self.event(id=101,content='<@999> 다른 질문인데 우주에 대해 알려줘.'))
+        await self.settle()
+        self.assertEqual({e.response_to or e.id for e,a in self.transport.sent},{100,101})
+        self.assertTrue(all(len(e.raw_parts)==1 for e,a in self.transport.sent))
+
+    async def test_complete_inflight_supplements_settle_before_single_regeneration(self):
+        self.runtime.direct_cooldown=0;self.backend.wait=asyncio.Event()
+        await self.runtime.ingest(self.event(content='<@999> 여행 조언해줘'))
+        await asyncio.sleep(.01)
+        await self.runtime.ingest(self.event(id=11,content='아, 짧게 해줘.'))
+        await self.runtime.ingest(self.event(id=12,content='짐은 적게 가져갈 거야!'))
+        self.backend.wait.set();await self.settle()
+        self.assertEqual(len(self.transport.sent),1)
+        self.assertEqual([p.id for p in self.transport.sent[0][0].raw_parts],[10,11,12])
+
+    async def test_complete_turn_edit_invalidates_buffer_and_other_request_survives(self):
+        from echomate_bot.social import SocialDecision
+        self.backend.assess_social=AsyncMock(return_value=SocialDecision('bot','continue','0','question',True))
+        await self.runtime.ingest(self.event());await self.settle();self.transport.sent.clear()
+        await self.runtime.ingest(self.event(id=100,content='좋은 생각이네.'))
+        await self.runtime.ingest(self.event(id=101,content='재료는 없네.'))
+        await self.runtime.message_changed(2,3,100,'바뀐 원문')
+        await self.runtime.ingest(replace(self.event(id=200),author=7))
+        await self.settle()
+        self.assertEqual([e.author for e,a in self.transport.sent],[7])
+
     async def sequence(self,texts,interleave=False):
         self.runtime.direct_cooldown=0
         for i,text in enumerate(texts):
@@ -185,6 +244,7 @@ class FragmentSequences(unittest.IsolatedAsyncioTestCase):
         for mid in (11,12,13):
             await asyncio.sleep(.01)
             await self.runtime.ingest(self.event(id=mid,content='아, '+('조건 '*35)+'포함해서 해줘'))
+        await asyncio.gather(*(r.task for r in self.runtime.utterances.pending.values()))
         self.assertGreaterEqual(len(self.runtime.tasks),2)
         self.backend.wait.set();await self.settle()
         sources=[p.id for e,a in self.transport.sent for p in e.raw_parts]
@@ -226,6 +286,7 @@ class FragmentSequences(unittest.IsolatedAsyncioTestCase):
         self.runtime.pause_gateway()
         await self.sequence(['<@999>','이 조건을 포함해서','설명해줘'])
         self.assertFalse(self.transport.sent)
+        await asyncio.gather(*(r.task for r in self.runtime.utterances.pending.values()))
         self.assertEqual(len(self.runtime.deferred_events),1)
         await self.runtime.resume_gateway();await self.settle()
         self.assertEqual([e.response_to for e,a in self.transport.sent],[100])
@@ -274,3 +335,50 @@ class FragmentSequences(unittest.IsolatedAsyncioTestCase):
         last=replace(self.event(id=101,content='좋아해'),timestamp=datetime.fromtimestamp(1001,timezone.utc))
         self.assertIsNone(store.extract(Utterances.compose([first,last],'utt:consent'),'Asia/Seoul'))
         self.assertFalse(store.memories(2,4))
+
+
+class TurnContracts(unittest.IsolatedAsyncioTestCase):
+    event=base.BotIntegration.event
+
+    async def test_ten_complete_parts_same_reply_and_three_interleaved_authors(self):
+        emitted=[]
+        async def emit(event):emitted.append(event)
+        turns=Utterances(emit,lambda reason:None,settling=.01)
+        try:
+            for i in range(11):
+                for author in (4,5,6):
+                    event=replace(self.event(id=1000+100*author+i,content='생각해 보니 그렇네.!?'),author=author,reply_to=50+author,reply_author=20+author)
+                    self.assertEqual(turns.offer(event,context=('reply',50+author,20+author)),[])
+            await asyncio.gather(*(r.task for r in turns.pending.values()))
+            self.assertEqual(len(emitted),3)
+            self.assertTrue(all(len(e.raw_parts)==11 for e in emitted))
+            self.assertTrue(all({p.author for p in e.raw_parts}=={e.author} for e in emitted))
+        finally:await turns.close()
+
+    async def test_punctuation_does_not_decide_turn_boundary_or_incomplete_status(self):
+        from echomate_bot.utterances import unfinished
+        for suffix in ('','.','?','!','?!'):
+            self.assertTrue(unfinished('근데 생각보다 좋은데'+suffix))
+            self.assertFalse(unfinished('그래도 마음에 들어'+suffix))
+            turns=Utterances(AsyncMock(),lambda reason:None)
+            try:
+                self.assertFalse(turns.offer(self.event(content='괜찮네'+suffix),context=('peer','confirmed')))
+                self.assertFalse(turns.offer(self.event(id=11,content='너는 어때'+suffix),context=('peer','confirmed')))
+                row=next(iter(turns.pending.values()))
+                self.assertEqual(len(row.parts),2)
+                self.assertFalse(row.incomplete)
+            finally:await turns.close()
+
+    async def test_no_context_no_blanket_delay_and_deadline_survives_complete_pieces(self):
+        emitted=[]
+        async def emit(event):emitted.append(event)
+        turns=Utterances(emit,lambda reason:None,settling=.1,maximum=.025)
+        try:
+            self.assertEqual(len(turns.offer(self.event(content='오늘 점심 맛있었어.'))),1)
+            turns.offer(self.event(id=20,content='좋네.'),context=('peer','confirmed'))
+            await asyncio.sleep(.015)
+            turns.offer(self.event(id=21,content='너도 그래?'),context=('peer','confirmed'))
+            await asyncio.gather(*(r.task for r in turns.pending.values()))
+            self.assertEqual(len(emitted),1)
+            self.assertEqual(len(emitted[0].raw_parts),2)
+        finally:await turns.close()

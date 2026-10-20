@@ -506,7 +506,22 @@ class Runtime:
             own=[v[0] for v in self.requests.values() if (v[0].guild,v[0].channel,v[0].author)==(event.guild,event.channel,event.author)]
             if len(own)==1 and not human and SUPPLEMENT.search(event.content) and not INDEPENDENT.search(event.content):
                 event=replace(event,response_to=own[0].response_to or own[0].id)
-            ready=self.utterances.offer(event,bare=bare,direct=direct,human=human)
+            # These facts permit turn settling, not audience/flow selection.
+            # A peer candidate is never promoted to an invitation here.
+            context=None
+            if event.response_to and len(own)==1 and event.response_to==(own[0].response_to or own[0].id):
+                context=('request',event.response_to)
+            elif event.reply_to and event.reply_author:
+                context=('reply',event.reply_to,event.reply_author)
+            elif event.member_roles and not event.member_roles.ambiguous and event.member_roles.addressee not in (None,self.transport.bot_id):
+                context=('person',event.member_roles.addressee)
+            elif not human and not direct:
+                peers={f.conversation_id for f in self.conversations.flows.values() if
+                    (f.guild,f.channel,f.parent)==(event.guild,event.channel,event.parent)
+                    and not f.ended and event.author in f.direct_peers}
+                if len(peers)==1 and not self.social.packet(event,self.conversations,self.states,self.transport.bot_id)[0]['pending_human_exchange']:
+                    context=('peer',next(iter(peers)))
+            ready=self.utterances.offer(event,bare=bare,direct=direct,human=human,context=context)
             for assembled in ready:await self._ingest(assembled)
             return
         scope_started=time.monotonic()
@@ -727,6 +742,7 @@ class Runtime:
         def current():return (self.utterances.valid(event) and
                 not any(row.parts[0].response_to==(event.response_to or event.id) and
                     (row.parts[0].guild,row.parts[0].channel,row.parts[0].author)==(event.guild,event.channel,event.author)
+                    and sum(len(p.content)+128 for p in (*event.raw_parts,*row.parts))<=self.utterances.budget
                     for row in self.utterances.pending.values()) and not self.stopped and not self.changing_model and self.gateway_available and self.states.get(self.key(event)) is state and
                 state.is_current(channel_id=event.channel,thread_id=None,version=version) and
                 time.monotonic()<=event.received_at+180 and
