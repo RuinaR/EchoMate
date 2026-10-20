@@ -116,7 +116,8 @@ class LocalController:
                             channels[c.id]=dict(id=c.id,label=label,thread=isinstance(c,discord.Thread),parent=c.parent_id if isinstance(c,discord.Thread) else None)
                 for table in ('channels','threads'):
                     for cid in g[table]:channels.setdefault(int(cid),dict(id=int(cid),label='등록된 '+('스레드' if table=='threads' else '채널'),thread=table=='threads'))
-                servers.append(dict(id=gid,label=guild.name if guild else saved['label'] if saved else f'서버 {gid} · 로컬 자료',enabled=g['enabled'],channels=list(channels.values())))
+                servers.append(dict(id=gid,label=guild.name if guild else saved['label'] if saved else f'서버 {gid} · 로컬 자료',enabled=g['enabled'],channels=list(channels.values()),
+                    joined=bool(guild) if client and client.is_ready() else bool(saved)))
         runtime=client.runtime if client else None
         progress=[]
         if runtime:

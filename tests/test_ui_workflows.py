@@ -22,6 +22,21 @@ from echomate_bot.character_profiles import DEFAULT_PROFILE,ProfileStore
 
 
 class UIWorkflows(unittest.IsolatedAsyncioTestCase):
+    async def test_departed_guild_hidden_from_joined_list_but_local_records_preserved(self):
+        self.c.settings.set_scope(1,9,90,'mention')
+        self.c.bootstrap['admin_guilds'].append(9)
+        self.c.record_guilds.append(9)
+        await self.sync()
+        self.assertEqual([s['id'] for s in self.app.server_list.items],[2])
+        self.assertIn(9,[s['id'] for s in self.app.snapshot['servers']])
+        self.assertIn('9',self.c.settings.get()['guilds'])
+        # A known departure also overrides stale cached membership.
+        self.app.snapshot['servers'][0]['joined']=False
+        self.app.refresh_lists()
+        self.assertFalse(self.app.server_list.items)
+        self.assertIsNone(self.app.guild_id)
+        self.assertFalse(self.app.channel_ids)
+
     async def asyncSetUp(self):
         self.fixture=fixtures.OfflineRecords();self.fixture.setUp();self.c=self.fixture.c
         self.patch=patch('echomate_bot.desktop.ROOT',self.fixture.root);self.patch.start()

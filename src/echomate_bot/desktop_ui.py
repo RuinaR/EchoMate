@@ -258,8 +258,12 @@ class DesktopApp(CompanionViews):
         self.render()
     def refresh_lists(self):
         if not self.snapshot:return
-        servers=self.snapshot['servers'];cfg=self.snapshot['cfg']
+        # Retained settings/records are not evidence of current membership.
+        servers=[s for s in self.snapshot['servers'] if s.get('joined',True)];cfg=self.snapshot['cfg']
         self.server_list.set_items([dict(id=s['id'],label=s['label'],hint='이 서버에서 대화 허용' if s['enabled'] else '사용할 채널을 골라 주세요') for s in servers])
+        if self.guild_id is not None and not any(s['id']==self.guild_id for s in servers):
+            self.remember_scope();self.guild_id=None;self.channel_ids.clear()
+            self.server_list.selected=set()
         if self.guild_id is None and servers:
             self.guild_id=servers[0]['id'];self.server_list.selected={self.guild_id};self.server_list.redraw()
         server=next((s for s in servers if s['id']==self.guild_id),None)
