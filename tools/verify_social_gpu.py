@@ -53,6 +53,20 @@ class SocialTransport(Transport):
         self.sent.append(dict(source=event.response_to or event.id,author=event.author,text=action.text,kind=action.kind.value,seconds=time.monotonic()-event.received_at))
         return None if action.kind.value=='REACTION' else 9000+len(self.sent)
 
+def decision_contract(case,traces):
+    """Silence alone cannot prove the requested routing/state branch ran.
+
+    These optional assertions check actual structured runtime observations, not
+    model reasoning or message text. RAM state invariants still need their own
+    integration tests; a trace is not a substitute for those tests.
+    """
+    expected={key:case[field] for field,key in (
+        ('expected_evidence','evidence'),('expected_state_effect','state_effect')) if field in case}
+    if not expected:return True
+    decision=traces[-1].get('decision') if traces else None
+    observed=decision.get('social') if isinstance(decision,dict) else None
+    return bool(isinstance(observed,dict) and all(observed.get(key)==value for key,value in expected.items()))
+
 def result_health(behavior_ok,assessments,traces):
     """A failed classifier is not a correct silence, even if no send was wanted."""
     calls=[call for trace in traces for call in trace.get('calls',[])]
@@ -135,11 +149,12 @@ async def run(args):
                     kind_ok=not sent or not case.get('kind') or sent[0]['kind']==case['kind']
                     seed_active=any(f.conversation_id==seeds.get('a') and not f.ended for f in runtime.conversations.flows.values())
                     state_ok=(not case.get('keep_active') or seed_active) and (not case.get('expect_ended') or not seed_active)
-                    health=result_health(bool(sent)==case['respond'] and flow_ok and kind_ok and state_ok and len(sent)<=1,
+                    contract_ok=decision_contract(case,runtime.traces[trace_start:])
+                    health=result_health(bool(sent)==case['respond'] and flow_ok and kind_ok and state_ok and contract_ok and len(sent)<=1,
                                          serving.assessments[assessment_start:],runtime.traces[trace_start:])
                     metrics=[dict(c) for t in runtime.traces[trace_start:] for c in t.get('calls',[]) if c.get('outcome')=='completed']
                     row=dict(case=case['id'],category=case['category'],phase=case.get('phase','original'),mode=mode,generated=generated,expected=case['respond'],responded=bool(sent),
-                        **health,flow_ok=flow_ok,kind_ok=kind_ok,state_ok=state_ok,seconds=time.monotonic()-started,
+                        **health,flow_ok=flow_ok,kind_ok=kind_ok,state_ok=state_ok,contract_ok=contract_ok,seconds=time.monotonic()-started,
                         semantic_calls=serving.semantic_calls-semantic_start,packet_hashes=serving.packet_hashes[packet_start:],
                         assessments=serving.assessments[assessment_start:],
                         completed_calls=len(metrics),traces=runtime.traces,target_traces=runtime.traces[trace_start:],metrics=metrics,sent=transport.sent)
@@ -152,6 +167,7 @@ async def run(args):
             latency=distribution([r['seconds'] for r in rows]),mean_seconds=sum(r['seconds'] for r in rows)/max(1,len(rows)),
             physical_calls=sum(r['physical_calls'] for r in rows),queue_wait=distribution([m.get('queue_seconds',0) for r in rows for m in r['metrics']]),
             assessment_errors=sum(r['assessment_errors'] for r in rows),worker_failures=sum(r['worker_failures'] for r in rows),
+            contract_failures=sum(not r['contract_ok'] for r in rows),
             false_responses=sum(r['responded'] and not r['expected'] for r in rows),missed=sum(not r['responded'] and r['expected'] for r in rows),
             flow_errors=sum(not r['flow_ok'] for r in rows),peak_allocated_mib=max((m.get('peak_allocated_mib',0) for r in rows for m in r['metrics']),default=0),
             peak_reserved_mib=max((m.get('peak_reserved_mib',0) for r in rows for m in r['metrics']),default=0),scheduler=backend.scheduler.snapshot())
