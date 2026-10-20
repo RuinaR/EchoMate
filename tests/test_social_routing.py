@@ -232,6 +232,26 @@ class SocialRuntime(unittest.IsolatedAsyncioTestCase):
         await self.runtime.ingest(self.event(id=64,content='대화끝'));await self.settle()
         self.assertTrue(flow.ended);self.assertFalse(flow.engaged)
 
+    async def test_classifier_packet_keeps_actual_bot_after_many_unsent_supplements(self):
+        from echomate_studio.dialogue_state import Turn
+        flow=await self.start();state=self.runtime.states[flow.key]
+        for i in range(70,79):
+            state.append(channel_id=3,thread_id=None,turn=Turn(str(i),'4','추가 조건을 기록해 둘게',self.event().timestamp))
+        packet,frames=self.runtime.social.packet(self.event(id=90,content='앞에서 말한 방법은 이 조건에도 맞아'),self.runtime.conversations,self.runtime.states,999)
+        turns=packet['frames'][0]['turns']
+        self.assertLessEqual(len(turns),6)
+        self.assertTrue(any(t['bot'] and t['id']==str(flow.last_bot) for t in turns))
+        self.assertIn('10',[t['id'] for t in turns])
+
+    async def test_group_packet_recipient_tracks_actual_retained_reply(self):
+        from echomate_studio.dialogue_state import Turn
+        flow=await self.start();state=self.runtime.states[flow.key]
+        state.append(channel_id=3,thread_id=None,turn=Turn('80','5','두 번째 사람이 질문했어',self.event().timestamp))
+        state.append(channel_id=3,thread_id=None,turn=Turn('81','999','그 사람에게 실제로 한 답변',self.event().timestamp,True,'80'))
+        self.assertEqual(flow.last_recipient,4)
+        packet,_=self.runtime.social.packet(self.event(id=90,content='그 말은 누구에게 한 거야'),self.runtime.conversations,self.runtime.states,999)
+        self.assertEqual(packet['frames'][0]['last_recipient'],'5')
+
     async def test_explicit_new_speaker_is_separate_unless_reply_or_proven_group_join(self):
         first=await self.start()
         self.backend.assess_social.return_value=SocialDecision('bot','new','none','question',True)

@@ -53,6 +53,16 @@ class SocialTransport(Transport):
         self.sent.append(dict(source=event.response_to or event.id,author=event.author,text=action.text,kind=action.kind.value,seconds=time.monotonic()-event.received_at))
         return None if action.kind.value=='REACTION' else 9000+len(self.sent)
 
+def result_health(behavior_ok,assessments,traces):
+    """A failed classifier is not a correct silence, even if no send was wanted."""
+    calls=[call for trace in traces for call in trace.get('calls',[])]
+    errors=sum('error' in item for item in assessments)
+    failed=sum(call.get('outcome')=='failed' for call in calls)
+    cancelled=sum(call.get('outcome')=='cancelled' for call in calls)
+    inference_ok=not (errors or failed or cancelled or any(t.get('outcome')=='failed' for t in traces))
+    return dict(passed=bool(behavior_ok and inference_ok),behavior_ok=bool(behavior_ok),inference_ok=inference_ok,
+                physical_calls=len(calls),assessment_errors=errors,worker_failures=failed,worker_cancelled=cancelled)
+
 async def run(args):
     # A preserved source tree has a different __file__; keep all probe outputs
     # in the real project's private root and use the same existing adapter.
@@ -115,7 +125,7 @@ async def run(args):
                         await runtime.ingest(Event(150+n,2,3,item['author'],item['text'],now-timedelta(seconds=len(case.get('before',[]))-n),
                             reply_to=item.get('reply'),reply_author=item.get('reply_author'),member_mentions=tuple(item.get('mentions',()))))
                         await settle(runtime,backend)
-                    item=case['event'];metrics_start=len(backend.metrics);semantic_start=serving.semantic_calls;packet_start=len(serving.packet_hashes);assessment_start=len(serving.assessments);started=time.monotonic()
+                    item=case['event'];semantic_start=serving.semantic_calls;packet_start=len(serving.packet_hashes);assessment_start=len(serving.assessments);trace_start=len(runtime.traces);started=time.monotonic()
                     await runtime.ingest(Event(200,2,3,item.get('author',4),item['text'],datetime.now(timezone.utc),reply_to=item.get('reply'),
                         reply_author=item.get('reply_author'),member_mentions=tuple(item.get('mentions',()))))
                     await settle(runtime,backend)
@@ -125,11 +135,14 @@ async def run(args):
                     kind_ok=not sent or not case.get('kind') or sent[0]['kind']==case['kind']
                     seed_active=any(f.conversation_id==seeds.get('a') and not f.ended for f in runtime.conversations.flows.values())
                     state_ok=(not case.get('keep_active') or seed_active) and (not case.get('expect_ended') or not seed_active)
+                    health=result_health(bool(sent)==case['respond'] and flow_ok and kind_ok and state_ok and len(sent)<=1,
+                                         serving.assessments[assessment_start:],runtime.traces[trace_start:])
+                    metrics=[dict(c) for t in runtime.traces[trace_start:] for c in t.get('calls',[]) if c.get('outcome')=='completed']
                     row=dict(case=case['id'],category=case['category'],phase=case.get('phase','original'),mode=mode,generated=generated,expected=case['respond'],responded=bool(sent),
-                        passed=(bool(sent)==case['respond'] and flow_ok and kind_ok and state_ok and len(sent)<=1),flow_ok=flow_ok,kind_ok=kind_ok,state_ok=state_ok,seconds=time.monotonic()-started,
+                        **health,flow_ok=flow_ok,kind_ok=kind_ok,state_ok=state_ok,seconds=time.monotonic()-started,
                         semantic_calls=serving.semantic_calls-semantic_start,packet_hashes=serving.packet_hashes[packet_start:],
                         assessments=serving.assessments[assessment_start:],
-                        physical_calls=len(backend.metrics[metrics_start:]),traces=runtime.traces,metrics=backend.metrics[metrics_start:],sent=transport.sent)
+                        completed_calls=len(metrics),traces=runtime.traces,target_traces=runtime.traces[trace_start:],metrics=metrics,sent=transport.sent)
                     rows.append(row);atomic_private_json(root/'results-private.json',rows)
                     total=sum(mode in c.get('only_modes',args.modes.split(',')) for mode in args.modes.split(',') for c in protocol['cases'])
                     atomic_private_json(root/'progress.json',dict(completed=len(rows),passed=sum(r['passed'] for r in rows),total=total))
@@ -138,9 +151,10 @@ async def run(args):
             categories={c:dict(n=sum(r['category']==c for r in rows),passed=sum(r['passed'] for r in rows if r['category']==c)) for c in {r['category'] for r in rows}},
             latency=distribution([r['seconds'] for r in rows]),mean_seconds=sum(r['seconds'] for r in rows)/max(1,len(rows)),
             physical_calls=sum(r['physical_calls'] for r in rows),queue_wait=distribution([m.get('queue_seconds',0) for r in rows for m in r['metrics']]),
+            assessment_errors=sum(r['assessment_errors'] for r in rows),worker_failures=sum(r['worker_failures'] for r in rows),
             false_responses=sum(r['responded'] and not r['expected'] for r in rows),missed=sum(not r['responded'] and r['expected'] for r in rows),
-            flow_errors=sum(not r['flow_ok'] for r in rows),peak_allocated_mib=max((m.get('peak_allocated_mib',0) for m in backend.metrics),default=0),
-            peak_reserved_mib=max((m.get('peak_reserved_mib',0) for m in backend.metrics),default=0),scheduler=backend.scheduler.snapshot())
+            flow_errors=sum(not r['flow_ok'] for r in rows),peak_allocated_mib=max((m.get('peak_allocated_mib',0) for r in rows for m in r['metrics']),default=0),
+            peak_reserved_mib=max((m.get('peak_reserved_mib',0) for r in rows for m in r['metrics']),default=0),scheduler=backend.scheduler.snapshot())
         atomic_private_json(root/'summary.json',summary)
         print(json.dumps({k:v for k,v in summary.items() if k!='scheduler'}))
     finally:await backend.close();lease.close()

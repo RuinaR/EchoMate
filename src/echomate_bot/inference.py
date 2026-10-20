@@ -333,6 +333,7 @@ class LocalBackend:
     async def link_direct(self,packet):
         """Classify relation only; confirmed direct audience is not re-voted."""
         from copy import deepcopy
+        from .social_evidence import evidence_window,trim_frame
         peers=set(packet.get('current_peer_frames',()))|set(packet.get('direct_reference_frames',()))
         frames=[deepcopy(f) for f in packet['frames'] if f['index'] in peers]
         if not frames:return 'none'
@@ -343,11 +344,12 @@ class LocalBackend:
                 '독립적인 다른 주제나 요청이면 new다. 같은 화자·유일한 후보·같은 단어·최신 순서만으로 연결하지 않는다. '
                 '구체적인 앞선 발언에 의존하는 생략·지시 표현은 단어 중복이 없어도 연결할 수 있다. '
                 '구별할 근거가 부족하거나 여러 후보가 모두 가능하면 new다. 라벨 하나만 출력한다.')
-        for frame in frames:frame['turns']=frame['turns'][-4:]
+        reply=packet['current'].get('reply')
+        for frame in frames:frame['turns']=evidence_window(frame['turns'],limit=4,reply=reply)
         if self.processor is not None:
             while len(self.processor.tokenizer.encode(prompt+json.dumps(data,ensure_ascii=False),add_special_tokens=False))>2800:
                 longer=[f for f in frames if len(f['turns'])>2]
-                if longer:max(longer,key=lambda f:len(f['turns']))['turns'].pop(0)
+                if any(trim_frame(f,reply) for f in sorted(longer,key=lambda f:-len(f['turns']))):pass
                 elif data['surrounding']:data['surrounding'].pop(0)
                 else:raise ValueError('Direct relation context exceeds budget')
                 data['older_context_omitted']=True
@@ -362,6 +364,7 @@ class LocalBackend:
         from . import response_plans
         from copy import deepcopy
         from dataclasses import replace
+        from .social_evidence import trim_frame
         packet=deepcopy(packet)
         peers=response_plans.peer_indices(packet)
         if peers:
@@ -371,7 +374,7 @@ class LocalBackend:
             if self.processor is not None:
                 while len(self.processor.tokenizer.encode(response_plans.PROMPT+json.dumps(data,ensure_ascii=False),add_special_tokens=False))>5200:
                     longer=[f for f in data['frames'] if len(f['turns'])>2]
-                    if longer:max(longer,key=lambda f:len(f['turns']))['turns'].pop(0)
+                    if any(trim_frame(f,packet['current'].get('reply')) for f in sorted(longer,key=lambda f:-len(f['turns']))):pass
                     elif data['surrounding']:data['surrounding'].pop(0)
                     else:raise ValueError('Response plan context limit; recipient uncertain')
                     data['older_context_omitted']=True;omitted=True
@@ -383,7 +386,7 @@ class LocalBackend:
         if self.processor is not None:
             while len(self.processor.tokenizer.encode(PROMPT+json.dumps(packet,ensure_ascii=False),add_special_tokens=False))>5200:
                 frames=[f for f in packet['frames'] if len(f['turns'])>2]
-                if frames:max(frames,key=lambda f:len(f['turns']))['turns'].pop(0)
+                if any(trim_frame(f,packet['current'].get('reply')) for f in sorted(frames,key=lambda f:-len(f['turns']))):pass
                 elif packet['surrounding']:packet['surrounding'].pop(0)
                 else:raise ValueError('Social context limit; recipient uncertain')
                 packet['older_context_omitted']=True

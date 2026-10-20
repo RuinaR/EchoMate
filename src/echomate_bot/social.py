@@ -116,6 +116,7 @@ class SocialRouter:
         row=self.places.get((event.guild,event.channel),{}).get(str(event.id))
         if row:row['addressee']=str(bot_id)
     def packet(self,event,conversations,states,bot_id):
+        from .social_evidence import evidence_window,reply_recipient
         groups={};query=terms(event.content)
         for f in conversations.flows.values():
             if (f.guild,f.channel)!=(event.guild,event.channel) or f.ended or not f.last_bot or f.key not in states:continue
@@ -126,12 +127,15 @@ class SocialRouter:
         for f in candidates:
             version,turns=states[f.key].snapshot(channel_id=event.channel,thread_id=None)
             before=[t for t in turns if t.message_id!=str(event.id)]
-            if any(t.is_bot for t in before):retained[f.key]=(version,before[-6:])
+            if any(t.is_bot for t in before):
+                rows=[dict(id=t.message_id,speaker=t.author_id,bot=t.is_bot,reply=t.reply_to,text=t.content[:480],
+                           **({'text_clipped':True} if len(t.content)>480 else {})) for t in before]
+                retained[f.key]=(version,evidence_window(rows,reply=str(event.reply_to) if event.reply_to else None))
         # Rank the evidence that will actually reach the judge. A reply may
         # reference the bot's proposal, which need not occur in the human topic.
         candidates=[f for f in candidates if f.key in retained]
         def overlap(f):
-            return len(query & terms(' '.join(t.content[:480] for t in retained[f.key][1])))
+            return len(query & terms(' '.join(t['text'] for t in retained[f.key][1])))
         candidates.sort(key=lambda f:(-int(event.author in f.direct_peers),-overlap(f),min(f.messages or {''})))
         relevant=[f for f in candidates if event.author in f.direct_peers or overlap(f)]
         if not relevant:relevant=candidates
@@ -139,8 +143,8 @@ class SocialRouter:
         for f in relevant[:4]:
             version,before=retained[f.key]
             frames.append(dict(index=str(len(frames)),participants=list(map(str,sorted(f.participants))),current_peers=list(map(str,sorted(f.direct_peers))),
-                last_recipient=str(f.last_recipient) if f.last_recipient else None,
-                turns=[dict(id=t.message_id,speaker=t.author_id,bot=t.is_bot,reply=t.reply_to,text=t.content[:480]) for t in before[-6:]]))
+                last_recipient=reply_recipient(before),
+                turns=before))
             selected.append((f,version))
         people={str(event.author)}
         if event.member_roles and event.member_roles.addressee:people.add(str(event.member_roles.addressee))
