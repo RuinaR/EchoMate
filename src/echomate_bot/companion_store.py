@@ -3,7 +3,7 @@
 No network/model calls. Connections are short-lived and serialized; callers use
 to_thread. No automatic backups containing deleted subjects are created.
 """
-from contextlib import contextmanager
+from contextlib import contextmanager,closing
 import json
 import re
 import secrets
@@ -27,11 +27,12 @@ def safe_subject_text(text):
 
 class CompanionStore(MemberAliases,PrivacyStore,SummaryStore):
     def __init__(self,path,clock=time.time):
-        self.path=private_path(path);self.clock=clock;self.lock=threading.RLock();self.error=None
+        self.path=private_path(path);self.clock=clock;self.lock=threading.RLock();self.error=None;self.last_error=None;self.schema_version=None
         try:
             self.path.parent.mkdir(parents=True,exist_ok=True)
             with self.db() as db:
                 version=db.execute('PRAGMA user_version').fetchone()[0]
+                self.schema_version=version
                 if version>7:raise ValueError('Newer companion schema')
                 db.executescript('''
 BEGIN IMMEDIATE;
@@ -58,21 +59,48 @@ PRAGMA user_version=7;
 COMMIT;
 ''')
             self.cleanup()
-        except (sqlite3.Error,OSError,ValueError) as exc:self.error=type(exc).__name__
+            self.schema_version=7
+        except (sqlite3.Error,OSError,ValueError) as exc:self.error=type(exc).__name__;self.last_error=type(exc).__name__
+
+    def recover_readonly(self):
+        """Retry transient initialization failures only on a complete v7 DB.
+
+        Never creates a DB, runs migration/cleanup, or repairs corrupt data.
+        """
+        if not self.error:return True
+        if self.error not in ('OperationalError','OSError','PermissionError'):return False
+        with self.lock:
+            try:
+                with closing(sqlite3.connect(self.path.resolve().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
+                    db.execute('PRAGMA query_only=ON')
+                    db.execute('BEGIN')
+                    version=db.execute('PRAGMA user_version').fetchone()[0]
+                    if version!=7:return False
+                    required={'relationships','relationship_events','optouts','memory_optouts','tombstones','source_parts','memory_cutoffs','memories','reminders','memory_flows','subject_consents','member_aliases','alias_evidence','consent_choices','conversation_summaries','dialogue_summaries','summary_participants','summary_sources','summary_tombstones'}
+                    if not required<={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}:return False
+                    for table,columns in (('consent_choices','guild,user,category,enabled,version,at'),('relationships','guild,user'),('memories','guild,user,source'),('reminders','guild,requester'),('source_parts','guild,source,part'),('summary_participants','guild,user'),('conversation_summaries','guild,user')):
+                        db.execute('SELECT '+columns+' FROM '+table+' LIMIT 0')
+                self.error=None;self.last_error=None;self.schema_version=version
+                return True
+            except (sqlite3.Error,OSError) as exc:
+                self.last_error=type(exc).__name__;return False
 
     @contextmanager
     def db(self):
         if self.error:raise RuntimeError('Companion storage unavailable')
         with self.lock:
-            db=sqlite3.connect(self.path,timeout=.25);db.row_factory=sqlite3.Row
+            db=None
             try:
+                db=sqlite3.connect(self.path,timeout=.25);db.row_factory=sqlite3.Row
                 db.execute('PRAGMA journal_mode=WAL');db.execute('PRAGMA secure_delete=ON');db.execute('PRAGMA foreign_keys=ON')
                 with db:yield db
+                self.last_error=None
             except sqlite3.DatabaseError as exc:
                 self.last_error=type(exc).__name__
                 if 'malformed' in str(exc).lower() or 'not a database' in str(exc).lower():self.error=type(exc).__name__
                 raise
-            finally:db.close()
+            finally:
+                if db is not None:db.close()
 
     def opted_out(self,db,guild,user):
         return db.execute('SELECT 1 FROM optouts WHERE guild=? AND user=?',(str(guild),str(user))).fetchone() is not None

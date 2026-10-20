@@ -620,10 +620,16 @@ class DesktopApp(CompanionViews):
         dialog.bind('<Destroy>',closed);poll();entry.focus_set()
     def select_job(self,ids):self.job_id=next(iter(ids),None);self.render()
     def approve_commands(self):
+        plan=(self.snapshot or {}).get('command_review')
+        if not plan:
+            self.controller.submit('command_review');return
         def save(v):
             if v['confirm']!='동의로 교체':raise ValueError()
-            self.set_value('command_sync_pending',True)
-        self.form('다음 연결의 명령 정리 승인',[('confirm','동의로 교체 라고 입력','')],save,'이 봇의 글로벌 명령과 등록 관리 서버의 기존 명령을 정리해 /동의 하나만 남겨요. 사용자 자료는 삭제하지 않아요. 지금 연결·동기화하지 않아요.')
+            self.controller.submit('command_apply',fingerprint=plan['fingerprint'])
+        def command_label(c):return c['name']+' ('+{1:'슬래시',2:'사용자',3:'메시지'}.get(c.get('type',1),'기타')+')'
+        summary='Application '+plan['application']+'\n전역: '+', '.join(command_label(c) for c in plan['global_before'])+' → /동의\n'
+        summary+='\n'.join('서버 '+g+': '+(', '.join(command_label(c) for c in rows) or '없음')+' → 서버별 명령 없음' for g,rows in plan['guilds'].items())
+        self.form('확인한 명령 정리 승인',[('confirm','동의로 교체 라고 입력','')],save,summary+'\n승인하면 이 애플리케이션만 변경하고 재조회해 검증해요. 목록이 바뀌면 재승인이 필요해요. 사용자 자료는 삭제하지 않아요.')
     def draw_status(self,w,h,s):
         if not s:return
         width=(w-282)/3
@@ -639,7 +645,7 @@ class DesktopApp(CompanionViews):
         states={'waiting':'보충 대기','running':'처리 중','sent':'전송 완료','completed':'완료','silence':'침묵·보관 생략','failed':'실패','cancelled':'취소'}
         self.job_list.empty_hint='아직 처리한 요청이 없어요'
         flows=s.get('conversations',[])
-        flow_labels={'active':'대화 중','idle':'잠시 쉬는 중','ended':'종료'}
+        flow_labels={'active':'대화 중','waiting':'재개 대기','idle':'잠시 쉬는 중','ended':'종료'}
         self.job_list.set_items([dict(id=f['id'],label=flow_labels.get(f['status'],'대화')+' · '+f['conversation'][:8],hint=f"확인 참여자 {f['participants']}명 · 현재 상대 {len(f['peers'])}명") for f in flows]+[dict(id=j['id'],label=states.get(j['status'],j['status'])+' · '+STAGES.get(j['stage'],j['stage']),hint=str(j['seconds'])+'초 · 대화 '+j.get('flow','')[:8]) for j in jobs])
         self.job_list.place(x=240,y=300,width=270,height=max(100,h-445));self.job_list.selected={self.job_id} if self.job_id else set()
         selected=next((j for j in jobs if j['id']==self.job_id),None)
@@ -684,8 +690,8 @@ class DesktopApp(CompanionViews):
         self.text(250,215,'대화할 채널에서 사용할 응답 방식을 골라 주세요. 변경하면 바로 적용돼요.',11,MUTED,width=w-310)
         for i,(key,label,hint) in enumerate([('text','글로 답하기','질문에 답하거나 대화를 이어가요.'),('reactions','이모지로 가볍게 반응하기','허용 범위에서 실제 메시지 반응을 추가해요. 직접 요청도 적용돼요.'),('web_search','인터넷 근거 검색','공개 주제어로 위키·뉴스 원문을 찾고 로컬 AI로 검토해요. 최신성·출처가 부족하면 확답하지 않아요.')]):
             y=285+i*90;self.toggle(250,y,label,cfg[key],lambda k=key:self.set_value(k,not cfg[k]));self.text(300,y+36,hint,10,MUTED,width=w-355)
-        self.button(250,h-205,180,30,'Discord 명령 정리 승인',self.approve_commands)
-        self.text(250,h-155,'명령 변경: '+('다음 연결에서 동의 하나로 교체 예정' if cfg['command_sync_pending'] else '승인 전 · 자동 동기화하지 않음'),9,MUTED,width=w-300)
+        self.button(250,h-205,180,30,'명령 목록 확인 · 정리',self.approve_commands)
+        self.text(250,h-155,'명령 변경: 목록 확인 → 대상 검토 → 직접 승인 · 연결 시 자동 변경하지 않음',9,MUTED,width=w-300)
     def draw_labs(self,w,h,cfg):
         if not cfg:return
         rounded(self.canvas,226,143,w-252,h-210,PANEL)

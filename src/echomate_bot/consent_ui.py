@@ -17,7 +17,7 @@ class ConsentPanel(discord.ui.View):
     def notice(self):
         status='\n'.join(f"{LABELS[k]}: {'켜짐' if self.choices[k] else '꺼짐'} · 보관 {self.counts[k]}건" for k in LABELS)
         return ('**내 데이터 설정 · 이 서버에만 적용**\n'+status+'\n\n'
-                '저장 위치: 봇 소유자의 Windows PC `local_data/bot/companion.sqlite3`. PC 소유자는 파일에 접근할 수 있어. 외부 AI 학습으로 전송하지 않아.\n'
+                '저장 위치: 봇 소유자의 Windows PC에 있는 EchoMate 전용 사용자 자료 폴더의 `bot/companion.sqlite3`. 소스 실행은 설치 폴더의 `local_data`, Portable 기본값은 `%LOCALAPPDATA%/EchoMate/local_data`이며 소유자가 별도 위치를 지정할 수 있어. 개인 경로는 공개하지 않아. PC 소유자는 파일에 접근할 수 있어. 외부 AI 학습으로 전송하지 않아.\n'
                 '친밀도: User ID와 연결된 교류 횟수·반응·관계 상태·별명 근거. 변화 이력은 30일, 별명 근거는 90일, 관계 상태·확정 별명은 삭제 전까지 보관해.\n'
                 '기억: 민감정보를 제외한 취향·활동·일정. 상태는 기본 6시간, 일정은 종료+유예 뒤 만료해. 목표는 최근 확인 90일 뒤 자동 활용을 보류하며 보류된 목표·취향·직접 기억은 삭제 전까지 남을 수 있어.\n'
                 '요약: 여러 턴의 주제·정정·결정·미해결 내용과 출처·참여자·시각·채널. 참여한 사람 모두 요약 저장에 동의한 대화만 저장하며 30일 뒤 만료해. 과거 선별 발췌도 별도로 남아 있을 수 있어.\n'
@@ -84,6 +84,7 @@ async def open_consent(client,i):
     if not i.guild_id or str(i.guild_id) not in client.settings.get()['guilds']:
         await i.response.send_message('등록된 서버에서 본인 데이터 설정을 열어 줘.',ephemeral=True);return
     await i.response.defer(ephemeral=True)
+    if client.companion.error:await asyncio.to_thread(client.companion.recover_readonly)
     choices=await asyncio.to_thread(client.companion.consent,i.guild_id,i.user.id)
     counts=await asyncio.to_thread(client.companion.data_counts,i.guild_id,i.user.id)
     view=ConsentPanel(client,i.guild_id,i.user.id,choices,counts)

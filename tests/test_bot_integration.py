@@ -279,7 +279,8 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         with patch('echomate_bot.runtime.download',AsyncMock(return_value=b'not a raster')):
             await self.runtime.ingest(replace(self.event(),assets=(('emoji:5','https://cdn.discordapp.com/emojis/5.png'),)))
             await self.settle()
-        self.assertFalse(self.transport.sent)
+        self.assertEqual(len(self.transport.sent),1)
+        self.assertIn('분석을 완료하지 못했어',self.transport.sent[0][1].text)
         self.assertFalse(hasattr(self.backend,'catalog'))
     async def test_disabled_vision_never_downloads_and_declares_absent_evidence(self):
         from unittest.mock import patch,AsyncMock

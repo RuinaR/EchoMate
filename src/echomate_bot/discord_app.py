@@ -186,7 +186,7 @@ class DiscordTransport:
 
 
 class EchoClient(discord.Client):
-    def __init__(self,settings,backend,admin_guilds):
+    def __init__(self,settings,backend,admin_guilds,*,companion=None):
         intents=discord.Intents.none();intents.guilds=True;intents.guild_messages=True
         intents.message_content=True;intents.emojis_and_stickers=True;intents.guild_reactions=True
         super().__init__(intents=intents,allowed_mentions=discord.AllowedMentions.none(),max_messages=None,
@@ -195,7 +195,7 @@ class EchoClient(discord.Client):
         self.tree=app_commands.CommandTree(self);self.cache=VisualCache(settings.path.parent/'visual.sqlite3');self.library=None
         self.user_names={}
         from .companion_store import CompanionStore
-        self.companion=CompanionStore(settings.path.parent/'companion.sqlite3')
+        self.companion=companion if companion is not None else CompanionStore(settings.path.parent/'companion.sqlite3')
         self.runtime=Runtime(settings,backend,DiscordTransport(self),self.cache,self.library,
                              ledger_path=settings.path.parent/'sent.sqlite3',companion=self.companion)
         self.runtime.gateway_available=False
@@ -210,24 +210,59 @@ class EchoClient(discord.Client):
         self.tree.add_command(app_commands.Command(name='동의',description='내 친밀도·기억·대화 요약의 저장 동의와 삭제',callback=consent))
         @self.tree.error
         async def command_error(i,error):
-            self.runtime.note('consent_command_failed')
-            if not i.response.is_done():await i.response.send_message('저장소 처리에 실패했어. 변경 완료로 간주하지 말고 다시 확인해 줘.',ephemeral=True)
-            else:await i.followup.send('처리를 완료하지 못했어. 다시 확인해 줘.',ephemeral=True)
+            missing=isinstance(error,app_commands.CommandNotFound)
+            cause=getattr(error,'original',error)
+            self.runtime.note('legacy_command_unregistered' if missing else 'consent_command_failed_'+type(cause).__name__)
+            message=('이건 이전 버전의 명령이야. 지금은 /동의에서 본인 데이터 설정을 열어 줘. 예전 명령 목록 정리는 소유자가 앱에서 승인해야 해.' if missing else
+                '데이터 설정을 확인하지 못했어. 변경 완료로 간주하지 말고 /동의를 다시 열어 확인해 줘.')
+            if not i.response.is_done():await i.response.send_message(message,ephemeral=True)
+            else:await i.followup.send(message,ephemeral=True)
 
     async def setup_hook(self):
-        # Never reconcile commands without explicit local-owner approval.
-        if not self.settings.get()['command_sync_pending']:return
-        before=await self.tree.fetch_commands()
-        audit=dict(global_before=[c.name for c in before],guilds={})
-        await self.tree.sync()
-        for guild in sorted(set(self.admin_guilds)|{int(g) for g in self.settings.get()['guilds']}):
-            target=discord.Object(guild);self.tree.clear_commands(guild=target)
-            audit['guilds'][str(guild)]=[c.name for c in await self.tree.fetch_commands(guild=target)]
-            await self.tree.sync(guild=target)
-        from .settings import atomic_private_json
-        atomic_private_json(self.settings.path.parent/'command-audit.json',audit)
-        self.settings.set(self.settings.owner_id,'command_sync_pending',False)
-        self.runtime.note('consent_commands_reconciled')
+        # A historic boolean is not approval of a freshly reviewed remote list.
+        if self.settings.get()['command_sync_pending']:self.runtime.note('command_review_required')
+
+    async def review_commands(self,owner):
+        self.settings.authorize(owner)
+        if not self.application_id:raise ValueError('Application identity unavailable')
+        import hashlib
+        def rows(commands):
+            if any(int(c.application_id)!=self.application_id for c in commands):raise ValueError('Wrong application')
+            return sorted([dict(id=str(c.id),name=c.name,type=getattr(getattr(c,'type',None),'value',1)) for c in commands],key=lambda c:c['id'])
+        plan=dict(application=str(self.application_id),global_before=rows(await self.tree.fetch_commands()),guilds={})
+        for gid in sorted(set(self.admin_guilds)|{int(g) for g in self.settings.get()['guilds']}|{g.id for g in self.guilds}):
+            plan['guilds'][str(gid)]=rows(await self.tree.fetch_commands(guild=discord.Object(gid)))
+        plan['global_after']=['동의'];plan['guild_after']=[]
+        plan['fingerprint']=hashlib.sha256(json.dumps(plan,sort_keys=True).encode()).hexdigest()
+        self.command_review=plan
+        return plan
+
+    async def apply_commands(self,owner,fingerprint):
+        self.settings.authorize(owner)
+        if not hasattr(self,'command_lock'):self.command_lock=asyncio.Lock()
+        async with self.command_lock:
+            reviewed=getattr(self,'command_review',None)
+            if not reviewed or reviewed['fingerprint']!=fingerprint:raise ValueError('Command review required')
+            current=await self.review_commands(owner)
+            if current['fingerprint']!=fingerprint:raise ValueError('Command list changed; review again')
+            if [c.name for c in self.tree.get_commands()]!=['동의']:raise ValueError('Unexpected local command contract')
+            from .settings import atomic_private_json
+            self.settings.set(owner,'command_sync_pending',True)
+            audit=dict(before=current,status='applying')
+            path=self.settings.path.parent/'command-audit.json'
+            atomic_private_json(path,audit)
+            try:
+                await self.tree.sync()
+                for gid in current['guilds']:
+                    target=discord.Object(int(gid));self.tree.clear_commands(guild=target);await self.tree.sync(guild=target)
+                after=await self.review_commands(owner)
+                if [c['name'] for c in after['global_before']]!=['동의'] or any(after['guilds'].values()):raise ValueError('Command verification failed')
+                audit.update(status='verified',after=after);atomic_private_json(path,audit)
+                self.settings.set(owner,'command_sync_pending',False);self.command_review=None
+                self.runtime.note('consent_commands_reconciled')
+            except Exception as exc:
+                audit.update(status='failed',error=type(exc).__name__);atomic_private_json(path,audit)
+                self.runtime.note('command_sync_failed_'+type(exc).__name__);raise
 
     async def apply_guild_name(self,guild_id):
         from .naming import guild_name
@@ -266,6 +301,7 @@ class EchoClient(discord.Client):
         await self.runtime.ingest(Event(message.id,message.guild.id,message.channel.id,message.author.id,
             message.content,message.created_at,parent=parent,reply_to=message.reference.message_id if message.reference else None,
             assets=assets_from_message(message) if cfg['vision'] else (),received_at=received,
+            visual_inputs_present=bool(message.attachments or message.stickers or any(e.image or e.thumbnail for e in message.embeds)),
             member_names=tuple((u.id,tuple(dict.fromkeys(n for n in (getattr(u,'nick',None),u.display_name,getattr(u,'global_name',None),u.name) if n))) for u in (message.author,*message.mentions) if not u.bot),
             member_mentions=tuple(u.id for u in message.mentions),
             reply_author=(target.author.id if message.reference and isinstance((target:=message.reference.resolved),discord.Message) and target.channel.id==message.channel.id and target.guild and target.guild.id==message.guild.id else None)))

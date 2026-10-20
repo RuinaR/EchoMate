@@ -4,6 +4,7 @@ No login, token, gateway, slash sync or socket is used. This checks application
 and SDK integration, not Discord's remote rate-limit implementation.
 """
 import asyncio
+import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -119,6 +120,21 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body['allowed_mentions']['parse'], [])
         self.assertFalse(body['allowed_mentions']['replied_user'])
         self.assertTrue(body['flags'] & 4)
+
+    async def test_vision_off_keeps_attachment_fact_without_download_or_false_observation(self):
+        mid=discord.utils.time_snowflake(datetime.now(timezone.utc))
+        data=payload(mid,content='<@999> 이게 누군지 알겠니')
+        data['attachments']=[dict(id='55',filename='synthetic.png',size=10,url='https://invalid.example/p.png',proxy_url='https://invalid.example/p.png',height=1,width=1,content_type='image/png')]
+        self.http.messages[3,mid]=data
+        message=self.client._connection.create_message(channel=self.guild.get_channel(3),data=data)
+        with patch('echomate_bot.runtime.download',new=AsyncMock(side_effect=AssertionError('No download'))) as download:
+            await self.client.on_message(message)
+            while self.client.runtime.tasks or self.client.runtime.utterances.pending or self.client.runtime.utterances.emitting:
+                await asyncio.gather(*self.client.runtime.tasks.values(),*(r.task for r in self.client.runtime.utterances.pending.values()),*self.client.runtime.utterances.emitting,return_exceptions=True)
+        self.assertIn('확인할 수 없어',self.http.sends[0][1]['content'])
+        self.assertFalse(self.client.backend.calls);download.assert_not_awaited()
+        turns=next(iter(self.client.runtime.states.values())).snapshot(channel_id=3,thread_id=None)[1]
+        self.assertTrue(json.loads(next(t for t in turns if not t.is_bot).context_metadata)['visual_inputs_present'])
 
     async def test_social_engine_followup_and_reaction_reach_sdk_with_exact_sources(self):
         from echomate_bot.social import SocialDecision
@@ -274,6 +290,7 @@ class DiscordSDKSimulation(unittest.IsolatedAsyncioTestCase):
                 await asyncio.wait_for(asyncio.gather(*waits),5)
         self.assertEqual([int(b['message_reference']['message_id']) for _,b in self.http.sends],sources)
         self.client.backend.assess_dialogue.assert_awaited_once()
+        self.assertEqual(runtime.conversations.message_flow[(2,3,str(sources[0]))],runtime.conversations.message_flow[(2,3,str(sources[1]))])
 
     async def test_thread_permissions_reaction_and_standard_sticker_keep_source(self):
         self.message(channel=30)

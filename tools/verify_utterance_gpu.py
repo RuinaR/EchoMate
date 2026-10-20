@@ -98,6 +98,7 @@ async def run(args):
                 folder=root/case['name'];folder.mkdir()
                 settings=Settings(1,secrets.token_hex(32),folder/'settings.json');settings.set_scope(1,2,3,'mention');settings.set(1,'enabled',True)
                 settings.change(1,lambda c:c['guilds']['2'].update(name='라온봇'))
+                for key,value in case.get('settings',{}).items():settings.set(1,key,value)
                 borrowed=Counting(backend);transport=Transport()
                 if getattr(args,'sdk_mock',False):await transport.start_sdk()
                 runtime=Runtime(settings,borrowed,transport,None,None,ledger_path=folder/'sent.sqlite3')
@@ -111,12 +112,15 @@ async def run(args):
                             while not any(r.get('stage')=='text' for r in runtime.progress.values()):
                                 if time.monotonic()>deadline:raise TimeoutError('No generation stage')
                                 await asyncio.sleep(.01)
-                        event=Event(raw['id'],2,3,raw['user'],raw['text'],datetime.now(timezone.utc)-timedelta(seconds=raw.get('age',0)),reply_to=raw.get('reply'),reply_author=raw.get('reply_author'),received_at=time.monotonic()-raw.get('age',0),
+                        event=Event(raw['id'],2,3,raw['user'],raw['text'],datetime.now(timezone.utc)-timedelta(seconds=raw.get('age',0)),reply_to=raw.get('reply'),reply_author=raw.get('reply_author'),received_at=time.monotonic()-raw.get('age',0),assets=tuple(tuple(a) for a in raw.get('assets',())),
                             member_mentions=tuple(int(x) for x in __import__('re').findall(r'<@!?(\d+)>',raw['text'])))
                         transport.register(event);await runtime.ingest(event)
                         await asyncio.sleep(raw.get('pause',.04))
                     await settle(runtime)
                     roots=[r['source'] for r in transport.sent]
+                    required_ok=sorted(r for r in roots if r not in case.get('optional_roots',[]))==sorted(case['roots']) and len(roots)==len(set(roots))
+                    assembled=[r['sources'] for r in runtime.utterances.events if r['stage']=='finalized']
+                    assembly_ok=all(parts in assembled for parts in case.get('assembled',[]))
                     by_root={str(s['source']):s for s in transport.sent}
                     parts_ok=all(by_root.get(str(k),{}).get('parts')==v for k,v in case.get('parts',{}).items())
                     same_ok=all(str(a) in by_root and str(b) in by_root and by_root[str(a)]['conversation']==by_root[str(b)]['conversation'] for a,b in case.get('same_flow',[]))
@@ -124,7 +128,8 @@ async def run(args):
                     sdk_ok=all(s.get('sdk_reply',s['source'])==s['source'] and (s['sdk_source_reads'] is None or s['sdk_source_reads']==len(s['parts'])) for s in transport.sent)
                     inference_ok=not any('error' in a for a in borrowed.assessments) and not any(
                         t.get('outcome')=='failed' or any(c.get('outcome')=='failed' for c in t.get('calls',[])) for t in runtime.traces)
-                    row=dict(name=case['name'],passed=sorted(roots)==sorted(case['roots']) and parts_ok and same_ok and different_ok and sdk_ok and inference_ok,
+                    row=dict(name=case['name'],passed=required_ok and assembly_ok and parts_ok and same_ok and different_ok and sdk_ok and inference_ok,
+                        assembly_ok=assembly_ok,assembled=assembled,
                         parts_ok=parts_ok,flow_ok=same_ok and different_ok,sdk_ok=sdk_ok,inference_ok=inference_ok,expected=case['roots'],actual=roots,
                         semantic_calls=borrowed.semantic_calls,elapsed=time.monotonic()-began,sent=transport.sent,traces=runtime.traces,
                         decisions=borrowed.assessments,pending=len(runtime.tasks)+len(runtime.utterances.pending))

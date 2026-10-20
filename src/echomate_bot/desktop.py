@@ -20,7 +20,11 @@ from .settings import ROOT,Settings,MOODS,ACTIVITY
 STAGES={'utterance_wait':'메시지 보충 대기','social':'실제 청자·대화 흐름 판정','member_resolution':'호칭·답장 근거 확인','summary':'대화 요약 확인·압축', 'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
         'action':'행동 선택','text':'답변 작성','sending':'Discord 전송','research':'인터넷 원문·근거 확인','output_check':'출력 정책 검사'}
 NO_RESPONSE = {
-    'utterance_waiting':'미완성 발언의 보충을 잠시 기다려요', 'utterance_combined':'같은 작성자의 이어지는 조각을 결합했어요',
+    'utterance_waiting':'호출·연속 발언의 보충을 잠시 기다려요', 'utterance_combined':'같은 작성자의 이어지는 조각을 결합했어요',
+    'legacy_command_unregistered':'이전 명령이에요. /동의로 본인 데이터 설정을 열어 주세요',
+    'capability_state_changed':'설명 도중 기능·동의 상태가 바뀌어 오래된 안내를 보내지 않았어요',
+    'visual_asset_unavailable':'이미지 분석을 완료하지 못해 내용을 추측하지 않았어요',
+    'attention_followup_linked':'확인된 단독 호출 뒤의 첫 발언을 연결했어요',
     'utterance_separated':'독립 발언 또는 출처 경계로 나눴어요', 'utterance_invalidated':'원본 변경이나 접근 범위 변경으로 발언을 중단했어요',
     'resource_stop_commit':'Windows 가상 메모리 여유가 부족해요. 다른 작업을 마친 뒤 다시 준비해 주세요',
     'social_human_exchange_pending':'다른 사람과 주고받는 순서라 끼어들지 않았어요', 'social_candidate_capacity':'여러 대화의 연결이 불명확해 기다려요',
@@ -143,6 +147,7 @@ class LocalController:
                       models=[m.public() for m in getattr(self,'models',[])],profiles=getattr(self,'profiles_view',{}),preview=getattr(self,'preview_result',''),
                       recent_reason=next((NO_RESPONSE.get(r['code'],'') for r in reversed(runtime.diagnostics) if r['code'] in NO_RESPONSE or r['code']=='response_sent'),'') if runtime else '',
                       scheduler=serving.scheduler.snapshot() if serving and hasattr(serving,'scheduler') else {},
+                      command_review=getattr(self,'command_review',None),
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
                       companion_loading=getattr(self,'companion_loading',False),
                       statistics=statistics,
@@ -323,6 +328,12 @@ class LocalController:
                     self._publish()
                 self.preview_task.add_done_callback(completed)
                 # No Runtime ingestion: consent, memory, affinity and reminders untouched.
+            elif operation in ('command_review','command_apply'):
+                if not self.client or not self.client.is_ready():raise ValueError('봇 연결 후 명령 목록을 확인해 주세요')
+                if operation=='command_review':
+                    self.command_review=await self.client.review_commands(owner);self.notice='명령 목록 확인 완료 · 다시 눌러 변경 내용을 검토해 주세요'
+                else:
+                    await self.client.apply_commands(owner,kwargs['fingerprint']);self.command_review=None;self.notice='Discord 응답 재조회로 명령 정리를 확인했어요'
             elif operation=='refresh':await self.refresh_inventory()
             elif operation=='start':
                 self.settings.set(owner,'enabled',True)
@@ -474,6 +485,9 @@ class LocalController:
                     gpu_scheduler=self.client.backend.scheduler.snapshot() if self.client and hasattr(self.client.backend,'scheduler') else {},
                     safe_stopped=runtime.stopped if runtime else False,
                     summary=summarize(runtime.traces if runtime else []),
+                    assembly_events=runtime.utterances.report() if runtime else [],
+                    storage=dict(schema=getattr(getattr(self,'companion',None),'schema_version',None),error=getattr(getattr(self,'companion',None),'last_error',None)),
+                    commands=dict(reviewed=bool(getattr(self,'command_review',None)),pending=bool(self.settings.get()['command_sync_pending'])),
                     codes=dict(Counter(r['code'] for r in runtime.diagnostics)) if runtime else {}))
                 self.notice='진단 보고서 저장 · local_data/bot/diagnostic-report.json'
             elif operation=='guild':
@@ -505,9 +519,13 @@ class LocalController:
             if operation in {'settings','scope','guild'}:self.notice='설정 저장 완료'
         except Exception as exc:
             success=False
+            command_errors={'Command review required':'먼저 명령 목록을 확인하고 변경 내용을 승인해 주세요','Command list changed; review again':'명령 목록이 바뀌었어요. 변경 내용을 다시 확인해 주세요','Command verification failed':'명령 정리 결과를 확인하지 못했어요. 목록을 다시 확인해 주세요','Application identity unavailable':'연결된 봇의 애플리케이션을 확인하지 못했어요','Wrong application':'다른 애플리케이션의 명령은 변경하지 않아요'}
+            if operation=='command_apply':self.command_review=getattr(self.client,'command_review',None)
             safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요','미리보기 정리에 실패했어요. 앱을 닫고 다시 열어 주세요.'}
+            safe.add('봇 연결 후 명령 목록을 확인해 주세요')
             from .processes import ResourceLimitError,resource_message
             self.error=resource_message(exc,NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요')) if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
+            if operation in ('command_review','command_apply') and str(exc) in command_errors:self.error=command_errors[str(exc)]
             self.last_management_error=dict(operation=operation,kind=type(exc).__name__,message=self.error,at=time.time())
             if operation=='preview':self.preview_rejection=dict(session=kwargs.get('session'),error=self.error)
         result=dict(ok=success,error='' if success else self.error)
@@ -552,7 +570,7 @@ class LocalController:
             logging.getLogger('discord').setLevel(logging.CRITICAL)
             from .settings import DEFAULTS
             cfg=self.settings.get() if self.settings else dict(DEFAULTS)
-            self.client=EchoClient(self.settings,LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None),self.bootstrap['admin_guilds'])
+            self.client=EchoClient(self.settings,LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None),self.bootstrap['admin_guilds'],companion=self.companion)
             await self.client.backend.ready()
             if hasattr(self.client.backend,'probe'):await self.client.backend.probe()
             self.starting_model=False

@@ -88,7 +88,7 @@ class WorkerTrace(unittest.IsolatedAsyncioTestCase):
 class CleanupAndStorage(unittest.IsolatedAsyncioTestCase):
     async def test_startup_failure_and_disk_failure_still_close_client(self):
         c=LocalController.__new__(LocalController)
-        c.settings=None;c.bootstrap={'admin_guilds':[2]};c.phase='';c.error=''
+        c.settings=None;c.companion=None;c.bootstrap={'admin_guilds':[2]};c.phase='';c.error=''
         c.client=None;c.job=None;c.inventory=[];c.updates=queue.Queue(8)
         backend=SimpleNamespace(ready=AsyncMock(side_effect=ValueError),metrics=[])
         client=SimpleNamespace(backend=backend,close=AsyncMock())

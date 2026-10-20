@@ -204,7 +204,7 @@ class DiscordConsent(unittest.IsolatedAsyncioTestCase):
             try:
                 self.assertEqual([c.name for c in client.tree.get_commands()],['동의'])
                 await client.setup_hook();client.tree.sync.assert_not_awaited()
-                cfg.set(1,'command_sync_pending',True);await client.setup_hook();self.assertEqual(client.tree.sync.await_count,2);self.assertFalse(cfg.get()['command_sync_pending'])
+                cfg.set(1,'command_sync_pending',True);await client.setup_hook();client.tree.sync.assert_not_awaited();self.assertTrue(cfg.get()['command_sync_pending'])
                 response=SimpleNamespace(defer=AsyncMock(),send_message=AsyncMock())
                 i=SimpleNamespace(guild_id=2,user=SimpleNamespace(id=4),response=response,followup=SimpleNamespace(send=AsyncMock()))
                 await open_consent(client,i);self.assertTrue(i.followup.send.call_args.kwargs['ephemeral'])

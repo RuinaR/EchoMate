@@ -271,9 +271,15 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         app=self.app;app.page='models';n=len(self.commands)
         with patch('tkinter.filedialog.askdirectory',return_value=''):app.choose_model_folder()
         self.assertEqual(len(self.commands),n)
-        app.page='outputs';app.approve_commands();d=self.dialog();self.fill(d,['아니오'])
+        app.page='outputs';app.approve_commands();await self.sync()
+        self.assertEqual(self.commands[-1][0],'command_review')
+        self.assertFalse(self.c.settings.get()['command_sync_pending'])
+        self.c.command_review=dict(application='42',global_before=[dict(id='1',name='old',type=1)],guilds={'2':[]},fingerprint='synthetic')
+        await self.sync();app.approve_commands();d=self.dialog();self.fill(d,['아니오'])
         self.assertTrue(d.winfo_exists());self.assertFalse(self.c.settings.get()['command_sync_pending'])
-        self.fill(d,['동의로 교체']);await self.sync();self.assertTrue(self.c.settings.get()['command_sync_pending'])
+        self.fill(d,['동의로 교체']);await self.sync();self.assertFalse(self.c.settings.get()['command_sync_pending'])
+        self.assertEqual(self.commands[-1][0],'command_apply')
+        self.assertTrue(d.winfo_exists())
         self.assertIsNone(self.c.client)
 
     async def test_concurrent_deleted_memory_reports_failure_and_keeps_editor_input(self):

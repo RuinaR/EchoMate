@@ -38,7 +38,7 @@ class OfflineCommands(unittest.IsolatedAsyncioTestCase):
             def _publish(self):pass
             async def command(self,operation,**kw):self.forwarded.append(operation);return dict(ok=True)
         c=controller_type(Base)()
-        for op,kw in [('start',{}),('refresh',{}),('visual_cache',{'refresh':True})]:
+        for op,kw in [('start',{}),('refresh',{}),('command_review',{}),('command_apply',{'fingerprint':'synthetic'}),('visual_cache',{'refresh':True})]:
             self.assertFalse((await c.command(op,**kw))['ok'])
         self.assertFalse(c.forwarded)
         self.assertTrue((await c.command('settings',values={'mood':'평온'}))['ok'])

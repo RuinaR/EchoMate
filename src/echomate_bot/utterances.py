@@ -9,6 +9,7 @@ import hashlib
 import re
 import secrets
 import time
+from collections import deque
 
 
 def unfinished(text, *, bare=False,direct=False):
@@ -34,11 +35,28 @@ class Pending:
 
 
 class Utterances:
-    def __init__(self,emit,note,*,idle=.8,maximum=4.,budget=8000,capacity=64,settling=.3):
+    def __init__(self,emit,note,*,idle=.8,maximum=4.,budget=8000,capacity=64,settling=.8,attention_wait=2.):
         self.emit=emit;self.note=note;self.idle=idle;self.maximum=maximum
         self.budget=budget;self.capacity=capacity;self.pending={};self.closed=False
         self.emitting=set();self.changes={}
         self.settling=settling
+        self.attention_wait=attention_wait
+        self.events=deque(maxlen=100)
+
+    def record(self,row,stage,reason):
+        root=row.parts[0]
+        self.events.append(dict(guild=root.guild,channel=root.channel,speaker=root.author,
+            utterance=row.uid,sources=[p.id for p in row.parts],stage=stage,reason=reason,
+            elapsed=round(time.monotonic()-row.started,3)))
+
+    def report(self):
+        # Fresh export-local pseudonyms; actual IDs and message content stay RAM-only.
+        maps={k:{} for k in ('guild','channel','speaker','utterance','sources')}
+        def label(key,value):
+            table=maps[key]
+            if value not in table:table[value]=key[0].upper()+str(len(table)+1)
+            return table[value]
+        return [{k:([label(k,v) for v in value] if k=='sources' else label(k,value)) if k in maps else value for k,value in r.items()} for r in self.events]
 
     @staticmethod
     def key(event):return event.guild,event.channel,event.parent,event.author
@@ -50,21 +68,25 @@ class Utterances:
             utterance_id=uid,utterance_version=len(parts),response_to=(root.response_to or root.id) if len(parts)>1 else root.response_to,
             reply_to=root.reply_to,reply_author=root.reply_author,received_at=root.received_at,
             member_mentions=tuple(dict.fromkeys(uid for p in parts for uid in p.member_mentions)),
+            assets=tuple(dict.fromkeys(asset for p in parts for asset in p.assets)),
+            attention_only=all(p.attention_only for p in parts),
+            visual_inputs_present=any(p.visual_inputs_present for p in parts),
             target_content_hash=hashlib.sha256(root.content.encode()).hexdigest(),
             source_content_hash=hashlib.sha256(last.content.encode()).hexdigest())
 
-    def take(self,key):
+    def take(self,key,reason='boundary'):
         row=self.pending.pop(key)
+        self.record(row,'finalized',reason)
         if row.task and row.task is not asyncio.current_task():row.task.cancel()
         self.note('utterance_combined' if len(row.parts)>1 else 'utterance_finalized')
         return self.compose(row.parts,row.uid)
 
     async def later(self,key,row):
         try:
-            delay=self.idle if row.incomplete else self.settling
+            delay=self.attention_wait if row.bare else self.idle if row.incomplete else self.settling
             await asyncio.sleep(max(0,min(delay,self.maximum-(time.monotonic()-row.started))))
             if self.pending.get(key) is row and not self.closed:
-                event=self.take(key)
+                event=self.take(key,'maximum' if time.monotonic()-row.started>=self.maximum else 'settled')
                 # Keep ownership through permission checks, invalidation and shutdown.
                 self.emitting.add(asyncio.current_task())
                 try:await self.emit(event)
@@ -88,12 +110,14 @@ class Utterances:
         if boundary:ready.append(self.take(key));row=None;self.note('utterance_separated')
         if row:
             row.parts.append(event);row.bare=row.bare and bare
+            self.record(row,'waiting','source_appended')
             row.incomplete=unfinished(event.content,bare=bare,direct=direct)
             if row.task:row.task.cancel()
             if not row.context and not unfinished(event.content,bare=bare,direct=direct):ready.append(self.take(key))
             else:row.task=asyncio.create_task(self.later(key,row),name='echomate-fragment-wait')
         elif not terminal and (not human and unfinished(event.content,bare=bare,direct=direct) or context is not None and not direct and not INDEPENDENT.search(event.content)) and len(event.content)+128<=self.budget and len(self.pending)<self.capacity:
             row=Pending([event],time.monotonic(),bare=bare,context=context,incomplete=unfinished(event.content,bare=bare,direct=direct));self.pending[key]=row
+            self.record(row,'waiting','attention' if bare else 'context_turn' if context else 'unfinished')
             row.task=asyncio.create_task(self.later(key,row),name='echomate-fragment-wait');self.note('utterance_waiting')
         else:ready.append(self.compose([event],'utt:'+secrets.token_hex(12)))
         return ready
@@ -111,6 +135,7 @@ class Utterances:
     def discard(self,predicate):
         for key,row in list(self.pending.items()):
             if any(predicate(p) for p in row.parts):
+                self.record(row,'cancelled','source_or_scope_invalidated')
                 self.pending.pop(key);row.task.cancel();self.note('utterance_invalidated')
 
     async def close(self):

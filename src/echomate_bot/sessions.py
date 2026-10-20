@@ -31,6 +31,9 @@ class Conversation:
     status:str='candidate'
     candidate_keys:tuple=()
     last_action:str|None=None
+    attention_source:int|None=None
+    attention_user:int|None=None
+    attention_until:float=0.
 
 class Conversations:
     def __init__(self):self.flows={};self.message_flow={}

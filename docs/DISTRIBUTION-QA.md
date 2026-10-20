@@ -1,5 +1,11 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+최종 Portable 공개 소스 갱신 완료: manifest21,548파일, src/docs144파일 및 GPU 봉인 소스 일치, 번들 Python의 별도 저장소·숨긴 Tk·동의/명령 mock44검사 OK12.465초, 두 VBS /check PASS. 운영4파일 SHA256 보존. 이번 번들의 GPU 재로딩·실제 Discord·다른 Windows는 미검증이다. [근거](LIVE-SERVER-FIXES-QA.md).
+
+## 2026-10-20 실서버 수정 배포 후보
+
+이번 소스는 저장소·명령 승인·분할 호출·활성 상태·미관찰 이미지·실제 기능 설명을 수정했다. 기존 Portable 런타임을 재사용해 공개 src/docs를 한 번 갱신했다. 결과와 manifest/소스 일치·번들 검사 범위는 [통합 QA](LIVE-SERVER-FIXES-QA.md)에 기록한다. 모델/토큰/운영 DB/개인 설정은 패키지에 넣지 않았다. 다른 Windows·실제 Discord와 이번 번들의 GPU 재로딩은 NOT VERIFIED다. 정식 릴리즈 BLOCKED.
+
 ## 2026-10-20 완성형 차례 후보 — 소스/오프라인 검증 / BLOCKED
 
 기존 `dist/EchoMate-rc-utterance`의 공개 src/문서만 한 번 갱신했다(4.542GiB/21,546파일). 모델·LoRA·토큰·운영 DB와 번들 Python/의존성은 변경하지 않았다. 실행 소스85파일은 GPU 봉인 소스와 같고 manifest21,546개 파일 목록·공개146개 해시는 일치했다. 금지 파일0건·운영4파일 해시 보존을 확인했다. 번들 Python에서 별도 데이터 폴더로 발언·숨긴 Tk·오프라인·저장/취소54검사 OK16.722초, 창을 띄우지 않는 VBS /check PASS. 사용자 화면 조작이나 실제 Discord 동작은 아니다.

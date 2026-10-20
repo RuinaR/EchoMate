@@ -19,7 +19,7 @@ def configure_environment():
 def controller_type(base):
     class OfflineController(base):
         async def command(self,operation,**kwargs):
-            if operation in ('start','refresh') or operation=='visual_cache' and kwargs.get('refresh'):
+            if operation in ('start','refresh','command_review','command_apply') or operation=='visual_cache' and kwargs.get('refresh'):
                 self.error='오프라인 검증에서는 Discord 연결·조회·전송을 하지 않아요.'
                 self._publish()
                 return dict(ok=False,error=self.error)
