@@ -947,3 +947,8 @@ character_profiles.py·desktop.py·desktop_ui.py에서 ID 입력 없이 현재 �
 공개 Portable은24,767파일·4.590GiB이며 모델·개인 DB·토큰은 제외한다. 최종 source/docs 바이트 및 전체 파일 manifest는 별도 package audit로 대조한다. 소스와 Portable의 일반/오프라인 VBS 4진입점 /check는 앱/봇을 시작하지 않고 통과했다. 공개 다운로드 릴리즈는 만들지 않고 후보를 로컬에만 둔다.
 
 이번 변경 파일: ui_controls.py, desktop_ui.py, companion_ui.py, test_input_controls.py, test_ui_workflows.py, test_companion_ui.py, test_ui_record_selection.py 및 UI 문서. 명령: PYTHONPATH=src;tests;tools의 unittest discover -s tests -q, verify_ui_actions.py, verify_ui_functional_audit.py. 결과·경계·실패는 UI-INTERACTION-GUIDE를 따른다. 모델/추론/큐/DB 스키마 변경 없음.
+## 2026-10-24 모델/시스템 진단 1단계 — 기억 근거 송신 보호
+
+시작 main/local/remote `92074d0`, clean. 실제 Runtime은 기억 조회 직후만 동의를 검사하고 일반 기억을 사용한 생성의 마지막 송신에서 삭제/정정/철회를 확인하지 않았다. 이전 커밋 Runtime을 임시 모듈로 실행해 세 경로의 잘못된 송신을 재현했다. 최대3개 실제 기억 ID/행·범위·동의 버전의 읽기 전용 검증을 조회/송신에 연결했다. 별도 DB/스키마/운영 자료/모델 선택은 변경하지 않았다.
+
+표적31검사 OK6.050초, 전체721검사 OK258.066초. 이후 저장소 오류의 안전한 실패 검사1개를 추가한 해당8검사 OK2.266초다. 전체721은 추가 전 테스트 집합이며 마지막 실행 코드와 같다. 실제 Gemma 생성 후 동의를 철회한 SDK mock 경로는 송신0회였다. 실제 Discord 접근0회. 페르소나/모델 비교는 진행 중이며 이 수정으로 환각/차별성 문제가 해결됐다고 주장하지 않는다. 상세 결과와 최종 Git 마감은 후속 누적 기록을 따른다.

@@ -1190,7 +1190,7 @@ class Runtime:
             if (since<reply_cooldown and not(direct or continuing)) or not await self.fresh(event,state,version,revision):return
             flow=self.conversations.flows.get(self.key(event))
             if flow and (speech_eligible or reaction_only):flow.engaged=True;self.activity_changed()
-            command_answer=None;summary_guard=None;summary_id=None
+            command_answer=None;summary_guard=None;summary_id=None;memory_guard=None
             from .capabilities import public_state,describe,model_facts,VISUAL,visual_guard
             observation='present_not_analyzed' if event.assets or event.visual_inputs_present else 'not_provided'
             if not event.assets and event.reply_to:
@@ -1227,10 +1227,16 @@ class Runtime:
                     except (OSError,RuntimeError,ValueError,sqlite3.Error):command_answer='처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
                 else:
                     try:
+                        memory_version=await asyncio.to_thread(self.companion.consent_version,event.guild,event.author,'memory')
                         remembered=await asyncio.to_thread(self.companion.memories,event.guild,event.author,event.channel,event.content,
                             conversation_id=event.conversation_id,allow_user_archive=bool(re.search(r'내\s*(?:약속|일정|목표|취향|기억)',event.content)))
                         if not await self.automatic_subject_allowed(event.guild,event.author,'memory'):remembered=[]
                         if remembered:
+                            remembered=remembered[:3]
+                            if not await asyncio.to_thread(self.companion.memory_evidence_current,event.guild,event.author,event.channel,remembered,memory_version):
+                                remembered=[]
+                        if remembered:
+                            memory_guard=(remembered,memory_version)
                             from .memory_context import memory_context
                             context.insert(max(0,len(context)-1),dict(role='user',content=memory_context(remembered,cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul'))))
                     except (OSError,RuntimeError,sqlite3.Error):self.note('memory_lookup_failed')
@@ -1402,6 +1408,8 @@ class Runtime:
                                 if new_view!=old_view:self.note('capability_state_changed');return False
                             if summary_guard and await asyncio.to_thread(self.companion.digest_consent,event.guild,summary_guard)!=summary_guard:return False
                             if summary_id and not await asyncio.to_thread(self.companion.has_digest,event.guild,event.channel,event.author,summary_id):return False
+                            if memory_guard and not await asyncio.to_thread(self.companion.memory_evidence_current,event.guild,event.author,event.channel,*memory_guard):
+                                self.note('memory_evidence_changed');return False
                             return True
                         sent=await self.transport.execute(event,action,self.library,delivery_current)
                     except Exception:

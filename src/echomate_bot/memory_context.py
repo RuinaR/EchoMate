@@ -6,7 +6,7 @@ from .temporal import display_time
 def memory_context(rows,timezone_name,budget=1200):
     selected=[]
     for row in rows[:3]:
-        entry=dict(summary=row['summary'][:220],subject_user_id=row['user'],source=row['source'],
+        entry=dict(memory_id=row['memory_id'],summary=row['summary'][:220],subject_user_id=row['user'],source=row['source'],
                    observed_local=display_time(row['observed_at'],row['timezone']),timezone=timezone_name,
                    event_start_local=display_time(row['event_start_at'],timezone_name) if row['event_start_at'] else None,
                    event_end_local=display_time(row['event_end_at'],timezone_name) if row['event_end_at'] else None,

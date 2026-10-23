@@ -235,6 +235,27 @@ COMMIT;
             rows.sort(key=lambda r:(len(q & terms(r['summary'])),r['updated_at']),reverse=True)
         return rows
 
+    def memory_evidence_current(self,guild,user,channel,rows,consent_version):
+        """Read-only delivery guard for the exact facts used by generation.
+
+        Re-consenting is not permission to send an older in-flight answer.
+        A correction, expiry, deletion or source invalidation also retires it.
+        """
+        if not rows or len(rows)>3 or type(consent_version) is not int:return False
+        scope=(str(guild),str(user),str(channel));now=self.clock()
+        with self.db() as db:
+            db.execute('BEGIN')
+            consent=db.execute("SELECT enabled,version FROM consent_choices WHERE guild=? AND user=? AND category='memory'",scope[:2]).fetchone()
+            if not consent or not consent['enabled'] or consent['version']!=consent_version:return False
+            for expected in rows:
+                if tuple(expected.get(k) for k in ('guild','user','channel'))!=scope:return False
+                current=db.execute('SELECT * FROM memories WHERE memory_id=? AND guild=? AND user=? AND channel=?',
+                    (expected.get('memory_id'),*scope)).fetchone()
+                if not current or dict(current)!=expected or current['status']!='active':return False
+                if current['expires_at'] is not None and current['expires_at']<=now:return False
+                if db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(scope[0],current['source'])).fetchone():return False
+        return True
+
     def delete_source(self,guild,source,*,known=True):
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
