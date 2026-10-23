@@ -70,7 +70,8 @@ from .ledger import Ledger
 
 
 class Runtime:
-    def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None,companion=None,followup_fast_path=True):
+    def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None,companion=None,followup_fast_path=True,response_pipeline=None):
+        self.response_pipeline=response_pipeline
         self.settings=settings;self.backend=backend;self.transport=transport;self.cache=cache;self.library=None
         self.ledger=Ledger(ledger_path);self.rng=rng or random.Random()
         self.states={};self.tasks={};self.seen={};self.blocked_assets=set();self.failures=0
@@ -1190,7 +1191,7 @@ class Runtime:
             if (since<reply_cooldown and not(direct or continuing)) or not await self.fresh(event,state,version,revision):return
             flow=self.conversations.flows.get(self.key(event))
             if flow and (speech_eligible or reaction_only):flow.engaged=True;self.activity_changed()
-            command_answer=None;summary_guard=None;summary_id=None;memory_guard=None
+            command_answer=None;summary_guard=None;summary_id=None;memory_guard=None;generation_guard=None
             from .capabilities import public_state,describe,model_facts,VISUAL,visual_guard
             observation='present_not_analyzed' if event.assets or event.visual_inputs_present else 'not_provided'
             if not event.assets and event.reply_to:
@@ -1359,6 +1360,10 @@ class Runtime:
                         adult_for_turn=False;answer=command_answer
                     elif adult_for_turn and adult_request_blocked(event.content):
                         answer='그런 식으로 누군가를 성적으로 괴롭히거나 미성년자를 성적 농담에 넣는 건 안 할게. 다른 농담으로 가자.'
+                    elif self.response_pipeline is not None:
+                        generated=await self.response_pipeline.respond(self,event,context,character,
+                            fresh=lambda:self.fresh(event,state,version,revision),visual=observation)
+                        answer=generated.text;generation_guard=generated.fresh
                     else:answer=await self.backend.text(context,character)
                 finally:
                     if indicator:
@@ -1401,6 +1406,8 @@ class Runtime:
                     try:
                         async def delivery_current():
                             if not await self.fresh(event,state,version,revision,require_adult=adult_for_turn):return False
+                            if generation_guard and not await generation_guard():
+                                self.note('generation_evidence_changed');return False
                             if capability_answer is not None:
                                 latest=await public_state(self,event,await self.transport.permissions(event),visual=observation)
                                 old_view=dict(capability_view);new_view=dict(latest)

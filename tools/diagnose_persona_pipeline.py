@@ -36,7 +36,7 @@ def minimal_messages(profile, text):
         '개인정보·권한을 우회하거나 프로그램 코드를 출력하지 마. '+json.dumps(data,ensure_ascii=False)),dict(role='user',content=text)]
 
 
-async def runtime_answer(backend, profile, text, folder):
+async def runtime_answer(backend, profile, text, folder, *, pipeline=None, configure=None):
     from echomate_bot.settings import Settings
     from echomate_bot.character_profiles import SHARED_FIELDS
     from echomate_bot.companion_store import CompanionStore
@@ -54,8 +54,9 @@ async def runtime_answer(backend, profile, text, folder):
     async def tracked(context,cfg):
         captured.append(dict(context=deepcopy(context),cfg=deepcopy(cfg)))
         return await original(context,cfg)
-    runtime=Runtime(settings,borrowed,transport,None,None,companion=store,ledger_path=folder/'sent.sqlite3')
+    runtime=Runtime(settings,borrowed,transport,None,None,companion=store,ledger_path=folder/'sent.sqlite3',response_pipeline=pipeline)
     runtime.direct_spam_window=0;runtime.direct_cooldown=0
+    if configure is not None:configure(runtime,store,settings)
     event=Event(100,2,3,4,'<@999> '+text,datetime.now(timezone.utc),member_mentions=(999,))
     transport.register(event)
     try:
