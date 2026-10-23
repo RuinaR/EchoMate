@@ -151,6 +151,7 @@ class LocalController:
                       recent_reason=next((NO_RESPONSE.get(r['code'],'') for r in reversed(runtime.diagnostics) if r['code'] in NO_RESPONSE or r['code']=='response_sent'),'') if runtime else '',
                       scheduler=serving.scheduler.snapshot() if serving and hasattr(serving,'scheduler') else {},
                       command_review=getattr(self,'command_review',None),
+                      command_status=getattr(client,'command_status',{}) if client else {},
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
                       companion_loading=getattr(self,'companion_loading',False),
                       statistics=statistics,
@@ -334,9 +335,12 @@ class LocalController:
             elif operation in ('command_review','command_apply'):
                 if not self.client or not self.client.is_ready():raise ValueError('봇 연결 후 명령 목록을 확인해 주세요')
                 if operation=='command_review':
-                    self.command_review=await self.client.review_commands(owner);self.notice='명령 목록 확인 완료 · 다시 눌러 변경 내용을 검토해 주세요'
+                    self.command_review=None;self.notice='명령 목록 조회 중 · 변경하지 않아요';self._publish()
+                    client=self.client;plan=await client.review_commands(owner)
+                    if self.client is not client:raise ValueError('Application connection changed')
+                    self.command_review=plan;self.notice='명령 목록 조회 완료 · 변경은 별도 승인 후에만 실행해요'
                 else:
-                    await self.client.apply_commands(owner,kwargs['fingerprint']);self.command_review=None;self.notice='Discord 응답 재조회로 명령 정리를 확인했어요'
+                    await self.client.apply_commands(owner,kwargs['fingerprint']);self.command_review=None;self.notice='API 등록 확인 완료 · Discord 화면 표시와 실행은 별도 확인이 필요해요'
             elif operation=='refresh':await self.refresh_inventory()
             elif operation=='start':
                 self.settings.set(owner,'enabled',True)
@@ -490,7 +494,8 @@ class LocalController:
                     summary=summarize(runtime.traces if runtime else []),
                     assembly_events=runtime.utterances.report() if runtime else [],
                     storage=dict(schema=getattr(getattr(self,'companion',None),'schema_version',None),error=getattr(getattr(self,'companion',None),'last_error',None)),
-                    commands=dict(reviewed=bool(getattr(self,'command_review',None)),pending=bool(self.settings.get()['command_sync_pending'])),
+                    commands=dict(reviewed=bool(getattr(self,'command_review',None)),pending=bool(self.settings.get()['command_sync_pending']),
+                        state=getattr(self.client,'command_status',{}) if self.client else {}),
                     codes=dict(Counter(r['code'] for r in runtime.diagnostics)) if runtime else {}))
                 self.notice='진단 보고서 저장 · local_data/bot/diagnostic-report.json'
             elif operation=='guild':
@@ -523,12 +528,18 @@ class LocalController:
         except Exception as exc:
             success=False
             command_errors={'Command review required':'먼저 명령 목록을 확인하고 변경 내용을 승인해 주세요','Command list changed; review again':'명령 목록이 바뀌었어요. 변경 내용을 다시 확인해 주세요','Command verification failed':'명령 정리 결과를 확인하지 못했어요. 목록을 다시 확인해 주세요','Application identity unavailable':'연결된 봇의 애플리케이션을 확인하지 못했어요','Wrong application':'다른 애플리케이션의 명령은 변경하지 않아요'}
-            if operation=='command_apply':self.command_review=getattr(self.client,'command_review',None)
+            if operation in ('command_review','command_apply'):self.command_review=getattr(self.client,'command_review',None)
             safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요','미리보기 정리에 실패했어요. 앱을 닫고 다시 열어 주세요.'}
             safe.add('봇 연결 후 명령 목록을 확인해 주세요')
             from .processes import ResourceLimitError,resource_message
             self.error=resource_message(exc,NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요')) if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
             if operation in ('command_review','command_apply') and str(exc) in command_errors:self.error=command_errors[str(exc)]
+            if operation in ('command_review','command_apply'):
+                from discord import HTTPException
+                if isinstance(exc,HTTPException):
+                    self.error=('명령 API 접근 권한을 확인하지 못했어요' if exc.status==403 else '명령 API 대상을 찾지 못했어요' if exc.status==404 else '명령 API 요청에 실패했어요')+' · 자동 재시도하지 않았어요. 목록을 다시 조회해 주세요'
+                elif str(exc) in {'Wrong command scope','Unexpected local command contract','Application connection changed'}:
+                    self.error='명령의 애플리케이션·등록 범위를 다시 확인해 주세요. 변경을 완료한 것으로 간주하지 마세요'
             self.last_management_error=dict(operation=operation,kind=type(exc).__name__,message=self.error,at=time.time())
             if operation=='preview':self.preview_rejection=dict(session=kwargs.get('session'),error=self.error)
         result=dict(ok=success,error='' if success else self.error)

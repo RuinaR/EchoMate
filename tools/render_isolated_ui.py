@@ -13,6 +13,8 @@ import subprocess
 import sys
 import uuid
 
+PAGES=('setup','models','spaces','outputs','character','relations','memories','reminders','status','labs')
+
 
 def api():
     user=c.WinDLL('user32',use_last_error=True)
@@ -53,7 +55,7 @@ def capture(widget,path,user):
     finally:gdi.SelectObject(mem,old);gdi.DeleteObject(bmp);gdi.DeleteDC(mem);user.ReleaseDC(hwnd,dc)
 
 
-def worker(output):
+def worker(output,pages=PAGES):
     user=api();name=os.environ.get('ECHOMATE_QA_DESKTOP','')
     if not name.startswith('EchoMate-QA-'):raise RuntimeError('Isolated worker only')
     desktop=user.OpenDesktopW(name,0,False,0xff)
@@ -82,25 +84,32 @@ def worker(output):
             root.tk.call('tk','scaling',scale)
             for width,height in ((1040,740),(1180,820)):
                 root.geometry(f'{width}x{height}');app.canvas.place(x=0,y=0,width=width,height=height)
-                for page in ('setup','models','spaces','outputs','character','relations','memories','reminders','status','labs'):
+                for page in pages:
                     app.set_page(page);app.refresh_lists();start=time.perf_counter();app.render();root.update()
                     filename=f'{page}-{dpi}-{width}.png';capture(app.canvas,output/filename,user)
                     rows.append(dict(page=page,dpi=dpi,width=width,seconds=time.perf_counter()-start,file=filename))
-                app.snapshot['models']=[dict(id='synthetic-shard',name='합성 Gemma 분할 복사본',format='Transformers',path='models/synthetic-shard',bytes=22*1024**3,largest_shard_bytes=2*1024**3,compatible=True,reason='파일 검사 통과 · GPU 준비는 별도',memory_profile='gemma4-12b-sharded-2g')]
-                app.model_id='synthetic-shard';app.set_page('models');app.render();root.update()
-                filename=f'models-populated-{dpi}-{width}.png';capture(app.canvas,output/filename,user)
-                rows.append(dict(page='models_populated',dpi=dpi,width=width,file=filename))
-                app.snapshot['models']=[]
-                if dpi==100 and width==1180:
+                if 'models' in pages:
+                    app.snapshot['models']=[dict(id='synthetic-shard',name='합성 Gemma 분할 복사본',format='Transformers',path='models/synthetic-shard',bytes=22*1024**3,largest_shard_bytes=2*1024**3,compatible=True,reason='파일 검사 통과 · GPU 준비는 별도',memory_profile='gemma4-12b-sharded-2g')]
+                    app.model_id='synthetic-shard';app.set_page('models');app.render();root.update()
+                    filename=f'models-populated-{dpi}-{width}.png';capture(app.canvas,output/filename,user)
+                    rows.append(dict(page='models_populated',dpi=dpi,width=width,file=filename))
+                    app.snapshot['models']=[]
+                if dpi==100 and width==1180 and 'character' in pages:
                     app.advanced_profile();root.update()
                     dialog=next(v for v in root.winfo_children() if isinstance(v,tk.Toplevel))
                     capture(dialog.winfo_children()[0],output/'advanced.png',user);dialog.destroy()
+                if dpi==150 and width==1040 and 'outputs' in pages:
+                    app.snapshot['command_review']=dict(application='42',global_before=[dict(id='100',name='synthetic_legacy',type=1,contexts=[0],integration_types=[0],default_member_permissions=None)],guilds={'2':[]},fingerprint='synthetic')
+                    app.approve_commands();root.update()
+                    dialog=next(v for v in root.winfo_children() if isinstance(v,tk.Toplevel))
+                    capture(dialog.winfo_children()[0],output/'command-approval.png',user);dialog.destroy()
+                    app.snapshot['command_review']=None
         if errors:raise RuntimeError('Tk callback failures: '+','.join(errors))
         (output/'report.json').write_text(json.dumps(dict(isolated_desktop_verified=True,user_desktop_captured=False,rows=rows,callback_errors=errors),indent=2),encoding='utf-8')
     finally:app.destroy();user.CloseDesktop(desktop)
 
 
-def run(output):
+def run(output,pages=PAGES):
     output=Path(output).resolve()
     if not output.is_relative_to((Path.cwd()/'local_data').resolve()) or output.exists():raise ValueError('Fresh private output required')
     output.mkdir(parents=True)
@@ -108,12 +117,12 @@ def run(output):
     if not desktop:raise c.WinError(c.get_last_error())
     try:
         startup=subprocess.STARTUPINFO();startup.lpDesktop=name
-        subprocess.run([sys.executable,str(Path(__file__).resolve()),'--worker','--output',str(output)],startupinfo=startup,
+        subprocess.run([sys.executable,str(Path(__file__).resolve()),'--worker','--output',str(output),'--pages',*pages],startupinfo=startup,
             env=dict(os.environ,ECHOMATE_QA_DESKTOP=name),check=True,timeout=120)
     finally:user.CloseDesktop(desktop)
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--worker',action='store_true');args=parser.parse_args()
-    if args.worker:worker(Path(args.output))
-    else:run(args.output)
+    parser=argparse.ArgumentParser();parser.add_argument('--output',required=True);parser.add_argument('--worker',action='store_true');parser.add_argument('--pages',nargs='+',choices=PAGES,default=list(PAGES));args=parser.parse_args()
+    if args.worker:worker(Path(args.output),args.pages)
+    else:run(args.output,args.pages)

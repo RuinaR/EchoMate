@@ -200,9 +200,10 @@ class CommandAndStorage(unittest.IsolatedAsyncioTestCase):
 
     async def test_command_review_apply_reread_and_remote_verification(self):
         client=EchoClient(self.settings,self.backend,[2]);client._connection.application_id=42
-        old=SimpleNamespace(id=1,name='old',application_id=42)
-        new=SimpleNamespace(id=2,name='동의',application_id=42)
-        client.tree.fetch_commands=AsyncMock(side_effect=[[old],[old],[old],[old],[new],[]])
+        old=dict(id='1',name='old',application_id='42',description='legacy',type=1)
+        new=dict(id='2',name='동의',application_id='42',description='consent',type=1,contexts=[0],integration_types=[0])
+        client.tree._http.get_global_commands=AsyncMock(side_effect=[[old],[old],[new],[new]])
+        client.tree._http.get_guild_commands=AsyncMock(side_effect=[[old],[old],[]])
         client.tree.sync=AsyncMock()
         try:
             plan=await client.review_commands(1);client.tree.sync.assert_not_awaited()
@@ -214,22 +215,25 @@ class CommandAndStorage(unittest.IsolatedAsyncioTestCase):
 
     async def test_changed_or_foreign_command_list_never_writes(self):
         client=EchoClient(self.settings,self.backend,[2]);client._connection.application_id=42
-        old=SimpleNamespace(id=1,name='old',application_id=42)
-        new=SimpleNamespace(id=2,name='changed',application_id=42)
-        client.tree.fetch_commands=AsyncMock(side_effect=[[old],[],[new],[]]);client.tree.sync=AsyncMock()
+        old=dict(id='1',name='old',application_id='42',description='legacy',type=1)
+        new=dict(id='2',name='changed',application_id='42',description='changed',type=1)
+        client.tree._http.get_global_commands=AsyncMock(side_effect=[[old],[new]])
+        client.tree._http.get_guild_commands=AsyncMock(return_value=[]);client.tree.sync=AsyncMock()
         try:
             plan=await client.review_commands(1)
             with self.assertRaises(ValueError):await client.apply_commands(1,plan['fingerprint'])
             client.tree.sync.assert_not_awaited()
-            client.tree.fetch_commands=AsyncMock(return_value=[SimpleNamespace(id=4,name='other',application_id=43)])
+            client.tree._http.get_global_commands=AsyncMock(return_value=[dict(id='4',name='other',application_id='43',description='foreign',type=1)])
             with self.assertRaises(ValueError):await client.review_commands(1)
             with self.assertRaises(PermissionError):await client.review_commands(5)
         finally:await client.close()
 
     async def test_partial_command_sync_failure_keeps_pending_and_retry_review(self):
         client=EchoClient(self.settings,self.backend,[2]);client._connection.application_id=42
-        old=SimpleNamespace(id=1,name='old',application_id=42)
-        client.tree.fetch_commands=AsyncMock(side_effect=[[old],[],[old],[]])
+        old=dict(id='1',name='old',application_id='42',description='legacy',type=1)
+        new=dict(id='2',name='동의',application_id='42',description='consent',type=1,contexts=[0],integration_types=[0])
+        client.tree._http.get_global_commands=AsyncMock(side_effect=[[old],[old],[new]])
+        client.tree._http.get_guild_commands=AsyncMock(return_value=[])
         client.tree.sync=AsyncMock(side_effect=[None,OSError('synthetic failure')])
         try:
             plan=await client.review_commands(1)
@@ -237,7 +241,7 @@ class CommandAndStorage(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(self.settings.get()['command_sync_pending'])
             audit=json.loads((self.settings.path.parent/'command-audit.json').read_text(encoding='utf-8'))
             self.assertEqual(audit['status'],'failed');self.assertEqual(audit['error'],'OSError')
-            self.assertIsNotNone(client.command_review)
+            self.assertIsNone(client.command_review)  # A partial write requires a fresh review/approval.
         finally:await client.close()
 
     async def test_legacy_consent_schema_upgrade_preserves_explicit_optouts_and_restart(self):

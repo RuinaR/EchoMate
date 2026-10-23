@@ -1,5 +1,9 @@
 # 전체 응답 파이프라인 계측
 
+## 2026-10-24 명령과 독립된 합성 대화 검증
+
+기존 분할 모델 한 번 준비/probe57.562초, Runtime 의미4/텍스트11호출. 새6시퀀스11송신의 수신→SDK mock p50/p90/p95는8.656/9.610/11.524초, 마지막 조각→mock p50/p95 8.640/11.430초다. 큐 p95 0초, TTFT p50/p95 1.235/1.2961초, 생성속도 중앙값6.095tokens/s. 이전 다른 코호트보다 빠르거나 느려진 원인을 주장하지 않는다. private high-water13.009GiB·해제 후 allocated1024bytes/reserved2MiB. 실제 게임 프레임·Discord 네트워크·동시 서버 포화 부하는 측정하지 않았다. [상세 범위](COMMAND-RECOVERY-QA.md).
+
 ## 2026-10-23 로더 단계와 UI 갱신 비용
 
 기존 분할 모델 실제 준비26.157초, OS private commit high-water13.015GiB, working set high-water4.819GiB. 큰 private 증가는 allocator warmup에서 표본 관찰됐으며 파일 열기/NF4와 별도로 기록했다. GPU 생성4회 완료, TTFT0.125~0.750초/큐대기0초다. Discord 수신→송신 p50/p95를 새로 측정한 결과는 아니며 과거 E2E를 이번 수치로 대체하지 않는다. 계산 방식과 공정 큐는 변경하지 않았다.

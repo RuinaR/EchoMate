@@ -285,6 +285,33 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(d.winfo_exists())
         self.assertIsNone(self.c.client)
 
+    async def test_command_read_and_change_are_separate_release_actions(self):
+        app=self.app;app.page='outputs';app.render()
+        query=next(region for region in app.feedback.regions if region['box'][0]==250 and region['box'][1]==615)
+        # The fixture is 1180x820; this is the real row, not a direct callback.
+        before=len(self.commands);event=SimpleNamespace(x=260,y=625)
+        app.press(event);self.assertEqual(len(self.commands),before)
+        app.feedback.release(event);await self.sync()
+        self.assertEqual(self.commands[-1][0],'command_review')
+        self.assertFalse(self.c.settings.get()['command_sync_pending'])
+        self.assertFalse(any(x==446 and y==615 for x,y,w,h,cb in app.hits))
+        self.c.command_review=dict(application='42',global_before=[],guilds={'2':[]},fingerprint='synthetic')
+        await self.sync();self.assertTrue(any(x==446 and y==615 for x,y,w,h,cb in app.hits))
+        app.approve_commands();dialog=self.dialog();invoke(dialog,'<Escape>');await self.sync()
+        self.assertFalse(self.c.settings.get()['command_sync_pending'])
+
+    async def test_command_http_errors_are_safe_and_invalidate_ui_review(self):
+        import discord
+        for status in (403,404):
+            failure=discord.HTTPException(SimpleNamespace(status=status,reason='synthetic'),dict(code=50001,message='private response text'))
+            client=SimpleNamespace(is_ready=lambda:True,review_commands=AsyncMock(side_effect=failure),command_review=None)
+            self.c.command_review=dict(fingerprint='stale');self.c.client=client
+            try:
+                with patch.object(self.c,'_publish'):
+                    result=await self.c.command('command_review')
+                self.assertFalse(result['ok']);self.assertIsNone(self.c.command_review)
+                self.assertNotIn('private',result['error']);self.assertIn('권한' if status==403 else '대상',result['error'])
+            finally:self.c.client=None
     async def test_concurrent_deleted_memory_reports_failure_and_keeps_editor_input(self):
         app=self.app;app.page='memories';app.record_user='4'
         key=self.c.companion.add_memory(2,4,3,'합성 보존 내용')

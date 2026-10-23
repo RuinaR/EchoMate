@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 2026-10-24 명령 계약과 부분 실패 보호
+
+`command_contract.py`는 SDK HTTP 원본 JSON의 Application/scope·zero-based 접근 배열을 보존하고 전역 `/동의` 계약을 검증한다. 원격 metadata→검토 fingerprint→소유자 별도 승인→전역 payload 검증/sync→전역 GET 검증→서버별 정리→전체 GET 검증으로 진행한다. API 성공과 클라이언트 표시/실행은 별개다. 조회·변경 lock, 부분 실패/취소 단계 감사·승인 폐기와 pending 유지, 시작 시 자동 실행 금지를 유지한다. 라이브러리 전역 patch/자동 rollback은 없다. [실제 mock 재현·승인 경계](COMMAND-RECOVERY-QA.md).
+
 ## 2026-10-20 실서버 결함 수정 계약
 
 `capabilities.py`는 Settings/Runtime/현재 채널 권한/작성자 본인 동의만 읽어 공개 가능한 상태를 만든다. 기능 질문은 닫힌 반말 설명으로, 일반 생성은 압축 구조 자료로 사용한다. 관리자 비밀·개인 경로·타인 자료를 반환하지 않으며 송신 직전 상태 변경을 차단한다. 이미지 존재와 실제 관찰을 분리하고 조립 시 원본별 첨부를 보존한다. Controller/Client는 CompanionStore를 공유하며 일시 오류 복귀는 완전한 schema7의 읽기 전용 검사만 허용한다.

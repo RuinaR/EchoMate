@@ -92,7 +92,7 @@ async def run(output,pages=PAGES):
                         if dialog.bind('<Escape>'):workflows.invoke(dialog,'<Escape>')
                         else:dialog.destroy()
                     await case.sync()
-                expected_error='봇 연결 후 명령 목록을 확인해 주세요' if target['label']=='명령 목록 확인 · 정리' and case.c.client is None else ''
+                expected_error='봇 연결 후 명령 목록을 확인해 주세요' if target['label']=='명령 목록 조회' and case.c.client is None else ''
                 operations=[op for op,kw in case.commands[before:]]
                 safe_offline_block=bool(expected_error and case.c.error==expected_error and operations==['command_review'] and sdk_http.await_count==0)
                 rows.append(dict(page=page,method=target['method'],line=target['line'],label=target['label'],

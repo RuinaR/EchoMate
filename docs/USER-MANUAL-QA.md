@@ -1,5 +1,9 @@
 # 사용자 확인 — 오프라인 10~15분
 
+## 2026-10-24 최신 명령 안내
+
+명령 목록 조회와 변경안 검토·승인은 별도 버튼이다. 조회만으로 등록/삭제되지 않으며 API 검증 성공도 실제 Discord 화면 표시/본인 패널 성공과 다르다. 현재 실제 조회는 승인되지 않았고 비표시 원인은 미확정이다. 일반 앱의 봇 시작은 Gateway/서비스 부수효과가 있으므로 독립 읽기 전용 REST 조회 대신 켜지 않는다. 오프라인 `EchoMate-Check.vbs` 확인은 계속 운영 자료와 분리해 수행한다. [새 자동 검사·승인 경계·최신 Portable](COMMAND-RECOVERY-QA.md).
+
 최종 Portable 공개 소스 갱신 완료: manifest21,548파일, src/docs144파일 및 GPU 봉인 소스 일치, 번들 Python의 별도 저장소·숨긴 Tk·동의/명령 mock44검사 OK12.465초, 두 VBS /check PASS. 운영4파일 SHA256 보존. 이번 번들의 GPU 재로딩·실제 Discord·다른 Windows는 미검증이다. [근거](LIVE-SERVER-FIXES-QA.md).
 
 ## 2026-10-20 재시험 전 주의

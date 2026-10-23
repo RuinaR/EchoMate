@@ -669,10 +669,11 @@ class DesktopApp(CompanionViews):
         def save(v):
             if v['confirm']!='동의로 교체':raise ValueError()
             self.controller.submit('command_apply',fingerprint=plan['fingerprint'])
-        def command_label(c):return c['name']+' ('+{1:'슬래시',2:'사용자',3:'메시지'}.get(c.get('type',1),'기타')+')'
+        def command_label(c):
+            return c['name']+' ('+{1:'슬래시',2:'사용자',3:'메시지'}.get(c.get('type',1),'기타')+')'+(' · 접근 범위 '+str(c.get('contexts'))+' · 설치 '+str(c.get('integration_types'))+' · 기본 권한 '+str(c.get('default_member_permissions')))
         summary='Application '+plan['application']+'\n전역: '+', '.join(command_label(c) for c in plan['global_before'])+' → /동의\n'
         summary+='\n'.join('서버 '+g+': '+(', '.join(command_label(c) for c in rows) or '없음')+' → 서버별 명령 없음' for g,rows in plan['guilds'].items())
-        self.form('확인한 명령 정리 승인',[('confirm','동의로 교체 라고 입력','')],save,summary+'\n승인하면 이 애플리케이션만 변경하고 재조회해 검증해요. 목록이 바뀌면 재승인이 필요해요. 사용자 자료는 삭제하지 않아요.')
+        self.form('확인한 명령 변경 승인',[('confirm','동의로 교체 라고 입력','')],save,summary+'\n범위 0=서버, None=응답에 정보 없음. 기본 권한 None=별도 기본 제한 없음. 서버별 권한 덮어쓰기와 실제 화면 표시는 별도 확인이에요.\n승인하면 이 애플리케이션만 변경해요. 전역 /동의를 먼저 재조회하고 성공한 경우에만 서버별 구형 명령을 정리해요. 목록이 바뀌면 재승인이 필요해요. 사용자 자료는 삭제하지 않아요.')
     def draw_status(self,w,h,s):
         if not s:return
         width=(w-282)/3
@@ -736,8 +737,9 @@ class DesktopApp(CompanionViews):
         self.text(250,215,'앱 전체의 응답 기능을 정해요.\n채널별 허용 범위는 ‘대화할 곳’에서 설정해요.',11,MUTED,width=w-310)
         for i,(key,label,hint) in enumerate([('text','글로 답하기','질문에 답하거나 대화를 이어가요.'),('reactions','이모지로 가볍게 반응하기','허용한 메시지에 Unicode 반응을 남겨요.'),('web_search','인터넷 근거 검색','공개 정보의 근거를 찾고, 확인 실패도 안내해요.')]):
             y=285+i*90;self.toggle(250,y,label,cfg[key],lambda k=key:self.set_value(k,not cfg[k]));self.text(300,y+36,hint,10,MUTED,width=w-355)
-        self.button(250,h-205,180,30,'명령 목록 확인 · 정리',self.approve_commands)
-        self.text(250,h-155,'명령 변경: 목록 확인 → 대상 검토 → 직접 승인 · 연결 시 자동 변경하지 않음',9,MUTED,width=w-300)
+        self.button(250,h-205,180,30,'명령 목록 조회',lambda:self.controller.submit('command_review'))
+        self.button(446,h-205,180,30,'변경안 검토 · 승인',self.approve_commands,enabled=bool((self.snapshot or {}).get('command_review')))
+        self.text(250,h-155,'조회는 읽기 전용 · 변경은 대상 검토와 별도 승인 후\nAPI 등록 확인과 Discord 화면 표시 확인은 별개예요.',9,MUTED,width=w-300)
     def draw_labs(self,w,h,cfg):
         if not cfg:return
         rounded(self.canvas,226,143,w-252,h-210,PANEL)

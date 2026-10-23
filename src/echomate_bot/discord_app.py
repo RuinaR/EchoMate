@@ -206,6 +206,8 @@ class EchoClient(discord.Client):
     def install_commands(self):
         from .consent_ui import open_consent
         @app_commands.guild_only()
+        @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
+        @app_commands.allowed_installs(guilds=True,users=False)
         async def consent(i:discord.Interaction):await open_consent(self,i)
         self.tree.add_command(app_commands.Command(name='동의',description='내 친밀도·기억·대화 요약의 저장 동의와 삭제',callback=consent))
         @self.tree.error
@@ -224,17 +226,35 @@ class EchoClient(discord.Client):
 
     async def review_commands(self,owner):
         self.settings.authorize(owner)
+        if not hasattr(self,'command_lock'):self.command_lock=asyncio.Lock()
+        async with self.command_lock:return await self._review_commands(owner)
+
+    async def _fetch_command_rows(self,guild=None):
+        from .command_contract import rows
+        http=self.tree._http
+        data=await http.get_global_commands(self.application_id) if guild is None else await http.get_guild_commands(self.application_id,guild)
+        return rows(data,self.application_id,guild)
+
+    async def _review_commands(self,owner):
+        self.settings.authorize(owner)
+        self.command_review=None
+        self.command_status=dict(status='reading',stage='identity')
         if not self.application_id:raise ValueError('Application identity unavailable')
         import hashlib
-        def rows(commands):
-            if any(int(c.application_id)!=self.application_id for c in commands):raise ValueError('Wrong application')
-            return sorted([dict(id=str(c.id),name=c.name,type=getattr(getattr(c,'type',None),'value',1)) for c in commands],key=lambda c:c['id'])
-        plan=dict(application=str(self.application_id),global_before=rows(await self.tree.fetch_commands()),guilds={})
-        for gid in sorted(set(self.admin_guilds)|{int(g) for g in self.settings.get()['guilds']}|{g.id for g in self.guilds}):
-            plan['guilds'][str(gid)]=rows(await self.tree.fetch_commands(guild=discord.Object(gid)))
+        from .command_contract import failure_details
+        self.command_status=dict(status='reading',stage='read_global')
+        try:
+            plan=dict(application=str(self.application_id),global_before=await self._fetch_command_rows(),guilds={})
+            for gid in sorted(set(self.admin_guilds)|{int(g) for g in self.settings.get()['guilds']}|{g.id for g in self.guilds}):
+                self.command_status['stage']='read_guild'
+                plan['guilds'][str(gid)]=await self._fetch_command_rows(gid)
+        except (Exception,asyncio.CancelledError) as exc:
+            self.command_status=failure_details(exc,self.command_status['stage']);raise
         plan['global_after']=['동의'];plan['guild_after']=[]
         plan['fingerprint']=hashlib.sha256(json.dumps(plan,sort_keys=True).encode()).hexdigest()
         self.command_review=plan
+        self.command_status=dict(status='reviewed',stage='read_complete',global_count=len(plan['global_before']),
+            consent_present=any(c['name']=='동의' and c['type']==1 for c in plan['global_before']))
         return plan
 
     async def apply_commands(self,owner,fingerprint):
@@ -243,25 +263,44 @@ class EchoClient(discord.Client):
         async with self.command_lock:
             reviewed=getattr(self,'command_review',None)
             if not reviewed or reviewed['fingerprint']!=fingerprint:raise ValueError('Command review required')
-            current=await self.review_commands(owner)
-            if current['fingerprint']!=fingerprint:raise ValueError('Command list changed; review again')
-            if [c.name for c in self.tree.get_commands()]!=['동의']:raise ValueError('Unexpected local command contract')
+            current=await self._review_commands(owner)
+            if current['fingerprint']!=fingerprint:
+                self.command_review=None;self.command_status=dict(status='failed',stage='preflight',error='CommandListChanged')
+                raise ValueError('Command list changed; review again')
+            from .command_contract import consent_contract,failure_details
+            payload=[c.to_dict(self.tree) for c in self.tree.get_commands()]
+            if not consent_contract(payload):
+                self.command_review=None;self.command_status=dict(status='failed',stage='preflight',error='LocalContractInvalid')
+                raise ValueError('Unexpected local command contract')
             from .settings import atomic_private_json
             self.settings.set(owner,'command_sync_pending',True)
-            audit=dict(before=current,status='applying')
+            audit=dict(before=current,status='applying',stage='write_global')
             path=self.settings.path.parent/'command-audit.json'
             atomic_private_json(path,audit)
             try:
                 await self.tree.sync()
+                # Verify global registration BEFORE removing any legacy guild
+                # commands. An empty/wrong global result must stop the sequence.
+                audit['stage']='verify_global'
+                atomic_private_json(path,audit)
+                if not consent_contract(await self._fetch_command_rows()):
+                    raise ValueError('Command verification failed')
                 for gid in current['guilds']:
+                    audit['stage']='write_guild';audit['guild']=gid
+                    atomic_private_json(path,audit)
                     target=discord.Object(int(gid));self.tree.clear_commands(guild=target);await self.tree.sync(guild=target)
-                after=await self.review_commands(owner)
-                if [c['name'] for c in after['global_before']]!=['동의'] or any(after['guilds'].values()):raise ValueError('Command verification failed')
-                audit.update(status='verified',after=after);atomic_private_json(path,audit)
+                audit['stage']='verify_all'
+                atomic_private_json(path,audit)
+                after=await self._review_commands(owner)
+                if not consent_contract(after['global_before']) or any(after['guilds'].values()):raise ValueError('Command verification failed')
+                audit.update(status='verified',stage='api_verified',client_visibility='not_verified',after=after);atomic_private_json(path,audit)
                 self.settings.set(owner,'command_sync_pending',False);self.command_review=None
+                self.command_status=dict(status='verified',stage='api_verified',client_visibility='not_verified')
                 self.runtime.note('consent_commands_reconciled')
-            except Exception as exc:
-                audit.update(status='failed',error=type(exc).__name__);atomic_private_json(path,audit)
+            except (Exception,asyncio.CancelledError) as exc:
+                self.command_review=None
+                self.command_status=failure_details(exc,audit['stage'])
+                audit.update(self.command_status);atomic_private_json(path,audit)
                 self.runtime.note('command_sync_failed_'+type(exc).__name__);raise
 
     async def apply_guild_name(self,guild_id):
