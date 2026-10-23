@@ -1,5 +1,9 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## 2026-10-24 레퍼런스 평가 v2 마감
+
+운영 실행 src는 `4c4c9b2`와 동일하며 평가 도구는 앱 번들에 활성화하지 않는다. 공개 src/docs157파일·README/기본 프로필·manifest21,561 membership/크기와 공개 hash를 대조했다. 번들16검사 OK1.057초·두 VBS `/check` PASS. 문서 증분 갱신이며 전체 인터프리터 재해시/새 모델 로딩/GUI/다른 Windows 검증으로 주장하지 않는다. 운영4파일 hash 동일, 원문/가중치/개인 자료 비포함. [품질 후보 기각과 상세 범위](REFERENCE-PERSONA-V2-QA.md).
+
 ## 2026-10-24 평가 도구 마감 — 실행 소스 유지
 
 마감: 전체714검사 OK217.451초, 마지막 국소 빈 배치 거부12검사 OK0.083초. 운영4파일 hash 동일, 공개 src/docs155+README/기본 프로필·Portable manifest21,559 대조/두 VBS check PASS. 실행 코드/운영 자료/실제 Discord 변경0회. [마감 경과](WORKLOG.md).
