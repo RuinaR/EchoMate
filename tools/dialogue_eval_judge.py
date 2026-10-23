@@ -56,7 +56,11 @@ async def judge(backend, results, root, limit):
     for phase in {r['phase'] for r in results}:
         phase_key=[k for k in keys if result_index[k['record_id']]['phase']==phase]
         if phase_key:
-            phase_scores[phase]=[attribution_score(phase_key,{k['id']:p[k['id']] for k in phase_key}) for p in predictions]
+            group_counts={p:sum(k['profile']==p for k in phase_key) for p in TRAITS}
+            balanced=len(set(group_counts.values()))==1 and min(group_counts.values())>0
+            phase_scores[phase]=dict(comparable=balanced,counts=group_counts,
+                scores=[attribution_score(phase_key,{k['id']:p[k['id']] for k in phase_key},labels=tuple(TRAITS)) for p in predictions] if balanced else None,
+                note='Unbalanced/missing types cannot establish candidate improvement')
     summary=dict(method='same-generator auxiliary attribution; self-preference bias unresolved',
         view_scores=[attribution_score(keys,p) for p in predictions],
         phase_scores=phase_scores,

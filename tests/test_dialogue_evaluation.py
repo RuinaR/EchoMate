@@ -79,6 +79,8 @@ class EvaluationContracts(unittest.TestCase):
         result=attribution_score(key,{r['id']:r['profile'] for r in key})
         self.assertEqual(1,result['macro_recall']);self.assertLess(result['wilson95'][0],1)
         self.assertEqual('NOT_VERIFIED',result['human_equivalence'])
+        subset=attribution_score([dict(id='only-a',profile='a')],{'only-a':'d'},labels=['a','b','c','d'])
+        self.assertEqual(0,subset['accuracy']);self.assertEqual(1,subset['confusion']['a']['d'])
 
     def test_pii_screen_is_exclusion_not_silent_rewrite(self):
         self.assertIn('email',pii_risk('연락은 somebody@example.invalid 로'))
@@ -109,16 +111,21 @@ class EvaluationContracts(unittest.TestCase):
             self.assertIn('&lt;/script&gt;',value);self.assertIn("script-src 'sha256-",value)
 
     def test_final_corpus_must_be_sealed_and_never_silently_reused(self):
+        with self.assertRaisesRegex(ValueError,'no cases'):
+            runner.load_cases(SimpleNamespace(suite='korean',offset=100,limit=1),Path('local_data/unused'))
         root=Path('local_data/eval-contract-tests');root.mkdir(parents=True,exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root) as temp:
             corpus=Path(temp);row=deepcopy(korean_development()[0]);row['split']='final'
-            path=corpus/'final.json';path.write_text(json.dumps([row]),encoding='utf-8')
+            other=deepcopy(row);other['id']='other-final';other['group']='other-family';other['context']=[dict(role='user',content='새로운 별도 장면이야.')]
+            path=corpus/'final.json';path.write_text(json.dumps([row,other]),encoding='utf-8')
             import hashlib
             (corpus/'seal.json').write_text(json.dumps({'files':{'final.json':hashlib.sha256(path.read_bytes()).hexdigest()}}))
             seal=corpus/'candidate.json';seal.write_text(json.dumps({'sources':runner.source_seal()}))
             args=SimpleNamespace(suite='final',corpus=str(corpus),limit=1,long=False,candidate_seal=str(seal))
             self.assertEqual(1,len(runner.load_cases(args,corpus/'run')))
             with self.assertRaisesRegex(ValueError,'consumed'):runner.load_cases(args,corpus/'run2')
+            args.offset=1
+            self.assertEqual(1,len(runner.load_cases(args,corpus/'explicit-next-batch')))
             args.candidate_seal=None
             with self.assertRaisesRegex(ValueError,'seal required'):runner.load_cases(args,corpus/'run3')
 

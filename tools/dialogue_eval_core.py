@@ -206,11 +206,13 @@ def blind_packets(results, *, seed, forbidden_names=()):
     return packets, key, excluded
 
 
-def attribution_score(key, predictions):
+def attribution_score(key, predictions, *, labels=None):
     expected = {r['id']: r['profile'] for r in key}
     if set(predictions) != set(expected):
         raise ValueError('Missing/extra blind judgments')
-    labels = sorted(set(expected.values()))
+    labels = list(labels) if labels is not None else sorted(set(expected.values()))
+    if not set(expected.values()).issubset(labels):
+        raise ValueError('Unknown expected character')
     if any(p not in labels+['unknown'] for p in predictions.values()):
         raise ValueError('Unknown character prediction')
     matrix = {p: dict.fromkeys(labels+['unknown'], 0) for p in labels}

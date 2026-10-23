@@ -20,6 +20,9 @@ from dialogue_eval_scenarios import korean_development
 
 
 def load_cases(args, root):
+    offset=getattr(args,'offset',0)
+    if not isinstance(offset,int) or offset<0:
+        raise ValueError('Explicit nonnegative batch offset required')
     if args.suite=='campaign':
         from types import SimpleNamespace
         base=vars(args).copy()
@@ -29,7 +32,10 @@ def load_cases(args, root):
         selected={'ko-worry','ko-roast','ko-no-record','ko-fiction','ko-turn-a'}
         return [r for r in korean_development() if r['id'] in selected]+standard+final
     if args.suite == 'korean':
-        return korean_development()[:args.limit]
+        selected=korean_development()[offset:offset+args.limit]
+        if not selected:
+            raise ValueError('Batch has no cases')
+        return selected
     corpus = private_root(args.corpus)
     seal = json.loads((corpus/'seal.json').read_text(encoding='utf-8'))
     path = corpus/f'{args.suite}.json'
@@ -40,7 +46,9 @@ def load_cases(args, root):
     rows.sort(key=lambda r: digest(r['id']))
     if args.long:
         rows=[r for r in rows if r.get('rollout_users')]
-    selected=rows[:args.limit]
+    selected=rows[offset:offset+args.limit]
+    if not selected:
+        raise ValueError('Batch has no cases')
     if args.suite == 'final':
         if not args.candidate_seal:
             raise ValueError('Frozen candidate seal required for final')
@@ -198,6 +206,7 @@ if __name__=='__main__':
     parser.add_argument('--output',required=True)
     parser.add_argument('--model',required=True)
     parser.add_argument('--limit',type=int,default=8)
+    parser.add_argument('--offset',type=int,default=0)
     parser.add_argument('--max-seconds',type=int,default=1800)
     parser.add_argument('--long',action='store_true')
     parser.add_argument('--judge-limit',type=int,choices=range(0,33),default=0)

@@ -1,5 +1,13 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## 2026-10-24 평가 도구 마감 — 실행 소스 유지
+
+마감: 전체714검사 OK217.451초, 마지막 국소 빈 배치 거부12검사 OK0.083초. 운영4파일 hash 동일, 공개 src/docs155+README/기본 프로필·Portable manifest21,559 대조/두 VBS check PASS. 실행 코드/운영 자료/실제 Discord 변경0회. [마감 경과](WORKLOG.md).
+
+실행 Python92파일이 시작 소스/기존 Portable 바이트·manifest hash와 일치한다. 출처 계약은 운영에 미채택이므로 전체 런타임 재빌드·추가 번들 GPU 로딩은 하지 않는다. 공개 문서/README와 해당 manifest 항목만 갱신한다. 개발용 평가 tools/원문/NC 자료/전체 출력/HTML/정답표/운영 설정·DB/모델·LoRA는 번들에 넣지 않는다.
+
+두 VBS `/check` 조기 종료 PASS는 경로 확인이며 GUI/모델/Discord 시작은0회다. 새 UI 렌더/사람 조작/다른 Windows를 재검한 것으로 표시하지 않는다. 최종 공개 파일 대조는 WORKLOG와 [평가 QA](DIALOGUE-EVALUATION-QA.md)를 따른다.
+
 ## 2026-10-24 카드 공개 파일 및 번들 검사
 
 공개 src/docs/README/기본 프로필·manifest만 갱신하며 전체 런타임 재빌드는 하지 않는다. 번들 Python·별도 데이터 홈·운영 GPU lease로 새 카드 실제 생성→SDK mock3/3·4송신을 확인했다. 모델 준비68.235초, 해제 후 allocated1KiB/reserved2MiB다. 원본 발언 전달의 마지막 수정은 이후 CPU/Runtime 검사와 전체702회귀로 검증했으므로 GPU 재검과 구분한다. 최종 파일/번들 표적/보존 수치는 [CHARACTER-CARD-QA](CHARACTER-CARD-QA.md) 마감을 따른다. 실제 Discord·다른 Windows·장시간·사람 조작을 PASS 처리하지 않는다.
