@@ -405,3 +405,8 @@ Windows 화면 자동 조작은 도구가 물리 Escape 중단을 두 차례 보
 ### 추가 — 네트워크 없는 SDK 통합 검사
 
 실제 discord.py2.7.1 객체와 운영 on_message/Runtime/Transport를 사용하고 HTTP 경계만 메모리로 대체한 test_discord_simulator.py 4검사를 추가했다. 원본 reply/nonce/멘션 억제, 채널·봇 차단, 스레드 권한·Unicode/기본 스티커, NotFound/Forbidden을 검사한다. HTTPClient.request는 실패하도록 차단했으며 로그인·토큰·슬래시 sync·실제 송신은 없다. 제한 환경의 Windows 비동기 루프 대기 시도는 중단·기록했고 정상 실행은 sdk-simulator-2.log의 4검사 OK0.372초다. 외부 Discord rate-limit/서버 전달은 모의 검증과 구분한다.
+## 2026-10-24 모델/시스템 진단 — BLOCKED 유지
+
+일반 기억의 생성 중 삭제·정정·철회가 최종 송신에 반영되지 않던 결함을 수정했다. 이전 Runtime 재현3실패→수정 표적 통과 및 실제 Gemma 생성 후 철회의 SDK mock 송신0회가 근거다. 전체721검사와 이후 추가 표적 범위를 구분한다. 모델 비교·후보 기각·계측 오류·사람 평가/다른 PC/장시간 미검증은 [진단 QA](MODEL-SYSTEM-DIAGNOSIS-QA.md)에 남긴다. 기존 `/동의` 비표시와 사회적 오류·인격 차별성/사실성 차단은 해제하지 않는다. 실제 Discord 인증/조회/송신/명령 변경0회다.
+
+최종 시간 경계 추가 후 **전체726 OK225.592초**, 번들9 OK1.037초·공개156파일/manifest21,560/두 VBS check·운영4파일 hash 보존. 이 자동 성공을 인격/사실성·실제 Discord·다른 Windows의 PASS로 확대하지 않는다.

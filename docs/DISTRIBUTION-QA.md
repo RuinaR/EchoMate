@@ -214,3 +214,6 @@ Portable 첫 실행은 라이브러리 내부 models 폴더를 사용자 모델 
 로딩 중 취소는26.063초 후 정리됐고 GPU allocated1KiB/reserved2MiB였다. 안전한 로딩 구간을 즉시 물리 중단하지 않는다. Tk 검사 펌프 최대 간격1.937초가 있어 완전 무정지 UI라고 인증하지 않는다. 같은 호스트의 격리 저장소 검증이며 다른 Windows/깨끗한 VM/native 사용자 조작은 NOT VERIFIED다.
 
 공개 Portable은24,767파일·4.590GiB이며 모델·개인 DB·토큰은 제외한다. 최종 source/docs 바이트 및 전체 파일 manifest는 별도 package audit로 대조한다. 소스와 Portable의 일반/오프라인 VBS 4진입점 /check는 앱/봇을 시작하지 않고 통과했다. 공개 다운로드 릴리즈는 만들지 않고 후보를 로컬에만 둔다.
+## 2026-10-24 모델/시스템 진단 후 증분 반영
+
+운영 기본은 Gemma이고 Qwen 평가 사본·평가 데이터/출력·tools·운영 DB/설정/토큰은 Portable에 넣지 않는다. 공개 런타임3모듈과 문서만 반영하며 기존 Python/의존성 전체 재빌드는 하지 않는다. 번들 Python의 별도 CWD/local_data에서 기억·동의·송신32검사 OK13.400초. 첫 시도의 경로 불일치25오류는 보호 규칙을 완화하지 않고 격리 경로를 바로잡아 해결했다. 실제 GUI/GPU 미리보기·다른 Windows·사용자 조작은 이번에 재검하지 않았다. 최종 공개 파일/manifest/VBS 대조는 [진단 마감](MODEL-SYSTEM-DIAGNOSIS-QA.md)을 따른다.

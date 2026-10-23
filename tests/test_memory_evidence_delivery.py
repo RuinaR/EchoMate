@@ -32,6 +32,13 @@ class EvidenceSnapshot(unittest.TestCase):
         self.assertFalse(self.valid())
         self.rows=self.store.memories(2,4,3);self.assertTrue(self.valid())
         self.store.delete_source(2,self.rows[0]['source']);self.assertFalse(self.valid())
+    def test_retrieval_time_boundary_remains_valid_at_delivery(self):
+        with self.store.db() as db:db.execute("UPDATE memories SET kind='plan',event_end_at=1001 WHERE memory_id=?",(self.key,))
+        self.rows=self.store.memories(2,4,3);self.assertTrue(self.valid())
+        self.now=1002;self.assertFalse(self.valid());self.now=1000
+        with self.store.db() as db:db.execute("UPDATE memories SET kind='goal',last_confirmed_at=? WHERE memory_id=?",(1000-90*86400+1,self.key))
+        self.rows=self.store.memories(2,4,3);self.assertTrue(self.valid())
+        self.now=1002;self.assertFalse(self.valid())
 
 
 class RuntimeEvidence(unittest.IsolatedAsyncioTestCase):

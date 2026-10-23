@@ -253,6 +253,8 @@ COMMIT;
                     (expected.get('memory_id'),*scope)).fetchone()
                 if not current or dict(current)!=expected or current['status']!='active':return False
                 if current['expires_at'] is not None and current['expires_at']<=now:return False
+                if current['kind']=='plan' and (current['event_end_at'] is None or current['event_end_at']<=now):return False
+                if current['kind']=='goal' and (current['last_confirmed_at'] is None or current['last_confirmed_at']<=now-90*86400):return False
                 if db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(scope[0],current['source'])).fetchone():return False
         return True
 
