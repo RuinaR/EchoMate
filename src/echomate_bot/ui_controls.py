@@ -7,6 +7,33 @@ from tkinter import font as tkfont
 PANEL='#121b28';CARD='#182333';FG='#e9eff9';MUTED='#94a4bb';ACCENT='#9b91ff'
 
 
+class MultilineControl(tk.Frame):
+    """Bounded draft text with local scroll; the existing form owns saving."""
+    def __init__(self,parent,variable,width=535,max_chars=800):
+        super().__init__(parent,bg=CARD,width=width,height=110)
+        self.variable=variable;self.max_chars=max_chars;self.updating=False
+        self.text=tk.Text(self,height=4,wrap='word',bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',10),highlightthickness=1,highlightbackground='#344259',highlightcolor=ACCENT,undo=True)
+        scroll=tk.Scrollbar(self,command=self.text.yview);scroll.pack(side='right',fill='y');self.text.pack(fill='both',expand=True);self.text.configure(yscrollcommand=scroll.set)
+        self.text.insert('1.0',variable.get());self.text.edit_modified(False)
+        self.text.bind('<<Modified>>',self.changed);self.trace=variable.trace_add('write',self.sync)
+        self.text.bind('<FocusIn>',lambda e:self.event_generate('<FocusIn>'))
+        self.bind('<Destroy>',self.cleanup,add='+')
+    def changed(self,event=None):
+        if self.text.edit_modified() and not self.updating:
+            self.updating=True;self.variable.set(self.text.get('1.0','end-1c'));self.updating=False
+        self.text.edit_modified(False)
+    def sync(self,*args):
+        if self.updating:return
+        self.updating=True;self.text.delete('1.0','end');self.text.insert('1.0',self.variable.get());self.text.edit_modified(False);self.updating=False
+    def validate(self):
+        from .character_card import prose
+        prose(self.variable.get(),self.max_chars)
+    def set_enabled(self,value):self.text.configure(state='normal' if value else 'disabled')
+    def focus_set(self):self.text.focus_set()
+    def cleanup(self,event):
+        if event.widget is self:self.variable.trace_remove('write',self.trace)
+
+
 class CanvasFeedback:
     """Repaint only interactive items, never a page, database or model."""
     def __init__(self,canvas,keyboard=False,activate_on_release=False):

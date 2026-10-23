@@ -193,14 +193,14 @@ class LocalBackend:
             torch.cuda.empty_cache()
             result=check_resources();result['allocator_cache_reclaimed']=True;return result
 
-    async def _job(self, messages, images=None, budget=384, weight="base",choices=None):
+    async def _job(self, messages, images=None, budget=384, weight="base",choices=None,persona=None):
         metadata=request_context.get() or {}
         request=Request(**metadata)
         queued=time.monotonic()
-        return await self.scheduler.submit(lambda:self._run_job(messages,images,budget,weight,choices,queued_at=queued),request,
+        return await self.scheduler.submit(lambda:self._run_job(messages,images,budget,weight,choices,queued_at=queued,**({"persona":persona} if persona is not None else {})),request,
                                           wait_for_capacity=bool(metadata))
 
-    async def _run_job(self, messages, images=None, budget=384, weight="base",choices=None,queued_at=None):
+    async def _run_job(self, messages, images=None, budget=384, weight="base",choices=None,queued_at=None,persona=None):
         if self.failed:raise RuntimeError("Inference disabled after device failure; restart required")
         self._physical_pending+=1;stop=threading.Event()
         loop=asyncio.get_running_loop()
@@ -208,7 +208,7 @@ class LocalBackend:
         def work():
             entered=time.monotonic();before=self.metrics[-1] if self.metrics else None;outcome='failed'
             try:
-                result=self._generate(messages,images,budget,weight,stop,choices) if choices is not None else self._generate(messages,images,budget,weight,stop)
+                result=(self._generate(messages,images,budget,weight,stop,choices,persona=persona) if persona is not None else self._generate(messages,images,budget,weight,stop,choices) if choices is not None else self._generate(messages,images,budget,weight,stop))
                 outcome='completed';return result
             except InterruptedError:
                 outcome='cancelled';raise
@@ -237,7 +237,7 @@ class LocalBackend:
                 except Exception:break
             raise
 
-    def _generate(self,messages,images,budget,weight,stop,choices=None):
+    def _generate(self,messages,images,budget,weight,stop,choices=None,persona=None):
         if stop.is_set():raise InterruptedError("Cancelled queued inference")
         import torch
         from transformers import StoppingCriteria, StoppingCriteriaList
@@ -256,6 +256,10 @@ class LocalBackend:
             except RuntimeError:self.failed=True;raise
             prepared=time.monotonic()
             proc=self.processor
+            card_metric={}
+            if persona is not None:
+                from .character_card import augment
+                messages,card_metric=augment(messages,persona[0],persona[1],proc.tokenizer)
             if images:
                 # All bytes were decoded locally; processor never receives remote URLs.
                 messages=[dict(role=m["role"],content=m["content"]) for m in messages]
@@ -296,6 +300,7 @@ class LocalBackend:
                           ttft_seconds=(cancel.first_token-started) if cancel.first_token else None,
                           tokens_per_second=len(ids)/max(time.monotonic()-started,1e-9),
                           peak_reserved_mib=round(torch.cuda.max_memory_reserved()/1048576,1))
+            metric["character_card"]=card_metric
             self.metrics.append(metric);self.metrics=self.metrics[-200:]
             if not metric["ended"]:raise ValueError("Incomplete model output")
             return visible(proc.tokenizer.decode(ids,skip_special_tokens=False))
@@ -303,9 +308,12 @@ class LocalBackend:
             self.failed=True;torch.cuda.empty_cache();raise RuntimeError("GPU allocation failure; inference disabled") from None
 
     async def text(self,context,cfg):
+        from .character_profiles import applied_profile
+        profile=applied_profile(cfg)
+        persona=(profile,cfg.get("_familiarity")) if any(profile["card"][k] for k in profile["card"] if k not in ("version","edge")) or profile["card"]["edge"]!="off" else None
         messages=[dict(role='system',content=instruction(cfg)),*context]
         for attempt in range(2):
-            try:result=await self._job(messages,weight=cfg['model'],budget=768)
+            try:result=await self._job(messages,weight=cfg['model'],budget=768,**({'persona':persona} if persona is not None else {}))
             except ValueError as exc:
                 if str(exc)!='Unexpected output channel' or attempt:raise
                 correction=' 분석·채널 표기 없이 사용자에게 보낼 자연스러운 한국어 답변만 새로 작성해.'

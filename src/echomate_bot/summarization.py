@@ -32,11 +32,16 @@ class Summarizer:
         # Don't retain sensitive text in a summary even with consent.
         allowed={t.author_id for t in turns}
         def suitable(t):
+            # Generated roleplay is not evidence about the real user's life.
+            if t.is_bot and t.context_metadata:
+                try:
+                    if json.loads(t.context_metadata).get('fictional_character'):return False
+                except (ValueError,TypeError,AttributeError):return False
             text=re.sub(r'<@!?(\d+)>',lambda m:'' if m[1] in allowed else m[0],t.content)
             text=re.sub(r'https?://[^\s]+','',text)
             return 0<len(t.content)<=4000 and not SENSITIVE.search(text) and not re.search(r'<@|@everyone|@here',text)
         selected=[t for t in turns[-40:] if suitable(t) and not t.message_id.startswith('reaction:')]
-        if len(selected)<2 or not any(t.is_bot for t in selected):return None
+        if len(selected)<2 or not any(t.is_bot and not t.message_id.startswith('reaction:') for t in turns):return None
         humans={t.author_id for t in turns if not t.is_bot}
         versions=await asyncio.to_thread(self.store.digest_consent,guild,humans)
         if persist and not versions:return None

@@ -1,0 +1,40 @@
+# Character Card v2 · 가상 배경과 대화 행동
+
+## 2026-10-24 범위·실행 계획
+
+시작 main/로컬·원격 `ed17a91` clean. 이전688검사는 출발 근거이며 이번 소스의 성공으로 재사용하지 않는다. 단계는 ①공개 자료/기존 실패 감사 ②카드·선택·예산·편집 구현/표적검사 ③단일 모델 baseline/신규/다중 턴 평가 ④원인 있는 개선 또는 한계 기록 ⑤전체 회귀/Portable/보존/공개 파일 마감이다. 실제 Discord는 인증 조회를 포함해0회로 유지한다. 다른 앱/게임 프로세스·화면을 조사하지 않고 집계 자원만 확인한다.
+
+## 조사와 선택
+
+- [SillyTavern Character Design](https://docs.sillytavern.app/usage/core-concepts/characterdesign/)은 프로필·배경·예시와 문맥 비용을 설명한다. [World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)와 [공개 구현](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js)의 조건 활성화/토큰 상한을 참고했다. EchoMate는 명시 키워드와 상한만 자체 구현하고 재귀 활성화·확률 선택은 채택하지 않았다.
+- [Author's Note](https://docs.sillytavern.app/usage/core-concepts/authors-note/)의 배치/빈도 개념을 검토했다. 사용자 자유 텍스트를 대화 끝의 높은 권한 지시로 주입하는 기능은 도입하지 않는다.
+- [RisuAI Lorebook](https://github.com/kwaroran/RisuAI/wiki/Lorebook), [저장소](https://github.com/kwaroran/RisuAI)를 검토했다. 사용자 자료와 세계관을 한 곳에 넣는 방식을 그대로 따르지 않는다. SillyTavern은 [AGPL3](https://github.com/SillyTavern/SillyTavern/blob/release/LICENSE), RisuAI는 [GPL3](https://github.com/kwaroran/Risuai/blob/main/LICENSE)다. 코드를 복사하거나 의존성으로 번들하지 않았고 본 구현/합성 카드는 새로 작성했다.
+- [Character.AI Definition](https://support.character.ai/hc/en-us/articles/50609183646875-5-Character-Definition)의 행동·정서·예시 표현, [공개 기억 안내](https://blog.character.ai/helping-characters-remember-what-matters-most/)를 참고했다. 내부 검색기/모델/학습 구조는 확인할 수 없으므로 추정하지 않는다.
+- [Crack 공식 프롬프트 안내](https://help.crack.wrtn.ai/character/prompt)는 시스템/캐릭터/기능 자료, 조건부 키워드북, 과거 대화 요약을 설명한다. [스토리 설정](https://help.crack.wrtn.ai/guide/user/tutorial/story/2)과 [캐릭터 안내](https://help.crack.wrtn.ai/guide/user/character/what-is-character)를 함께 확인했다. 내부 엔진이나 동일 품질 재현은 공개 설명으로 알 수 없다.
+- [PersonaChat](https://arxiv.org/abs/1801.07243)은 프로필 조건 대화를, [RoleLLM](https://arxiv.org/abs/2310.00746)은 역할 지식/스타일과 학습 단계를 다룬다. 본 모델에서의 성능 보장이 아니다. [RMTBench](https://arxiv.org/abs/2507.20352)를 참고해 단발 문장 차이뿐 아니라 사용자의 목적·정정·불편·여러 턴을 평가한다.
+- [Generative Agents](https://arxiv.org/abs/2304.03442)와 [RAG](https://arxiv.org/abs/2005.11401)의 관련 자료 선택 원칙은 참고하되 자동 반성/계획 모델 호출이나 새 임베딩 모델은 추가하지 않는다. 명시 키워드는 가볍고 설명 가능하지만 의역 검색에 약하다는 한계가 있다.
+- [QLoRA](https://arxiv.org/abs/2305.14314)의 양자화 학습은 추론 메모리와 다르다. 현재 [공식 Gemma 4 12B 카드](https://huggingface.co/google/gemma-4-12B-it)는 Apache2.0을 표시한다. 이전 세대 Gemma 약관과 혼동하지 않는다. 16GB에서의 학습 activations/optimizer/Windows 호환과 충분한 잔여 VRAM은 검증하지 않았으므로 학습·LoRA 다운로드/운영 적용은 하지 않는다. 카드 선택이 먼저이며 후속 학습을 자동으로 우위라고 보지 않는다.
+
+## 데이터와 권한 계약
+
+외부 프로필 container version2에 optional `card`를 추가하며 그 카드 형식은2다. 기존 v1/v2의 카드 없는 프로필은 원본 서명 검증 후 메모리에서 보완한다. 원본을 자동 덮어쓰지 않는다. 이 명칭은 EchoMate 자체 JSON 계약이며 SillyTavern/RisuAI PNG·외부 카드 포맷의 완전한 상호 운용을 뜻하지 않는다.
+
+카드는 나이/자기 표현/가상 배경/판단 기준/관계/두려움/갈등/생각을 바꾸는 조건/모순/유머/질문/친밀 표현/어휘/시작과 마무리/싫어하는 것, 거친 표현 범위, 세계관 최대16항목, 예시 최대12항목이다. 각 문자열·키워드·항목 ID·크기·필드를 검증한다. 저장소4MiB/프로필 가져오기128KiB/카드96KiB로 제한하며 기존 작은 프로필도 같은 경로로 읽는다. 내보내기에는 가상 설정 전체가 포함된다.
+
+세계관은 공개/비공개·활성·키워드(any/all)·중요도·ID를 갖고 예시는 활성·키워드·중요도·관계 조건을 갖는다. 비공개 설정은 **모델 입력에서 제외**하지만 암호화 비밀 저장소를 의미하지 않는다. 실제 토큰·개인 기억은 카드에 넣지 않는다. `/성격`은 owner-only ephemeral을 유지하고 주요 판단/표현만 표시하며 배경 전체·비공개 항목·개인 DB를 공개하지 않는다.
+
+현재 실제 user 발언과 직전 두 user 발언으로 관련 자료를 고르고, assistant 출력이나 세계관 자체로 재귀 검색하지 않는다. 중요도는 관련성 다음 순위다. 예시는 최근8메시지에 같은 답변이 이미 있으면 제외하고, 친숙한 관계 예시는 실제 동의된 친밀도>=70에서만 선택한다. 친밀도는 장난 동의나 기억 접근 권한이 아니다. 최대 세계관3/예시2이며 실제 프롬프트 예산에서 더 적어질 수 있다.
+
+기본 안전/캐릭터 프롬프트와 원문 대화는 유지한다. GPU Worker 안에서 실제 chat template의 토큰 수로 **추가900토큰·전체6000토큰**을 확인한다. 넘치면 선택 예시→세계관→부가 설정을 줄이고, 최소 자료도 안 맞으면 추가 카드를 넣지 않는다. 원문을 자르거나 안전 지침을 제거하지 않는다. 기본 입력 자체의 초과는 기존처럼 안전하게 실패한다. 카드가 없는 기존 프로필은 새 tokenization 경로를 실행하지 않는다. 판단·응답 자격·reply·권한·GPU 큐를 변경하지 않고 text 생성에만 추가 자료를 제공한다.
+
+가상 캐릭터 출력은 RAM Turn에 출처 표식을 붙인다. 지속 요약은 그 bot 출력을 실제 사용자 사실의 근거로 저장하지 않으며 사용자 원본 중심으로 계속 동작한다. 그 결과 카드 대화의 요약에는 봇의 기술 답변도 빠질 수 있다. 새 카드/예시/Lorebook 데이터 자체는 CompanionStore·관계·예약에 넣지 않는다. 기존 본인/서버/사용자 동의와 철회·삭제 경계는 유지한다.
+
+## 거친 표현과 이전 실패 재검토
+
+기본은 보수적, 선택 옵션은 까칠한 직설/상호 장난이다. 상대가 현재 가벼운 놀림을 요청한 경우 상황·실수에 대한 짧은 독설은 가능하다. 친밀도만으로 허용하지 않으며 불편/중지·위기 표현은 우선한다. 보호 특성 혐오·위협·지속 괴롭힘·불편 후 공격은 허용하지 않는다. 성인 유머/연령/권한을 바꾸지 않고 반복 자모 출력 제한도 유지한다. 현재 감지에는 한국어 표현 기반 보수적 한계가 있으므로 완전한 상호성 판단이라고 주장하지 않는다.
+
+이전 예시 후보의 문제 출력은 분석형/보수적 설정에서 나온 지능 비하였고, 당시 고정 정책과도 맞지 않았다. 최신 요청은 거친 단어 자체를 FAIL로 보지 않도록 평가를 수정하지만 과거 후보의 품질 성공을 소급 선언하지 않는다. 새 평가는 설정·현재 요청·중지·자연스러움을 함께 본다.
+
+## 단계1 근거
+
+카드/기존 프로필/SDK 명령/미리보기 표적33검사 OK3.168초. v2 원본 비변경·큰 카드 왕복·키워드/비공개/반복/관계·예산·긴 텍스트 저장/취소/삭제·오래된 저장 차단·가상 bot 답변 요약 제외를 확인했다. 실제 GPU 비교는 별도 단계이며 이 시점에 품질 PASS를 선언하지 않는다. 비공개 protocol/rubric/기준 프롬프트/출력/메모리 계측은 `local_data/card-20261024/`에만 저장한다.

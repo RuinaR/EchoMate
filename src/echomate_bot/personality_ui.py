@@ -13,6 +13,8 @@ def personality_embed(cfg):
     embed=discord.Embed(title='🎭 현재 적용된 캐릭터',description=display(p['introduction']),colour=0x9b91ff)
     embed.add_field(name='캐릭터',value=display(p['name']),inline=False)
     embed.add_field(name='핵심 접근 방식',value=APPROACHES[p['approach']],inline=False)
+    from .character_card import EDGES
+    embed.add_field(name='카드의 판단·표현',value=display(p['card']['priorities'] or '별도 판단 기준 없음')+'\n표현 범위: '+EDGES[p['card']['edge']],inline=False)
     strategies={'balanced':'상황을 짚고 필요한 관점을 제안해.','supportive':'공감과 선택권을 먼저, 부담을 줄이는 관점을 제안해.','playful':'가벼운 비유와 놀이 관점으로 반응해. 심각한 고통에는 장난을 멈춰.','analytical':'원인·조건을 구분하고 다음 행동을 제안해.','dry':'결론과 현실적인 선택부터, 사람을 비웃지 않는 건조한 유머를 써.'}
     embed.add_field(name='상황별 반응',value=strategies[p['approach']],inline=False)
     embed.add_field(name='말투·길이',value=('반말' if p['speech']=='casual' else '존댓말')+' · '+('짧게' if p['length']=='short' else '상황에 맞게')+' · 설명 '+{'brief':'간단히','balanced':'균형 있게','detailed':'자세히'}[p['detail']],inline=False)

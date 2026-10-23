@@ -1413,6 +1413,9 @@ class Runtime:
                     self.pending_mentions.pop(self.key(event),None)
                     bot_content=action.text
                     output_metadata={}
+                    card=cfg.get('character_profile',{}).get('card',{})
+                    if any(v for k,v in card.items() if k not in ('version','edge')):
+                        output_metadata['fictional_character']=True
                     if action.asset:
                         description=latest_catalog.get('stickers' if action.kind==Kind.STICKER else 'reactions',{}).get(action.asset,'')
                         if isinstance(description,dict):

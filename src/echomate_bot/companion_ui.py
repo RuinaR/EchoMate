@@ -48,7 +48,7 @@ class CompanionViews:
 
     def form(self,title,fields,submit,help_text='',read_only=False,guard_context=False,controls=None,preview=None):
         from .desktop_ui import PANEL,CARD,FG,MUTED,ACCENT,BG,rounded
-        from .ui_controls import RangeControl,SegmentControl,CanvasFeedback
+        from .ui_controls import RangeControl,SegmentControl,CanvasFeedback,MultilineControl
         from tkinter import font as tkfont
         dialog=tk.Toplevel(self.root);dialog.title(title);dialog.configure(bg=PANEL);dialog.transient(self.root)
         # A modal can outlive an async refresh or a programmatic selection
@@ -73,6 +73,8 @@ class CompanionViews:
                 entry=RangeControl(canvas,var,width=535,**{k:v for k,v in spec.items() if k not in ('kind','help')});typed[key]=entry
             elif spec.get('kind')=='choice':
                 entry=SegmentControl(canvas,var,spec['choices'],width=535);typed[key]=entry
+            elif spec.get('kind')=='multiline':
+                entry=MultilineControl(canvas,var,max_chars=spec['max_chars']);typed[key]=entry
             else:
                 entry=tk.Entry(canvas,textvariable=var,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=fonts[2],readonlybackground=CARD,
                                highlightthickness=1,highlightbackground='#344259',highlightcolor=ACCENT)

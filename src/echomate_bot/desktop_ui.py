@@ -443,6 +443,8 @@ class DesktopApp(CompanionViews):
         self.button(824,583,max(160,w-850),34,'캐릭터 프리셋',self.preset_picker)
         self.toggle(250,638,'성인 유머 · 연령 제한 채널에서만',cfg['adult_humor'],lambda:self.set_value('adult_humor',not cfg['adult_humor']))
         self.button(686,634,128,30,'표현 고급 설정',self.advanced_profile)
+        from .card_ui import edit_card
+        self.button(824,634,max(160,w-850),30,'배경·세계관',lambda:edit_card(self))
         self.text(250,671,'기분·강도는 즉시 저장해요. 팝업은 ‘적용’으로 저장해요.',9,MUTED,width=w-290)
 
     def draw_setup(self,w,h,cfg):

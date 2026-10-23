@@ -12,6 +12,9 @@ DEFAULT_PROFILE=dict(version=1,name='EchoMate',introduction='편안하게 이야
 SHARED_FIELDS=('warmth','cuteness','playfulness','gender','mood','activity')
 LEGACY_KEYS=set(DEFAULT_PROFILE)
 DEFAULT_PROFILE.update(version=2,approach='balanced',curiosity=40,skepticism=35,tastes='',values='',habits='')
+PROFILE_V2_KEYS=set(DEFAULT_PROFILE)
+from .character_card import empty_card,validate_card
+DEFAULT_PROFILE['card']=empty_card()
 APPROACHES={'balanced':'균형 있게','supportive':'공감부터','playful':'장난과 활기','analytical':'분석부터','dry':'건조한 직설'}
 
 def applied_profile(cfg):
@@ -21,16 +24,20 @@ def applied_profile(cfg):
 
 def presets():
     """Editable data copies, never models or implicit settings writes."""
-    return {
+    result={
         'supportive':dict(DEFAULT_PROFILE,name='다정한 쉼표',approach='supportive',warmth=95,calmness=90,energy=25,humor=10,cuteness=10,playfulness=5,honesty=55,curiosity=35,skepticism=15,values='상대의 부담을 줄이고 작은 선택을 존중함'),
         'playful':dict(DEFAULT_PROFILE,name='장난스런 반짝',approach='playful',warmth=70,calmness=20,energy=95,humor=95,cuteness=75,playfulness=95,honesty=60,curiosity=85,skepticism=25,values='함께 재미있는 관점을 발견함'),
         'analytical':dict(DEFAULT_PROFILE,name='차분한 논리',approach='analytical',warmth=15,calmness=95,energy=20,humor=0,cuteness=0,playfulness=0,honesty=95,curiosity=60,skepticism=90,detail='detailed',values='원인과 근거를 구분하고 실행 가능한 선택을 중시함'),
         'dry':dict(DEFAULT_PROFILE,name='담백한 시선',approach='dry',warmth=20,calmness=75,energy=35,humor=75,cuteness=0,playfulness=40,honesty=100,curiosity=15,skepticism=75,values='허세보다 실질을 중시함',habits='상황의 모순을 짧게 짚되 사람을 비웃지 않음')}
+    from .character_presets import decorate
+    return decorate(result)
 
 def validate_profile(value):
     if not isinstance(value,dict) or type(value.get('version')) is not int:raise ValueError('지원하지 않는 캐릭터 형식이에요')
     if value['version']==1 and set(value)==LEGACY_KEYS:value=dict(DEFAULT_PROFILE,**value,approach='balanced',curiosity=40,skepticism=35,tastes='',values='',habits='');value['version']=2
+    if value['version']==2 and set(value)==PROFILE_V2_KEYS:value=dict(value,card=empty_card())
     if value['version']!=2 or set(value)!=set(DEFAULT_PROFILE):raise ValueError('지원하지 않는 캐릭터 형식이에요')
+    validate_card(value['card'])
     for key,limit in (('name',32),('introduction',240),('address_style',32)):
         if not isinstance(value[key],str) or not 1<=len(value[key])<=limit or any(ord(c)<32 for c in value[key]) or re.search(r'<@|https?://',value[key]):raise ValueError('캐릭터 이름과 소개를 확인해 주세요')
     from .naming import validate_name
@@ -63,7 +70,7 @@ def compile_profile(value):
             'supportive':'반응의 중심은 동행과 지지야. 고민에는 감정을 구체적으로 짚고 선택권을 돌려줘. 해결책을 나열하기 전에 부담을 덜어주는 한 가지 관점을 줘. 의견 충돌에는 상대의 이유를 먼저 인정한 뒤 네 의견을 말해.',
             'playful':'반응의 중심은 함께 노는 관점이야. 일상의 난관에는 가벼운 비유나 뜻밖의 관점으로 긴장을 풀고 작은 도전을 제안해. 정답 나열보다 상대와 주고받을 소재를 만들어. 심각한 고통/불편에는 장난을 멈추고 직접 도와.',
             'analytical':'반응의 중심은 원인과 선택이야. 고민에는 조건이나 원인을 한 가지 구분하고 실행 가능한 다음 행동을 제시해. 의견 충돌에는 전제와 근거를 나눠 말해. 막연한 위로로 설명을 대신하지 마. 감정을 무시하거나 진단하지 마.',
-            'dry':'반응의 중심은 꾸밈없는 현실 점검이야. 요점을 먼저 직설적으로 말하고 상황의 허점/모순을 짧게 짚어. 허세를 걷어내는 건조한 유머는 가능하되 사람을 비웃지 마. 실제 도움이 되는 선택 하나로 끝내. 고통에는 냉소를 멈춰.'}[p['approach']],
+            'dry':'반응의 중심은 꾸밈없는 현실 점검이야. 요점을 먼저 직설적으로 말하고 상황의 허점/모순을 짧게 짚어. 허세를 걷어내는 건조한 유머와 비판은 표현 설정과 상대의 의사를 따라. 실제 도움이 되는 선택 하나로 끝내. 고통에는 냉소를 멈춰.'}[p['approach']],
            ('상대의 부담과 감정을 먼저 짚되 자동 위로 문구를 반복하지 마.' if p['warmth']>=85 else '공감은 짧게 하고 실제 내용이나 관점부터 제시해.' if p['warmth']<40 else '상대의 상황을 인정하고 내용으로 이어가.'),
            ('답이 가능하면 묻지 말고 끝내.' if p['curiosity']<40 else '필요한 조건이 빠졌을 때만 구체적으로 한 가지 물어.' if p['curiosity']<75 else '잡담에서는 상대의 이유나 새로운 관점을 묻는 한 가지 질문을 골라. 매 답변에 질문하지는 마.'),
            ('상대의 해석을 가능한 출발점으로 받아 줘. 사실 확인은 생략하지 마.' if p['skepticism']<40 else '전제를 확인하고 단정과 가능성을 구분해.' if p['skepticism']<75 else '단정의 숨은 전제나 다른 설명을 한 가지 짚어. 사람의 동기를 근거 없이 의심하지 마.'),
@@ -74,11 +81,11 @@ def compile_profile(value):
            ('감탄사와 느낌표를 덧붙이지 말고 담백하게 말해.','감탄은 절제하고 담백하게 말해.','반가운 소식에는 짧은 감탄을 드물게 써.','상황에 맞는 감탄을 드러내되 남발하지 마.','기쁜 반응은 짧은 감탄으로 또렷하게 드러내. 느낌표를 연속해서 쓰지 마.')[expression_level(p['exclamation'])],
            ('농담을 먼저 만들지 말고 상대의 장난은 편안하게 받아 줘.','상대가 농담할 때만 짧게 받아 줘.','잡담에서 어울릴 때 가벼운 장난을 받아 줘.','분위기에 맞을 때 먼저 가벼운 장난을 제안할 수 있어.','놀이와 농담 요청에는 재치 있게 응수해. 매 문장을 농담으로 바꾸지 마.')[expression_level(p['humor'])],
            ('반응에 생동감을 담되 공격하지 마.','가볍고 즉흥적인 표현을 허용하되 성급하게 단정하지 마.','차분함과 생동감을 상황에 맞게 조절해.','급한 감탄 없이 생각을 정돈해 말해.','여유 있고 안정적인 끝맺음으로 말하고 자극적인 과장을 피해.')[expression_level(p['calmness'])],
-           ('반대 의견은 완곡하게 전하되 사실과 불확실성을 숨기지 마.','의견은 부드럽게 표현하되 사실을 바꾸지 마.','동의 여부를 명료하게 말하고 이유를 짧게 덧붙여.','불확실성과 반대 의견을 직접적이되 배려하며 말해.','결론과 한계를 먼저 담백하게 밝혀. 사람을 평가하거나 모욕하지 마.')[expression_level(p['honesty'])],
+           ('반대 의견은 완곡하게 전하되 사실과 불확실성을 숨기지 마.','의견은 부드럽게 표현하되 사실을 바꾸지 마.','동의 여부를 명료하게 말하고 이유를 짧게 덧붙여.','불확실성과 반대 의견을 직접적이되 배려하며 말해.','결론과 한계를 먼저 담백하게 밝혀. 비판과 장난의 범위는 표현 설정과 상대의 의사를 따라.')[expression_level(p['honesty'])],
            '잡담은 '+('짧은 반응을 우선해.' if p['length']=='short' else '상황에 맞는 길이로 말해.'),
            {'brief':'설명은 핵심부터 간결하게 하되 필수 단계는 유지해.','balanced':'설명은 결론과 필요한 이유를 충분히 전달해.','detailed':'설명 요청에는 단계와 이유를 자세히 전달하되 반복하지 마.'}[p['detail']],
            ('답변 텍스트에는 이모지를 넣지 마.','답변 텍스트에는 이모지를 거의 사용하지 마.','답변 텍스트에는 어울릴 때 이모지 하나를 드물게 써.','답변 텍스트에는 상황에 맞을 때 이모지 하나를 가끔 써.','밝은 잡담에는 어울리는 이모지 하나를 쓸 수 있어. 기술 설명이나 진지한 상황에는 절제해.')[expression_level(p['emoji'])],
-           '가벼운 비속어는 상황에 대한 감탄으로만, 사람을 공격하지 마.' if p['swearing'] else '비속어를 먼저 사용하지 마.']
+           '가벼운 비속어와 까칠한 장난은 카드 표현 범위와 상대의 의사를 따라. 위협·혐오·불편 후 공격은 하지 마.' if p['swearing'] else '비속어를 먼저 사용하지 마.']
     return ' '.join(lines)
 
 class ProfileStore:
@@ -86,7 +93,7 @@ class ProfileStore:
     def _sign(self,data):return hmac.new(self.key,json.dumps(data,sort_keys=True,ensure_ascii=False).encode(),hashlib.sha256).hexdigest()
     def list(self):
         if not self.path.exists():return {'default':deepcopy(DEFAULT_PROFILE)}
-        if self.path.stat().st_size>1024**2:raise ValueError('프로필 저장소가 너무 커요')
+        if self.path.stat().st_size>4*1024**2:raise ValueError('프로필 저장소가 너무 커요')
         envelope=json.loads(self.path.read_text(encoding='utf-8'));data=envelope['data']
         if not hmac.compare_digest(envelope['signature'],self._sign(data)):raise PermissionError('프로필 서명을 확인할 수 없어요')
         if not isinstance(data,dict) or len(data)>32:raise ValueError('프로필 개수 제한이에요')
@@ -105,7 +112,7 @@ class ProfileStore:
     def import_file(self,actor,key,path):
         if type(actor) is not int or actor!=self.owner:raise PermissionError('소유자만 변경할 수 있어요')
         if key in self.list():raise ValueError('기존 프로필을 덮어쓰지 않아요. 새 프로필로 가져와 주세요')
-        if Path(path).stat().st_size>16384:raise ValueError('프로필 파일이 너무 커요')
+        if Path(path).stat().st_size>131072:raise ValueError('프로필 파일이 너무 커요')
         return self.save(actor,key,validate_profile(json.loads(Path(path).read_text(encoding='utf-8'))))
     def export_file(self,key,path):
         return self.export_value(self.list()[key],path)
@@ -114,7 +121,7 @@ class ProfileStore:
         if Path(path).resolve()==self.path.resolve() or Path(path).name in ('bootstrap.json','settings.json','characters.json'):raise ValueError('운영 설정 파일에는 내보낼 수 없어요')
         if Path(path).suffix.lower()!='.json':raise ValueError('캐릭터 JSON 파일로만 내보낼 수 있어요')
         if Path(path).exists():
-            if Path(path).stat().st_size>16384:raise ValueError('기존 파일을 덮어쓸 수 없어요')
+            if Path(path).stat().st_size>131072:raise ValueError('기존 파일을 덮어쓸 수 없어요')
             try:validate_profile(json.loads(Path(path).read_text(encoding='utf-8')))
             except (ValueError,TypeError,KeyError):raise ValueError('기존 캐릭터 파일이 아닌 자료는 덮어쓰지 않아요') from None
         value=deepcopy(validate_profile(value))

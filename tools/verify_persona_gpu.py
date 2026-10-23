@@ -24,7 +24,7 @@ async def run(args):
     root=private_path(args.output);root.mkdir(parents=True,exist_ok=False)
     protocol=json.loads(private_path(args.protocol).read_text(encoding='utf-8'))
     baseline=json.loads(private_path(args.baseline).read_text(encoding='utf-8'))
-    if not isinstance(protocol,list) or not 1<=len(protocol)<=12:raise ValueError('Bounded protocol required')
+    if not isinstance(protocol,list) or not 1<=len(protocol)<=24:raise ValueError('Bounded protocol required')
     entry=ModelValidator().validate(args.model)
     if not entry.compatible:raise ValueError('Model incompatible')
     health=check_resources()
@@ -50,17 +50,20 @@ async def run(args):
                     for case in protocol:
                         if phase=='baseline' and not case.get('baseline'):continue
                         cfg=deepcopy(DEFAULTS);cfg.update(character_profile=dict(p,name='EchoMate'),**{k:p[k] for k in SHARED_FIELDS})
-                        cfg['mood']=case.get('mood','평온');cfg=effective_character(cfg,case['text']);cfg['_familiarity']=None
+                        cfg['mood']=case.get('mood','평온');cfg=effective_character(cfg,case['text']);cfg['_familiarity']=case.get('familiarity')
+                        if phase=='baseline':
+                            from echomate_bot.character_card import empty_card
+                            cfg['character_profile']['card']=empty_card()
                         context=[]
                         if case.get('follow'):
-                            previous=prior[case['follow']];context=[dict(role='user',content=previous['question']),dict(role='assistant',content=previous['output'])]
+                            previous=prior[case['follow']];context=deepcopy(previous.get('context',[]))+[dict(role='user',content=previous['question']),dict(role='assistant',content=previous['output'])]
                         context.append(dict(role='user',content=case['text']))
                         before=len(backend.metrics);start=time.monotonic()
                         if phase=='baseline':
                             with patch('echomate_bot.inference.instruction',return_value=baseline[key]['instruction']):output=await backend.text(context,cfg)
                             prompt=baseline[key]['instruction']
                         else:output=await backend.text(context,cfg);prompt=instruction(cfg)
-                        result=dict(phase=phase,profile=key,case=case['id'],question=case['text'],output=output,seconds=time.monotonic()-start,
+                        result=dict(context=context[:-1],phase=phase,profile=key,case=case['id'],question=case['text'],output=output,seconds=time.monotonic()-start,
                             metrics=deepcopy(backend.metrics[before:]),system_tokens=len(backend.processor.tokenizer.encode(prompt,add_special_tokens=False)),
                             complete=bool(output.strip()),code=contains_code(output),mood=cfg['mood'])
                         results.append(result);prior[case['id']]=result

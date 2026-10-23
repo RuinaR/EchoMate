@@ -369,6 +369,9 @@ class LocalController:
                 self.phase='정지'
             elif operation=='settings':
                 values=kwargs['values']
+                if 'expected_profile' in kwargs:
+                    from .character_profiles import applied_profile
+                    if applied_profile(self.settings.get())!=kwargs['expected_profile']:raise ValueError('Character changed; reopen editor')
                 allowed={'enabled','text','reactions','vision','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','adult_humor','character_profile','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','command_sync_pending','web_search','summaries_auto'}
                 if set(values)-allowed:raise ValueError('Unknown GUI setting')
                 from .settings import validate
