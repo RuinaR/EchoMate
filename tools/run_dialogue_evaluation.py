@@ -9,6 +9,7 @@ import asyncio
 from copy import deepcopy
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 import time
 from unittest.mock import patch
@@ -79,6 +80,8 @@ async def run(args):
     root=private_root(args.output);root.mkdir(parents=True, exist_ok=False)
     if not 1<=args.limit<=100:
         raise ValueError('Use explicit bounded batches of 1..100 cases')
+    if not 0<args.max_seconds<=7200:
+        raise ValueError('Use an explicit time budget of at most two hours')
     rows=load_cases(args, root)
     sources=source_seal()
     profiles=presets()
@@ -92,6 +95,7 @@ async def run(args):
     model_files={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in Path(entry.path).glob('*.json') if p.name in ('config.json','tokenizer_config.json','model.safetensors.index.json')}
     import importlib.metadata
     seal=dict(sources=sources, cases=digest(rows), model=model_files, profiles=digest(profiles),
+              git_head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
               versions={name:importlib.metadata.version(name) for name in ('torch','transformers','safetensors','bitsandbytes')},
               tools={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in Path('tools').glob('*dialogue_*.py')},
               phase=args.phase, health=health, parameters=dict(sampling=False,max_new_tokens=768,evidence_candidate=args.evidence_candidate,paired=args.paired),
@@ -119,6 +123,7 @@ async def run(args):
         with MemoryRecorder(interval=.5) as recorder, patch.object(ModelRegistry,'resolve',lambda r,key='base':entry if key=='base' else resolve(r,key)), patch('echomate_bot.character_card.augment',side_effect=tracked_augment):
             summary['before']=snapshot();loading=time.monotonic();await backend.ready();await backend.probe()
             summary['load_seconds']=time.monotonic()-loading
+            summary['probe_calls']=len(backend.metrics)
             summary['ready']=snapshot()
             for case in rows:
                 for key, profile in profiles.items():
@@ -135,6 +140,7 @@ async def run(args):
                             # Existing per-job health checks also remain active.
                             check_resources()
                             cfg=deepcopy(DEFAULTS);cfg.update(character_profile=dict(deepcopy(profile),name='EchoMate'), **{k:profile[k] for k in SHARED_FIELDS})
+                            cfg['mood']=case.get('mood',cfg['mood'])
                             cfg=effective_character(cfg,text);cfg['_current_utterance']=text
                             cfg['_familiarity']=case.get('familiarity')
                             context.append(dict(role='user',content=text))

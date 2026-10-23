@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import Counter
 import hashlib
 import html
+import base64
 import json
 import math
 from pathlib import Path
@@ -67,6 +68,8 @@ def validate_case(row):
         raise ValueError('Unknown split')
     if not row['context'] or len(row['context']) > 64:
         raise ValueError('Bounded context required')
+    if row['context'][-1]['role']!='user':
+        raise ValueError('The current utterance must have a real user role')
     for message in row['context']:
         if message['role'] not in ('user', 'assistant') or not isinstance(message['content'], str):
             raise ValueError('Invalid dialogue')
@@ -234,3 +237,17 @@ def report_html(path, records, summary):
     page = '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>EchoMate 비공개 평가</title><style>body{background:#111923;color:#e8eef7;font:16px sans-serif;max-width:1100px;margin:30px auto}pre{white-space:pre-wrap;overflow-wrap:anywhere}details{padding:12px;border-bottom:1px solid #526174}</style><h1>EchoMate 비공개 비교</h1><p>자동 점수는 사람 품질 판정이 아닙니다. 브라우저 찾기 및 행 펼치기를 사용하세요.</p><pre>' + esc(json.dumps(summary, ensure_ascii=False, indent=2)) + '</pre>' + body
     path = private_root(path)
     path.write_text(page, encoding='utf-8')
+
+
+def blind_html(path, packets):
+    """Manual response-only votes with a local download; never uploads answers."""
+    labels={'supportive':'감정·선택 존중','playful':'놀이·관점 전환',
+            'analytical':'원인·근거 확인','dry':'건조한 모순 지적','unknown':'구별 어려움'}
+    script="""document.getElementById('export').addEventListener('click',()=>{const votes={};document.querySelectorAll('input:checked').forEach(x=>{votes[x.name]=x.value;});const blob=new Blob([JSON.stringify(votes,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='blind-votes.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);});"""
+    sha=base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+    cards=[]
+    for row in packets:
+        buttons=''.join('<label><input type="radio" name="'+html.escape(row['id'],quote=True)+'" value="'+key+'">'+label+'</label> ' for key,label in labels.items())
+        cards.append('<section><h2>'+html.escape(row['id'])+'</h2><pre>'+html.escape(row['response'])+'</pre>'+buttons+'</section>')
+    page='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; script-src \'sha256-'+sha+'\'"><title>EchoMate 비공개 블라인드 평가</title><style>body{background:#111923;color:#edf2fa;font:16px sans-serif;max-width:950px;margin:30px auto}pre{white-space:pre-wrap;overflow-wrap:anywhere}section{padding:18px;border-bottom:1px solid #526174}label{display:inline-block;padding:10px}button{padding:12px;font-size:16px}</style><h1>응답만 보고 대화 전략 고르기</h1><p>실제 캐릭터 이름·정답·질문·생성 순서는 숨겼습니다. 무리하게 구별하지 말고 구별 어려움도 골라 주세요. 성격/자연스러움의 최종 인증은 아닙니다. 저장 버튼은 선택 결과를 이 PC로 다운로드하며 외부로 보내지 않습니다.</p><button id="export">선택 결과 파일로 저장</button>'+''.join(cards)+'<script>'+script+'</script>'
+    private_root(path).write_text(page,encoding='utf-8')

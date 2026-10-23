@@ -213,8 +213,16 @@ def build(root):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['acquire', 'build'])
+    parser.add_argument('action', choices=['acquire', 'build', 'freeze'])
     parser.add_argument('--root', required=True)
     args = parser.parse_args()
     root = private_root(args.root); root.mkdir(parents=True, exist_ok=True)
-    acquire(root) if args.action=='acquire' else build(root)
+    if args.action=='freeze':
+        from run_dialogue_evaluation import source_seal
+        target=root/'candidate-freeze.json'
+        if target.exists() or (root/'corpus/consumed-final.json').exists():
+            raise ValueError('Never replace an existing candidate/final seal')
+        save(target,dict(sources=source_seal(),evidence_candidate_sha256=hashlib.sha256(Path('tools/dialogue_evidence_candidate.py').read_bytes()).hexdigest(),
+             criterion='Reject unsupported user facts/write promises, fictional contradictions or unacceptable latency; never tune on consumed finals'))
+    elif args.action=='acquire':acquire(root)
+    else:build(root)

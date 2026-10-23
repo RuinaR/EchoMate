@@ -8,10 +8,10 @@ from collections import Counter
 import json
 from pathlib import Path
 
-from dialogue_eval_core import attribution_score, inspect_reply, private_root, save, verify_claims
+from dialogue_eval_core import attribution_score, blind_html, private_root, save, verify_claims
 
 
-def review(run, *, votes=None, claims=None):
+def review(run, *, votes=None, claims=None, limit=16):
     run=private_root(run)
     records=json.loads((run/'results-private.json').read_text(encoding='utf-8'))
     result=dict(responses=len(records),cases=len({r['case'] for r in records}),
@@ -20,10 +20,20 @@ def review(run, *, votes=None, claims=None):
                 flags=dict(Counter(f for r in records for f in r['checks']['flags'])),
                 factuality='NOT_CERTIFIED; unannotated prose requires claim review',
                 persona_naturalness='HUMAN_REVIEW_REQUIRED')
+    packets=json.loads((run/'blind-responses.json').read_text(encoding='utf-8'))
+    key=json.loads((run/'blind-key.json').read_text(encoding='utf-8'))
+    identities={r['id']:r for r in key};counts=Counter();chosen=[]
+    for p in packets:
+        profile=identities[p['id']]['profile']
+        if counts[profile]<max(1,limit//4):
+            chosen.append(p);counts[profile]+=1
+    human_key=[identities[p['id']] for p in chosen]
+    save(run/'human-blind-key.json',human_key)
+    blind_html(run/'blind-review.html',chosen)
+    result['human_packet']=dict(n=len(chosen),profile_counts=dict(counts),actual_votes='NOT_VERIFIED')
     if votes:
-        key=json.loads((run/'blind-key.json').read_text(encoding='utf-8'))
         predictions=json.loads(private_root(votes).read_text(encoding='utf-8'))
-        result['blind_score']=attribution_score(key,predictions)
+        result['blind_score']=attribution_score(human_key,predictions)
     if claims:
         annotations=json.loads(private_root(claims).read_text(encoding='utf-8'))
         index={r['record_id']:r for r in records}
@@ -40,4 +50,5 @@ def review(run, *, votes=None, claims=None):
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--run',required=True);parser.add_argument('--votes');parser.add_argument('--claims')
-    args=parser.parse_args();review(args.run,votes=args.votes,claims=args.claims)
+    parser.add_argument('--limit',type=int,choices=range(4,65),default=16)
+    args=parser.parse_args();review(args.run,votes=args.votes,claims=args.claims,limit=args.limit)

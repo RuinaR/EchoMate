@@ -38,6 +38,8 @@ BST30개는4~8턴, LoCoMo30개는8~12턴 프로토콜이다. 전자를 장시간
 
 `prepare_dialogue_evaluation.py acquire/build` → 원문 해시 검증/원천 분리/최종 봉인 → `run_dialogue_evaluation.py` → 개별 비공개 JSON/HTML/블라인드 묶음 → `review_dialogue_evaluation.py` 순서다. 산출물 경로는 프로젝트 `local_data`의 하위로 제한한다. HTML은 텍스트를 escape하며 외부 요청·script를 CSP로 금지한다.
 
+기존 `echomate_studio.persona_dataset`은 별도 권리/개인정보 검토가 필요한 과거 원문 스타일 학습용이며, 이번 공개 대화의 라이선스·선행 대화·원천 가족/봉인 계약과 다르다. 이를 자동 학습 자료로 연결하지 않았다. 실제 생성은 기존 `LocalBackend`/`InstanceLease`/`MemoryRecorder`/모델 validator와 Worker를 그대로 재사용하고 새 대화 Runtime이나 모델 로더를 만들지 않았다. 모델 사전학습에 공개 자료가 들어갔는지는 확인하지 못하므로 최종 독립성은 이번 개발 반복에서의 미사용을 뜻한다.
+
 - **Fast:** CPU 계약 검사·캐시된 출력 재검토·근거 ID 대조·사람의 블라인드 투표/원자 주장 주석 수입. 키워드 flag가 없다고 사실성 PASS로 하지 않는다.
 - **Standard:** 사례 수·시간이 제한된 실제 Gemma 생성. 동일 모델/파라미터/프로필과 실제 chat-template prompt hash, 선택된 lore/example ID, token/TTFT/큐·worker 시간과 메모리를 기록한다.
 - **Deep:** `--long`에서 실제 생성 답변을 다음 턴에 넣고 원래 인간 답변을 정답처럼 재사용하지 않는다. 작은 배치로 운영하며 전체 자료를 매 수정마다 재실행하지 않는다.
@@ -46,6 +48,8 @@ BST30개는4~8턴, LoCoMo30개는8~12턴 프로토콜이다. 전자를 장시간
 캐시 식별자는 사례/맥락/정답/프로필/실행 source/모델 설정/생성 설정/평가 버전을 포함한다. GPU 응답 자동 재사용은 하지 않으며 Fast는 보존된 응답의 재분석이다. 모델 config/tokenizer 설정/index hash와 라이브러리 버전을 기록하지만 매 평가마다 수십 GiB 가중치 전체를 다시 hash하지 않으므로 가중치 전체의 새로운 무결성 인증은 아니다.
 
 ### 평가자의 한계
+
+개발자 재현 순서: 프로젝트 Python 환경과 `PYTHONPATH=src;tests;tools`에서 `prepare_dialogue_evaluation.py acquire --root local_data/<새 평가>` → 같은 root의 `build` → `freeze`를 실행한다. 이미 소비한 root/candidate seal을 덮어쓰지 않는다. 생성 도구는 `--suite standard --limit 4 --phase baseline --output local_data/<새 실행> --model <기존 검증 모델 폴더>`로 작은 배치를 먼저 실행한다. Final/paired campaign은 추가로 `--candidate-seal local_data/<새 평가>/candidate-freeze.json`을 지정한다. 실제 source가 고정되지 않았거나 품질 실패가 남았으면 Final을 반복 소모하지 않는다. 로컬 결과 재검은 `review_dialogue_evaluation.py --run local_data/<실행>`이며 사람의16응답 HTML 투표를 저장한 뒤 같은 도구의 `--votes <local_data 안의 투표 파일>`로 점수를 대조할 수 있다. 기본 경로 밖 corpus를 쓰면 생성 도구의 `--corpus`도 해당 `corpus` 디렉터리로 지정한다.
 
 원자 주장 검사기는 합성 사실 ID/value 및 `current/dialogue/consented_memory/card/lore/general/unverified/none` 출처를 대조한다. 동의 기억은 본인·서버·동의가 맞아야 하고 가상 lore는 현실 공동 경험의 근거가 될 수 없다. 자연어 전체에서 자동으로 모든 주장을 추출하거나 일반 지식을 판정하는 시스템은 아니다. 미주석 응답은 REQUIRES_CLAIM_REVIEW로 남긴다. 욕설 단어만으로 실패 처리하지 않고 불편 중지 맥락은 따로 검토한다.
 
@@ -71,3 +75,16 @@ BST30개는4~8턴, LoCoMo30개는8~12턴 프로토콜이다. 전자를 장시간
 ## 마감 결과
 
 실제 실행 결과와 채택/기각, 전체 회귀·운영 해시·Portable·Git 마감은 아래 누적한다. 위 자료 규모와 도구 구현만으로 목표 대화 품질을 PASS 처리하지 않는다.
+
+### 비교 실패 후 다음 접근의 비용
+
+|대안|예상 이득|비용·채택 전 조건|
+|---|---|---|
+|현재 후보처럼 출처 계약을 생성 입력에 추가|예시 사건과 현재 사건 분리를 도울 가능성|추가 GPU 호출0회지만 입력 토큰/답변 길이가 늘 수 있음. 실제 생성이 계약을 따르는지 확인해야 하며 설명 자체는 검증기가 아님|
+|기존 개인 기억 조회의 확정 결과와 비사실적 캐릭터 반응을 분리|검색 실패/빈 결과/동의 철회 상태를 사실로 유지|기존 `handle_request`를 재사용하는 최소 확장이 우선. 모호한 질문의 분류와 문맥 최신성, 자연스러움 검증이 필요하고 모든 기억 질문을 고정 거절로 바꾸면 안 됨|
+|근거 ID가 있는 원자 주장 계획과 자유로운 표현을 분리|없는 개인 사실을 ID 검증에서 차단 가능|한국어 주장 추출/계획 누락의 정확도 미검증. 호출을 나누면 추가 큐/TTFT/토큰 비용, 한 호출로 합치면 출력 계약 부담. 자유 텍스트가 계획을 위반하는지도 별도 검증 필요|
+|캐릭터별 합성 선호/무근거 거부 대조 자료와 LoRA|말투보다 반응 전략을 학습할 가능성|평가자 교정·사람 구별 평가·동의 없는 원문 제외가 먼저. 가변 배경/개인 기억을 가중치에 넣지 않음. 과적합·기본 정확성 손실·어댑터/큐 수명주기 비용을 함께 평가|
+
+[Gemma4 공식 개요](https://ai.google.dev/gemma/docs/core.md)는 fine-tuning 메모리가 추론보다 훨씬 크고 framework/batch/PEFT에 의존한다고 설명한다. [12B 공식 개발 안내](https://developers.googleblog.com/gemma-4-12b-the-developer-guide/)의16GB 로컬 실행 설명을 Windows16GB의 안전한 학습 보장으로 해석하지 않는다. [PEFT quantization 안내](https://huggingface.co/docs/peft/developer_guides/quantization)의 k-bit 준비와 NF4/LoRA 경로는 참고 가능한 방법이지 이 PC에서 검증한 학습 결과가 아니다.
+
+현재 torch2.9.1+cu128/Transformers5.20.1/PEFT0.21.2/bitsandbytes0.50.2/Safetensors0.8.0을 확인했다. 라이브러리 설치/추가 모델 다운로드/학습/어댑터 기본 적용은 하지 않았다. 12B의 단순4bit 가중치 크기만으로 activation·gradient·optimizer·Windows commit 피크를 계산할 수 없어 실제16GB 학습 가능 여부는 **NOT VERIFIED**다. 이번 결과로 LoRA가 더 낫다고 결론 내리지 않는다. 동일 프롬프트의 무한 재작성보다 평가 자료와 사람 근거, 출처 검증이 가능한 구조를 다음 작업으로 삼는다.

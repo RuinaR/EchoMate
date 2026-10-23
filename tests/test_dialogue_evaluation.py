@@ -6,6 +6,8 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 
 from dialogue_eval_core import (attribution_score, audit_splits, blind_packets,
     cache_key, inspect_reply, pii_risk, private_root, report_html, verify_claims)
@@ -100,6 +102,11 @@ class EvaluationContracts(unittest.TestCase):
             value=path.read_text(encoding='utf-8')
             self.assertNotIn('<script>',value);self.assertIn('&lt;script&gt;',value)
             self.assertIn("default-src 'none'",value)
+            from dialogue_eval_core import blind_html
+            blind_html(path,[dict(id='answer-1',response='</script><img src="https://bad.invalid">')])
+            value=path.read_text(encoding='utf-8')
+            self.assertEqual(1,value.count('<script>'))
+            self.assertIn('&lt;/script&gt;',value);self.assertIn("script-src 'sha256-",value)
 
     def test_final_corpus_must_be_sealed_and_never_silently_reused(self):
         root=Path('local_data/eval-contract-tests');root.mkdir(parents=True,exist_ok=True)
