@@ -25,5 +25,26 @@
   "skepticism": 35,
   "tastes": "",
   "values": "",
-  "habits": ""
+  "habits": "",
+  "card": {
+    "version": 2,
+    "age": "",
+    "appearance": "",
+    "background": "",
+    "priorities": "",
+    "relationships": "",
+    "fears": "",
+    "conflict": "",
+    "change": "",
+    "contradictions": "",
+    "humor": "",
+    "questions": "",
+    "closeness": "",
+    "vocabulary": "",
+    "opening": "",
+    "dislikes": "",
+    "edge": "off",
+    "lore": [],
+    "examples": []
+  }
 }

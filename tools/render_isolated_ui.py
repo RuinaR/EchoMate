@@ -106,6 +106,18 @@ def worker(output,pages=PAGES):
                     dialog=next(v for v in root.winfo_children() if isinstance(v,tk.Toplevel))
                     capture(dialog.winfo_children()[0],output/'persona-presets.png',user);dialog.destroy()
                     dialog=app.character_preview();root.update();capture(dialog,output/'persona-preview.png',user);dialog.destroy()
+                if dpi in (100,150) and width==1040 and 'character' in pages:
+                    from echomate_bot.card_ui import edit_card
+                    from test_dialog_layout import invoke
+                    for part in ('배경·정체성','인격·기준','대화 습관','세계관 항목','예시 대화'):
+                        edit_card(app);root.update()
+                        chooser=next(v for v in root.winfo_children() if isinstance(v,tk.Toplevel))
+                        chooser._form_values['part'].set(part);invoke(chooser,'<Control-Return>');root.update()
+                        dialog=next(v for v in root.winfo_children() if isinstance(v,tk.Toplevel))
+                        canvas=dialog.winfo_children()[0]
+                        capture(canvas,output/f'card-{dpi}-{part}.png',user)
+                        canvas.yview_moveto(1);root.update();capture(canvas,output/f'card-{dpi}-{part}-bottom.png',user)
+                        dialog.destroy()
                 if dpi==150 and width==1040 and 'outputs' in pages:
                     app.snapshot['command_review']=dict(application='42',global_before=[dict(id='100',name='synthetic_legacy',type=1,contexts=[0],integration_types=[0],default_member_permissions=None)],guilds={'2':[]},fingerprint='synthetic')
                     app.approve_commands();root.update()

@@ -1341,6 +1341,7 @@ class Runtime:
                     profile['_adult_active']=False;profile['_adult_unavailable']=True
                 adult_for_turn=profile['_adult_active']
                 character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
+                character['_current_utterance']=event.content
                 character['_guild_name']=guild_name(cfg,event.guild)
                 if self.companion:
                     try:character['_familiarity']=await asyncio.to_thread(self.companion.familiarity,event.guild,event.author) if await self.automatic_subject_allowed(event.guild,event.author) else None

@@ -51,6 +51,10 @@ async def run(args):
                         if phase=='baseline' and not case.get('baseline'):continue
                         cfg=deepcopy(DEFAULTS);cfg.update(character_profile=dict(p,name='EchoMate'),**{k:p[k] for k in SHARED_FIELDS})
                         cfg['mood']=case.get('mood','평온');cfg=effective_character(cfg,case['text']);cfg['_familiarity']=case.get('familiarity')
+                        if case.get('stress_card'):
+                            cfg['character_profile']=deepcopy(cfg['character_profile'])
+                            card=cfg['character_profile']['card']
+                            card['lore']=[dict(id='budget-'+str(i),keys=['가상'],priority=50,enabled=True,private=False,match='any',content=('가상 관측 일지의 반복 부록. '*35)[:600]) for i in range(3)]
                         if phase=='baseline':
                             from echomate_bot.character_card import empty_card
                             cfg['character_profile']['card']=empty_card()

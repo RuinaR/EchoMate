@@ -8,7 +8,7 @@
 
 - [SillyTavern Character Design](https://docs.sillytavern.app/usage/core-concepts/characterdesign/)은 프로필·배경·예시와 문맥 비용을 설명한다. [World Info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/)와 [공개 구현](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/world-info.js)의 조건 활성화/토큰 상한을 참고했다. EchoMate는 명시 키워드와 상한만 자체 구현하고 재귀 활성화·확률 선택은 채택하지 않았다.
 - [Author's Note](https://docs.sillytavern.app/usage/core-concepts/authors-note/)의 배치/빈도 개념을 검토했다. 사용자 자유 텍스트를 대화 끝의 높은 권한 지시로 주입하는 기능은 도입하지 않는다.
-- [RisuAI Lorebook](https://github.com/kwaroran/RisuAI/wiki/Lorebook), [저장소](https://github.com/kwaroran/RisuAI)를 검토했다. 사용자 자료와 세계관을 한 곳에 넣는 방식을 그대로 따르지 않는다. SillyTavern은 [AGPL3](https://github.com/SillyTavern/SillyTavern/blob/release/LICENSE), RisuAI는 [GPL3](https://github.com/kwaroran/Risuai/blob/main/LICENSE)다. 코드를 복사하거나 의존성으로 번들하지 않았고 본 구현/합성 카드는 새로 작성했다.
+- [RisuAI Lorebook](https://github.com/kwaroran/RisuAI/wiki/Lorebook), [저장소](https://github.com/kwaroran/RisuAI)와 [공개 Lorebook 구현](https://github.com/kwaroran/Risuai/blob/main/src/ts/process/lorebook.svelte.ts)·[예시 파서](https://github.com/kwaroran/Risuai/blob/main/src/ts/process/exampleMessages.ts)를 검토했다. 사용자 자료와 세계관을 한 곳에 넣는 방식을 그대로 따르지 않는다. SillyTavern은 [AGPL3](https://github.com/SillyTavern/SillyTavern/blob/release/LICENSE), RisuAI는 [GPL3](https://github.com/kwaroran/Risuai/blob/main/LICENSE)다. 코드를 복사하거나 의존성으로 번들하지 않았고 본 구현/합성 카드는 새로 작성했다.
 - [Character.AI Definition](https://support.character.ai/hc/en-us/articles/50609183646875-5-Character-Definition)의 행동·정서·예시 표현, [공개 기억 안내](https://blog.character.ai/helping-characters-remember-what-matters-most/)를 참고했다. 내부 검색기/모델/학습 구조는 확인할 수 없으므로 추정하지 않는다.
 - [Crack 공식 프롬프트 안내](https://help.crack.wrtn.ai/character/prompt)는 시스템/캐릭터/기능 자료, 조건부 키워드북, 과거 대화 요약을 설명한다. [스토리 설정](https://help.crack.wrtn.ai/guide/user/tutorial/story/2)과 [캐릭터 안내](https://help.crack.wrtn.ai/guide/user/character/what-is-character)를 함께 확인했다. 내부 엔진이나 동일 품질 재현은 공개 설명으로 알 수 없다.
 - [PersonaChat](https://arxiv.org/abs/1801.07243)은 프로필 조건 대화를, [RoleLLM](https://arxiv.org/abs/2310.00746)은 역할 지식/스타일과 학습 단계를 다룬다. 본 모델에서의 성능 보장이 아니다. [RMTBench](https://arxiv.org/abs/2507.20352)를 참고해 단발 문장 차이뿐 아니라 사용자의 목적·정정·불편·여러 턴을 평가한다.
@@ -38,3 +38,68 @@
 ## 단계1 근거
 
 카드/기존 프로필/SDK 명령/미리보기 표적33검사 OK3.168초. v2 원본 비변경·큰 카드 왕복·키워드/비공개/반복/관계·예산·긴 텍스트 저장/취소/삭제·오래된 저장 차단·가상 bot 답변 요약 제외를 확인했다. 실제 GPU 비교는 별도 단계이며 이 시점에 품질 PASS를 선언하지 않는다. 비공개 protocol/rubric/기준 프롬프트/출력/메모리 계측은 `local_data/card-20261024/`에만 저장한다.
+
+## 실제 GPU 평가·실패와 수정
+
+가용 RAM14.97GiB, 시스템 commit39.98GiB, VRAM14,048MiB,40℃를 확인한 뒤 검증된 기존 shard 하나로 시작했다. 각 실행에서 한 모델만 상주시켰다. 기존 운영 모델 선택·가중치·로더·NF4·큐·안전 기준을 바꾸지 않았다. GPU load가 낮다는 사용자 관찰만으로 판단하지 않았다. 다른 앱 상태나 게임 프레임/화면은 조사하지 않았다.
+
+첫 실행은 동결한 이전 프롬프트12응답과 새 카드64응답(개발12/당시 미사용52), 실제 이전 답변을 축적한7턴을 포함한다. 표시 이름은 공통으로 맞추고 가상 배경·가치관은 다르게 했다. 이름 가린 packet을 key 확인 전에 Codex가 검토했다. 모델/사람의 독립 블라인드 점수라고 부르지 않는다.
+
+| 동일 3질문 × 4설정 | 이전 프롬프트 | 새 카드 |
+|---|---:|---:|
+| 응답 수 | 12 | 12 |
+| 실제 생성 호출(재작성 포함) | 14 | 13 |
+| text 생성 p50/p95 | 4.266/9.581초 | 5.351/9.401초 |
+| TTFT p50/p95 | 0.562/0.583초 | 0.734/0.750초 |
+| 평균 입력 토큰 | 1301.2 | 1721.1 |
+| 평균 생성 토큰 | 39.6 | 46.5 |
+| tokens/s 중앙값 | 9.129 | 8.834 |
+
+출력 길이/재작성 횟수가 다르고 같은 PC에서 CPU/Tk QA도 일부 병행됐다. p95의 작은 차이를 속도 개선으로 주장하지 않는다. 신규64응답은 실제67생성호출, p50/p95 5.664/8.593초, TTFT0.750/1.000초, 중앙값8.787tokens/s였다. 선택 자체에 별도 모델 분류/임베딩 호출을 추가하지 않았다. 기본 생성 디코딩은 유지했다.
+
+### 발견1 — 실제 토크나이저 반환 형식
+
+처음 추가 자료 metric이0이었다. 실제 `apply_chat_template` 반환이 Mapping인데 len을 토큰 길이로 오인했다. 전체6000토큰 검사는 별도로 남아 있었지만 추가900 검증은 무효였으므로 최초 metric을 보존했다. Mapping의 input_ids, 중첩 리스트, Tensor shape를 구분해 수정하고 합성 Mapping/batch 회귀를 추가했다. 실제 로컬 tokenizer로 최초64개 입력을 재구성해 수정 전후 **64/64 byte 동일**, 추가 자료 최대494토큰을 확인했다. 이는 따로 저장한 재계산 근거이며 원래 GPU metric을 성공 값으로 덮어쓰지 않았다. 동일 입력을 불필요하게64회 재생성하지 않았다.
+
+수정 후 새 미사용6질문×4설정24응답과 큰 세계관의 예산 압축4응답을 한 모델로 검증했다. 스트레스4개는 품질 평가와 구분한다. 원래 관련 세계관3항목 중1항목만 남기고 추가733~775토큰, 전체2019~2086토큰으로 제한됐다. 일반 확인24응답 p50/p95 5.258/10.441초, 실제26생성호출이었다. 추가 자료 수치는 정상적인 양수로 기록됐다.
+
+### 품질 관찰
+
+- 배경 질문4/4는 자기 카드의 가상 사건을 반영했다. 도서관 복구/정거장 풍차/관측 오차/작동하지 않는 설계도의 네 사건을 서로 바꾸지 않았다. 현실 사용자 과거로 저장하지 않았다.
+- 세계관 후속에서는 이유를 듣는 조율/함께 하는 실험/전제 검증/실용적 반례의 차이가 확인됐다. 단발 어휘 차이보다 실질적인 관점 차이의 근거다.
+- 일상 농담은 여전히 조언형으로 수렴했다. 생각을 바꾸는 증거를 묻는 새 질문에서도 네 카드가 비슷한 분석 답변으로 수렴했다. 전체 캐릭터 구별 목표는 미달이다.
+- 요청된 놀림에는 쌀의 수영/기억력 초기화처럼 상황을 향한 표현도 나왔다. 거친 표현 자체로 FAIL 처리하지 않았다. 질병 비유/기억력 평가의 적절성은 별도 사람 검토가 필요하다. 불편 후 중지는 두 평가의 각4응답에서 확인했지만, 한 응답은 없는 밥솥 세척 모드를 가정했다.
+- 계산은4/4가54를 유지했다. 7턴 후 최소 행동을 요청했을 때 짧게 적응했으나 네 인격의 명확한 지속 구별까지 증명하지 못했다. 피곤한 기분의 한 응답은 제공되지 않은 이전 주장의 논리적 결함을 단정했다.
+- 새 현실 공동 경험 질문은 **4/4가 실제 카페 추억을 꾸몄다(FAIL)**. 형식/코드 제한 통과는 사실성 PASS가 아니다. 이 평가를 본 뒤 수정에 사용했으므로 더는 미사용 평가가 아니다.
+
+### 발견2 — 현실 경험 경계와 실제 현재 발언
+
+명백한 현실 물리 경험 회상은 봇의 알려진 기능 한계이므로 `reality_boundary`가 읽기 전용으로 안내한다. 실제 몸/함께 다닌 과거가 있다고 꾸미지 않는다. 현재 요청이 가상 설정인 경우와 인용문/실제 Discord 대화 기억은 구분한다. 반말/존댓말은 적용 설정을 따르고 생성 호출은 필요 없다. 이 규칙은 청자 판정이나 모든 환각을 해결하는 모델이 아니며 간접/생략 표현 전반을 보장하지 않는다.
+
+Portable GPU 통합에서는 답변 자체는 현실 경험을 부인했지만 생성 호출이 남았다. 실제 Runtime의 문맥 끝에 호칭 등 **참고 자료가 user role로 붙을 수 있어 그것을 현재 발언으로 읽는 결함**을 확인했다. Runtime/Controller가 검증된 원본 발언을 `_current_utterance`로 전달하도록 수정했고, 과거 발언 검색에서도 관측 메타데이터를 분리했다. 실제 Runtime→LocalBackend.text의 표적 검사에서 원본 전달과 생성0호출을 확인했다. 테스트의 초기 호출 이름 불일치는 합성 봇의 실제 멘션으로 고친 뒤 재검했다. UI/Preview와 Discord의 현재 발언 경로를 통일했으며 권한/신원으로 이 값을 사용하지 않는다.
+
+마지막 원본 전달 수정은 CPU/Runtime 검사로 검증했다. 아래 Portable GPU 수치를 최종 원본 전달 수정의 GPU 재검이라고 부르지 않는다. 그 뒤 같은 모델을 다시 로딩하며 같은 사실 안내를 반복하지 않았다. 일반 환각·근거 없는 평가·넓은 사회적 오류는 남으며 **릴리즈 BLOCKED**다.
+
+### 메모리와 SDK/Portable
+
+첫 준비+probe35.578초, 프로세스 private high-water13.008GiB, working set4.816GiB, 준비 후 시스템 commit여유29.517GiB였다. 새 확인 실행 준비33.516초/private13.009GiB. 두 생성 실행의 최대 GPU allocated8436.9MiB/reserved8746MiB, 각각 해제 후 allocated1024bytes/reserved2MiB다. 초기64응답의 약400초 범위에서 private 증가가 관찰됐으나 긴 입력/allocator/라이브러리 cache와 구분한 장시간 누수 결론은 내리지 않는다.
+
+첫 상주 모델로 기존 v2 프로필의 SDK2시퀀스도 검사했고, 별도의 Portable 검사는 실제 새 카드와 번들 Python을 썼다. Portable에서 운영 프로젝트의 GPU lease를 따로 확인해 이중 로딩을 막았고, 데이터 홈은 별도 테스트 저장소였다. 실제 card Runtime3/3·SDK mock4송신, 의미1회·생성4회, reply/조각/독립 대화·사람 대상 침묵을 확인했다. 준비68.235초, 수신→mock p50/p95 3.164/4.728초, 큐0초, TTFT0.937/0.950초, 해제 후 allocated1024bytes/reserved2MiB다. 다른 질문/환경의 source 지연보다 빠르다는 뜻이 아니다. 실제 Gateway/API/슬래시 등록/송신은0회다.
+
+## 한계와 다음 비용 비교
+
+카드와 검색 기능은 구현됐고 배경/가치관의 일부 차별성은 확인됐다. 그러나 강한 일상 대화 차별성과 모든 사실성/불편 경계를 모델이 안정적으로 지킨다는 목표는 미달이다. 동일 프롬프트를 반복 튜닝하거나 이미 본 평가를 새 독립 자료로 쓰지 않는다. 사람의 블라인드 비교·장기 대화 기준 확정이 먼저다.
+
+키워드 방식은 추가 모델/색인 없이 작지만 의역을 놓치고 무관한 단어가 맞을 수 있다. BM25는 같은 단어 기반의 가중치 개선, 임베딩은 별도 모델/메모리/평가 비용이 든다. 기존 Gemma 입력 임베딩의 평균을 의미 검색기로 쓰는 방법도 이 모델에서 검증되지 않아 채택하지 않았다. LoRA는 합성 상황별 판단·불편 중지·비판 수용 자료와 별도 화자/시간/상황 holdout이 필요하다. 배경/실제 사용자 기억은 가중치에 넣지 않아야 한다. Windows 학습 호환·activation 피크·게임과의 여유를 입증하지 못했으므로 실제 학습은 NOT VERIFIED이며 실행하지 않았다.
+
+실제 Discord 명령 비표시·사회적 오개입/누락/연결, 사람의 블라인드 품질/실제 UI 조작, 다른 Windows, 장시간 운용은 여전히 미검증 또는 차단이다. 공개 코드·원래 작성한 가상 예시만 Git에 포함하고 원본 평가/출력·운영 DB/토큰/모델/LoRA는 제외한다.
+
+## 최종 마감과 재개
+
+최종 실행 소스 **702검사 OK208.968초**. 단계별698/699/700 검사는 당시 근거로만 보관하고 현재 마감은702다. 기존688에 카드/예산/메타데이터/현실 경계/원본 Runtime/편집/요약 분리14검사를 추가했다. 마지막 원본 전달 표적21검사 OK1.294초, 캐릭터44디스패치 PASS. 격리 Desktop에서6페이지 렌더+25모달/스크롤 이미지(총31)를 생성했고 대상 HWND만 캡처했다. 모든 이미지가 독립 화면이거나 사람의 전수 조작 검증인 것은 아니다. 긴 글·저장/취소/삭제는 실제 자체 위젯과 임시 Controller/설정으로 확인했다. 네이티브 파일 선택과 사용자 Desktop 조작은 수행하지 않았다.
+
+최종 Portable 공개 src/docs154파일·README·공개 기본 프로필이 source/manifest와 일치하고 manifest는21,558파일이다. 번들 Python에서 별도 데이터 홈으로 **53표적검사 OK8.042초**, 두 VBS `/check` PASS. 마지막 원본 발언 수정 뒤 공개 파일을 갱신했고 CPU/Runtime 검사를 다시 실행했다. 앞선 Portable GPU3/3을 마지막 수정의 GPU 재검으로 확대하지 않는다. 기존 런타임 전체를 재빌드/재다운로드/전체 해시하지 않고 변경된 공개 파일을 검증했다. 모델/토큰/DB/운영 자료는 패키지에 넣지 않았다.
+
+운영 bootstrap/설정/companion/sent DB4파일 SHA256 동일, 모델·LoRA·운영 프로필은 쓰지 않았다. source/libs/설정의 운영 선택도 자동 변경하지 않았다. 비공개 평가/출력/토큰 원문·계측은 업로드하지 않는다. 첫 구현 단계는 `fc8e643`, 마감 관련 커밋은 Git 기록을 확인한다.
+
+재개 우선순위는 실제 명령 등록 상태의 별도 승인된 읽기 조회, 사람의 블라인드 캐릭터 수용 평가, 일상 차별성/근거 없는 평가·일반 환각·사회적 판단이다. 실제 조회와 변경 승인을 합치지 않는다. 추가 프롬프트/평가 반복보다 이 조건을 먼저 해결한다. 모델/학습을 바꾸는 경우 호환·activation 메모리·비동의 자료 제외·독립 holdout을 별도 검토한다. 정식 릴리즈는 **BLOCKED 유지**다.

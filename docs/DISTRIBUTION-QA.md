@@ -1,5 +1,9 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## 2026-10-24 카드 공개 파일 및 번들 검사
+
+공개 src/docs/README/기본 프로필·manifest만 갱신하며 전체 런타임 재빌드는 하지 않는다. 번들 Python·별도 데이터 홈·운영 GPU lease로 새 카드 실제 생성→SDK mock3/3·4송신을 확인했다. 모델 준비68.235초, 해제 후 allocated1KiB/reserved2MiB다. 원본 발언 전달의 마지막 수정은 이후 CPU/Runtime 검사와 전체702회귀로 검증했으므로 GPU 재검과 구분한다. 최종 파일/번들 표적/보존 수치는 [CHARACTER-CARD-QA](CHARACTER-CARD-QA.md) 마감을 따른다. 실제 Discord·다른 Windows·장시간·사람 조작을 PASS 처리하지 않는다.
+
 ## 2026-10-24 페르소나 공개 파일 갱신
 
 마감: 전체688검사 OK221.655초, Portable 공개 src/docs149파일·manifest21,553파일 대조, 번들39검사 OK8.141초·두 VBS `/check` PASS. 운영4파일 hash 보존. 캐릭터 강한 차별성 목표 미달·실제 Discord 미검증으로 BLOCKED다.

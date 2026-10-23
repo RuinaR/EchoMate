@@ -259,7 +259,7 @@ class LocalBackend:
             card_metric={}
             if persona is not None:
                 from .character_card import augment
-                messages,card_metric=augment(messages,persona[0],persona[1],proc.tokenizer)
+                messages,card_metric=augment(messages,persona[0],persona[1],proc.tokenizer,current_text=persona[2])
             if images:
                 # All bytes were decoded locally; processor never receives remote URLs.
                 messages=[dict(role=m["role"],content=m["content"]) for m in messages]
@@ -308,9 +308,12 @@ class LocalBackend:
             self.failed=True;torch.cuda.empty_cache();raise RuntimeError("GPU allocation failure; inference disabled") from None
 
     async def text(self,context,cfg):
+        from .reality_boundary import grounded_reply
+        grounded=grounded_reply(context,cfg)
+        if grounded is not None:return grounded
         from .character_profiles import applied_profile
         profile=applied_profile(cfg)
-        persona=(profile,cfg.get("_familiarity")) if any(profile["card"][k] for k in profile["card"] if k not in ("version","edge")) or profile["card"]["edge"]!="off" else None
+        persona=(profile,cfg.get("_familiarity"),cfg.get('_current_utterance')) if any(profile["card"][k] for k in profile["card"] if k not in ("version","edge")) or profile["card"]["edge"]!="off" else None
         messages=[dict(role='system',content=instruction(cfg)),*context]
         for attempt in range(2):
             try:result=await self._job(messages,weight=cfg['model'],budget=768,**({'persona':persona} if persona is not None else {}))

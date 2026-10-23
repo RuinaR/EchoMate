@@ -14,6 +14,14 @@ class CardData(unittest.TestCase):
     def test_missing_card_in_v2_reads_without_mutation(self):
         old={k:deepcopy(v) for k,v in DEFAULT_PROFILE.items() if k in PROFILE_V2_KEYS}
         result=validate_profile(old);self.assertNotIn('card',old);self.assertEqual(result['card'],empty_card())
+    def test_runtime_metadata_is_not_the_current_speakers_utterance(self):
+        from echomate_bot.reality_boundary import grounded_reply
+        from echomate_bot.settings import DEFAULTS
+        context=[dict(role='user',content='[참여자 4] 간단히 계산해 줘\n[관측된 이벤트 메타데이터 / 실제 발언 인용이 아님] {"배경":"도서관"}'),dict(role='user',content='[대화 대상 참고 자료 / 실제 발언 아님] 배경 과거 도서관')]
+        rows,current=select_material(presets()['supportive']['card'],context)
+        self.assertEqual(current,'간단히 계산해 줘');self.assertFalse(rows['lore'])
+        cfg=deepcopy(DEFAULTS);cfg['_current_utterance']='우리 실제로 같이 카페 갔을 때 네가 한 말 기억나?'
+        self.assertIn('그런 기억이 있다고 할 수는 없어',grounded_reply(context,cfg))
     def test_presets_are_independent_fiction_not_live_memory(self):
         a=presets();self.assertEqual(len({p['card']['background'] for p in a.values()}),4)
         a['supportive']['card']['background']='changed';self.assertNotEqual(presets()['supportive']['card']['background'],'changed')
@@ -45,6 +53,14 @@ class CardData(unittest.TestCase):
         self.assertIn('허락이 생기지 않아',rough_policy(c,'실수했네',100))
         self.assertIn('멈추고',rough_policy(c,'그만 놀려 불편해',100))
 
+    def test_mapping_and_batched_token_ids_count_tokens_not_metadata_keys(self):
+        class Tokenizer:
+            def apply_chat_template(self,ms,**kw):return {'input_ids':[[1]*sum(len(m['content']) for m in ms)],'attention_mask':[]}
+        m=[dict(role='system',content='정책'),dict(role='user',content='배경 과거')]
+        result,info=augment(m,presets()['dry'],None,Tokenizer(),limit=900,extra_limit=800)
+        actual=sum(len(x['content']) for x in result)-sum(len(x['content']) for x in m)
+        self.assertEqual(info['tokens'],actual);self.assertLessEqual(actual,800)
+
     def test_large_valid_card_exports_and_imports_without_losing_rows(self):
         import tempfile
         from pathlib import Path
@@ -58,6 +74,20 @@ class CardData(unittest.TestCase):
 
 
 class FictionSummary(unittest.IsolatedAsyncioTestCase):
+    async def test_physical_history_boundary_preserves_fiction_and_real_chat_history(self):
+        from echomate_bot.reality_boundary import physical_recollection
+        from echomate_bot.inference import LocalBackend
+        from echomate_bot.settings import DEFAULTS
+        from unittest.mock import AsyncMock
+        for text in ('우리 실제로 같이 카페 갔을 때 네가 한 말 기억나?', '너랑 함께 밥 먹었을 때 기억해?', '지난번 너와 여행했을 때의 추억을 말해줘','너랑\n함께 밥\n먹었을 때\n기억나?'):
+            self.assertTrue(physical_recollection(text))
+        for text in ('우리 가상 설정에서 너랑 카페 갔던 기억을 이야기해줘','내가 친구랑 밥 먹었던 얘기 기억나?','너는 내가 Discord에 쓴 계획을 기억해?','설정 속 과거를 알려줘','A가 "너랑 같이 밥 먹었을 때 기억나?"라고 물었대. 왜일까?'):
+            self.assertFalse(physical_recollection(text))
+        backend=LocalBackend();backend._job=AsyncMock(side_effect=AssertionError('No generation for impossible experience'))
+        try:
+            result=await backend.text([dict(role='user',content='너랑 함께 산책했을 때 기억나?')],deepcopy(DEFAULTS));self.assertIn('그런 기억이 있다고 할 수는 없어',result);backend._job.assert_not_awaited()
+        finally:await backend.close()
+
     async def test_fictional_bot_prose_is_not_persisted_as_real_user_memory(self):
         from datetime import datetime,timezone
         from echomate_studio.dialogue_state import Turn
@@ -68,6 +98,28 @@ class FictionSummary(unittest.IsolatedAsyncioTestCase):
         store=SimpleNamespace(digest_consent=lambda *args:{'4':{}},save_digest=lambda *args:'saved')
         result=await Summarizer(store,backend).generate(2,3,'c',turns,persist=True)
         self.assertIsNotNone(result);self.assertEqual([t.message_id for t in backend.summarize_dialogue.call_args.args[0]],['1','3'])
+
+
+import test_bot_integration as bot
+class RuntimeGrounding(unittest.IsolatedAsyncioTestCase):
+    setUp=bot.BotIntegration.setUp
+    asyncTearDown=bot.BotIntegration.asyncTearDown
+    event=bot.BotIntegration.event
+    settle=bot.BotIntegration.settle
+    async def test_actual_event_overrides_later_model_reference_messages(self):
+        from echomate_bot.inference import LocalBackend
+        from unittest.mock import AsyncMock
+        local=LocalBackend();local._job=AsyncMock(side_effect=AssertionError('No generation for impossible shared past'))
+        text='<@999> 우리 실제로 같이 카페 갔을 때 네가 한 말 기억나?'
+        async def generated(context,cfg):
+            self.assertEqual(cfg['_current_utterance'],text)
+            return await local.text(context,cfg)
+        self.backend.text=generated
+        try:
+            await self.runtime.ingest(self.event(content=text));await self.settle()
+            self.assertEqual(len(self.transport.sent),1)
+            self.assertIn('그런 기억이 있다고 할 수는 없어',self.transport.sent[0][1].text);local._job.assert_not_awaited()
+        finally:await local.close()
 
 
 class CardWidgets(unittest.IsolatedAsyncioTestCase):

@@ -317,7 +317,7 @@ class LocalController:
                 elif kwargs.get('profile') is not None:selected=[('저장본 · 미적용' if kwargs.get('profile_source')=='saved' else '미적용 편집본',deepcopy(validate_profile(kwargs['profile'])))]
                 else:selected=[('현재 적용',applied_profile(cfg))]
                 for label,p in selected:
-                    variant=deepcopy(cfg);variant.update(character_profile=deepcopy(p),**{k:p[k] for k in SHARED_FIELDS});variant['_familiarity']=None
+                    variant=deepcopy(cfg);variant.update(character_profile=deepcopy(p),**{k:p[k] for k in SHARED_FIELDS});variant['_familiarity']=None;variant['_current_utterance']=text
                     variants.append((label,p['name'],effective_character(variant,text)))
                 backend=self.client.backend if self.client else LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None)
                 owns_backend=self.client is None
@@ -371,7 +371,7 @@ class LocalController:
                 values=kwargs['values']
                 if 'expected_profile' in kwargs:
                     from .character_profiles import applied_profile
-                    if applied_profile(self.settings.get())!=kwargs['expected_profile']:raise ValueError('Character changed; reopen editor')
+                    if applied_profile(self.settings.get())!=kwargs['expected_profile']:raise ValueError('캐릭터가 바뀌었어요. 편집창을 다시 열어 주세요.')
                 allowed={'enabled','text','reactions','vision','mood','gender','warmth','cuteness','playfulness','activity','cooldown','engagement_seconds','model','adult_humor','character_profile','memory_auto','relations_auto','context_excerpts','reminders_enabled','reminder_grace','memory_plan_grace','memory_date_grace','memory_state_hours','command_sync_pending','web_search','summaries_auto'}
                 if set(values)-allowed:raise ValueError('Unknown GUI setting')
                 from .settings import validate
@@ -548,6 +548,7 @@ class LocalController:
             if operation in ('command_review','command_apply'):self.command_review=getattr(self.client,'command_review',None)
             safe={'본인의 친밀도 저장 동의가 필요해요','본인의 기억 저장 동의가 필요해요','연결과 실험 시각 분석 활성화가 필요해요','미리보기 정리에 실패했어요. 앱을 닫고 다시 열어 주세요.'}
             safe.add('봇 연결 후 명령 목록을 확인해 주세요')
+            safe.add('캐릭터가 바뀌었어요. 편집창을 다시 열어 주세요.')
             from .processes import ResourceLimitError,resource_message
             self.error=resource_message(exc,NO_RESPONSE.get('resource_stop_'+exc.reason,'모델 준비에 필요한 자원이 부족해요')) if isinstance(exc,ResourceLimitError) else str(exc) if str(exc) in safe else '설정값이나 설치 파일을 확인해 주세요' if isinstance(exc,ValueError) else type(exc).__name__
             if operation in ('command_review','command_apply') and str(exc) in command_errors:self.error=command_errors[str(exc)]

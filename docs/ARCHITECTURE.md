@@ -1,5 +1,11 @@
 # 아키텍처
 
+## 2026-10-24 카드 선택과 출처 경계
+
+`character_card`는 가상 데이터 검증/관련성 선택/정확한 chat-template 토큰 예산을 담당한다. 명시 키워드·중요도·관계·최근 예시 복제 제외로 최대 세계관3/예시2를 고르고 GPU Worker에서 선택 자료를 추가한다. 기본 정책/원문을 자르지 않는다. Mapping/input_ids·배치·Tensor를 구분해 토큰 수를 센다. 기존 프로필·저장소를 활용하며 새 기억 DB·임베딩 모델은 만들지 않는다.
+
+Runtime/Controller가 `_current_utterance`로 실제 원본을 text 생성 계층에 전달한다. 참고 자료의 user role은 실제 발언이 아니다. 현실 물리 경험 한계는 별도 읽기 전용 안내로, 가상 bot 답변은 지속 사용자 요약의 근거에서 제외한다. 청자/행동/동의·원본 reply·GPU 큐는 유지한다. 아래 이전 절의 고정 예시 설명은 당시 기각 후보와 혼동된 표현이며 ed17 실행 코드에는 없었다. 이번 선택형 예시가 새 구현이다. [계약·실패·실제 검사](CHARACTER-CARD-QA.md).
+
 ## 2026-10-24 캐릭터 행동과 읽기 전용 명령
 
 `applied_profile`은 서명 검증 후 v1→v2 정규화와 실제 공통 설정을 합친다. `compile_profile`은 반응 접근·수치·제한된 정체성 데이터와 고정된 행동 예시를 생성 정책으로 구성한다. `character.instruction`의 중복 성향 지침은 제거하고 핵심 성격 뒤에 기분의 표현 변화를 적용한다. Runtime/Controller 미리보기는 같은 `effective_character`를 쓰며 동의 없는 관계는 None이다. 사회적 판단/Action/저장소 권한은 이 정책과 분리한다.
