@@ -309,11 +309,25 @@ class LocalController:
                 if not isinstance(text,str) or not 1<=len(text)<=1000:raise ValueError('Invalid preview input')
                 self.preview_rejection={};self.preview_result='로컬에서 답변을 준비하고 있어요';self._publish()
                 from .inference import LocalBackend
-                cfg=self.settings.get();backend=self.client.backend if self.client else LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None)
+                from .character_profiles import validate_profile,applied_profile,presets,SHARED_FIELDS
+                from .character import effective_character
+                from copy import deepcopy
+                cfg=self.settings.get();variants=[]
+                if kwargs.get('compare'):selected=[('프리셋',dict(p,**{k:cfg[k] for k in ('mood','gender','activity')})) for p in presets().values()]
+                elif kwargs.get('profile') is not None:selected=[('저장본 · 미적용' if kwargs.get('profile_source')=='saved' else '미적용 편집본',deepcopy(validate_profile(kwargs['profile'])))]
+                else:selected=[('현재 적용',applied_profile(cfg))]
+                for label,p in selected:
+                    variant=deepcopy(cfg);variant.update(character_profile=deepcopy(p),**{k:p[k] for k in SHARED_FIELDS});variant['_familiarity']=None
+                    variants.append((label,p['name'],effective_character(variant,text)))
+                backend=self.client.backend if self.client else LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None)
                 owns_backend=self.client is None
                 self.preview_session=kwargs.get('session');self.preview_backend=backend;self.preview_owned=owns_backend;self.preview_started=time.monotonic()
                 async def generate_preview():
-                    try:self.preview_result=await backend.text([dict(role='user',content=text)],cfg)
+                    try:
+                        results=[]
+                        for label,name,variant in variants:
+                            results.append('['+label+' · '+name+' · '+variant['mood']+']\n'+await backend.text([dict(role='user',content=text)],variant))
+                            self.preview_result='\n\n'.join(results);self._publish()
                     except asyncio.CancelledError:self.preview_result='미리보기를 취소했어요';raise
                     except Exception as exc:
                         from .processes import ResourceLimitError,resource_message

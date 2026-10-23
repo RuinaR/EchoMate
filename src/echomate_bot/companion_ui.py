@@ -46,7 +46,7 @@ class CompanionViews:
             ('status','처리 · 확정 / 후보 / 삭제','확정')],save,
             '이 채널에서만 사용해요. 후보는 반복되어도 자동 확정하지 않아요. 같은 호칭을 가진 사람이 여럿이면 보류해요. 기억·알림 대상 권한은 바뀌지 않아요.',controls={'status':choice_field(['확정','후보','삭제'])})
 
-    def form(self,title,fields,submit,help_text='',read_only=False,guard_context=False,controls=None):
+    def form(self,title,fields,submit,help_text='',read_only=False,guard_context=False,controls=None,preview=None):
         from .desktop_ui import PANEL,CARD,FG,MUTED,ACCENT,BG,rounded
         from .ui_controls import RangeControl,SegmentControl,CanvasFeedback
         from tkinter import font as tkfont
@@ -113,7 +113,8 @@ class CompanionViews:
             for entry in entries:
                 if hasattr(entry,'set_enabled'):entry.set_enabled(True)
                 else:entry.configure(state='normal')
-            feedback.regions[0]['enabled']=True;feedback.regions[-1]['enabled']=True;feedback.paint()
+            for region in feedback.regions:region['enabled']=True
+            feedback.paint()
             canvas.itemconfigure(apply_label,text='적용')
             update_hint('적용하지 못했어요 · '+(message or '설정과 저장소 상태를 확인해 주세요')+'\n입력은 유지했어요. 수정한 뒤 다시 적용하거나 닫아 주세요.')
         def close():
@@ -147,6 +148,20 @@ class CompanionViews:
         if not read_only:
             shape=rounded(canvas,352,footer,92,30,CARD,8);label=canvas.create_text(398,footer+15,text='닫기',fill=FG,font=fonts[2])
             feedback.add((352,footer,92,30),shape,label,callback=close)
+        if preview is not None and not read_only:
+            def show_preview():
+                if dialog._pending_save:return
+                try:
+                    for control in typed.values():control.validate()
+                    window=preview({k:v.get().strip() for k,v in values.items()})
+                except (ValueError,KeyError):update_hint('미리보기 전에 입력값을 확인해 주세요.');return
+                if window is not None:
+                    window.grab_set()
+                    def restore(event):
+                        if event.widget is window and dialog.winfo_exists():dialog.grab_set()
+                    window.bind('<Destroy>',restore,add='+')
+            shape=rounded(canvas,22,footer,225,30,CARD,8);label=canvas.create_text(134,footer+15,text='저장 없이 미리보기',fill=FG,font=fonts[2])
+            feedback.add((22,footer,225,30),shape,label,callback=show_preview)
         shape=rounded(canvas,456,footer,100,30,ACCENT,8)
         apply_label=canvas.create_text(506,footer+15,text='닫기' if read_only else '적용',fill=BG,font=fonts[2])
         feedback.add((456,footer,100,30),shape,apply_label,primary=True,danger='삭제' in title or '초기화' in title,callback=save)

@@ -1343,7 +1343,7 @@ class Runtime:
                 character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
                 character['_guild_name']=guild_name(cfg,event.guild)
                 if self.companion:
-                    try:character['_familiarity']=await asyncio.to_thread(self.companion.familiarity,event.guild,event.author) if await self.automatic_subject_allowed(event.guild,event.author) else 50
+                    try:character['_familiarity']=await asyncio.to_thread(self.companion.familiarity,event.guild,event.author) if await self.automatic_subject_allowed(event.guild,event.author) else None
                     except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_lookup_failed')
                 indicator=(asyncio.create_task(self.transport.indicate_typing(event,lambda:self.fresh(event,state,version,revision)))
                            if hasattr(self.transport,'indicate_typing') else None)

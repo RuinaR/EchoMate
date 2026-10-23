@@ -152,8 +152,9 @@ class AdultWidgets(unittest.TestCase):
             for scale in (1.33,2.):
                 root.tk.call('tk','scaling',scale);app.render();root.update_idletasks()
                 models=[h for h in app.hits if h[1]==583]
-                self.assertEqual(len(models),4)
+                self.assertEqual(len(models),5)
                 labels=[app.canvas.itemcget(item,'text') for item in app.canvas.find_all() if app.canvas.type(item)=='text']
+                self.assertIn('캐릭터 프리셋',labels)
                 self.assertFalse(any(x in labels for x in ('個人','개인 말투 · 잠정','성인 유머 · 자유로운 표현')))
                 for item in app.canvas.find_all():
                     if app.canvas.type(item)=='text' and app.canvas.itemcget(item,'text') in {'개인 말투 · 잠정','기본 Gemma 4','성인 유머 · 자유로운 표현'}:

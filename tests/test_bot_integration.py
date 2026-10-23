@@ -96,7 +96,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
             client=EchoClient(self.settings,self.backend,[2])
         cache_factory.assert_called_once_with(self.settings.path.parent/'visual.sqlite3')
         self.assertEqual(runtime_factory.call_args.kwargs['ledger_path'],self.settings.path.parent/'sent.sqlite3')
-        self.assertEqual([c.name for c in client.tree.get_commands()],['동의'])
+        self.assertEqual([c.name for c in client.tree.get_commands()],['동의','성격'])
         self.assertEqual(client.tree.get_commands(guild=discord.Object(2)),[])
         self.assertFalse(validate_action(Action(Kind.REACTION,asset='<:fake:123456789>'),dict(DEFAULTS,reactions=True),'autonomous',dict(view=True,react=True),dict(reactions={'<:fake:123456789>':'x'}),None,2))
     async def test_transient_windows_replace_lock_preserves_atomic_settings(self):
@@ -257,7 +257,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
     async def test_unicode_quoted_code_url_are_not_destructively_stripped(self):
         self.assertFalse(needs_rewrite('`print("ㅋㅋ")`\n> ㅠㅠ\nhttps://example.org/ㅋㅋ',[]))
         self.assertTrue(needs_rewrite('맞아 ㅋㅋ',[]))
-        self.assertIn('상대의 상황을 배려',instruction(DEFAULTS))
+        self.assertIn('상대의 상황을 인정',instruction(DEFAULTS))
         with self.assertRaises(ValueError):visible('<|channel>thought\nprivate<channel|>final')
     async def test_ssrf_bytes_pixels_and_animation_samples(self):
         for url in ('http://cdn.discordapp.com/attachments/a','https://127.0.0.1/a','https://cdn.discordapp.com.evil/attachments/a','https://cdn.discordapp.com@evil/attachments/a','https://cdn.discordapp.com/../private'):
@@ -309,7 +309,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         panel=ConsentPanel(client,2,4,dict(relationships=False,memory=False,summaries=False),dict(relationships=0,memory=0,summaries=0))
         self.assertFalse(await panel.interaction_check(SimpleNamespace(user=SimpleNamespace(id=1),guild_id=2,response=response)))
         self.assertTrue(await panel.interaction_check(SimpleNamespace(user=SimpleNamespace(id=4),guild_id=2,response=response)))
-        self.assertEqual([c.name for c in client.tree.get_commands()],['동의']);panel.stop()
+        self.assertEqual([c.name for c in client.tree.get_commands()],['동의','성격']);panel.stop()
     async def test_cache_refresh_page_retains_previous_assets_and_clear_is_explicit(self):
         from echomate_bot.discord_app import EchoClient
         from unittest.mock import AsyncMock,patch
@@ -320,7 +320,7 @@ class BotIntegration(unittest.IsolatedAsyncioTestCase):
         self.settings.set(1,'vision',True)
         with patch('echomate_bot.discord_app.VisualCache',return_value=self.cache),patch('echomate_bot.discord_app.Runtime',return_value=self.runtime):
             client=EchoClient(self.settings,self.backend,[2])
-        self.assertEqual([c.name for c in client.tree.get_commands()],['동의'])
+        self.assertEqual([c.name for c in client.tree.get_commands()],['동의','성격'])
         self.assertIn('emoji:5',self.cache.descriptions(2))
         self.cache.clear(2);self.assertEqual(self.cache.descriptions(2),{})
     async def test_transport_rechecks_scope_before_each_output_and_sets_nonce(self):

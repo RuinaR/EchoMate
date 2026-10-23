@@ -202,7 +202,7 @@ class DiscordConsent(unittest.IsolatedAsyncioTestCase):
             cfg=Settings(1,secrets.token_hex(32),Path(folder)/'settings.json');cfg.set_scope(1,2,3,'mention')
             client=EchoClient(cfg,base.FakeBackend(),[2]);client.tree.sync=AsyncMock();client.tree.fetch_commands=AsyncMock(return_value=[])
             try:
-                self.assertEqual([c.name for c in client.tree.get_commands()],['동의'])
+                self.assertEqual([c.name for c in client.tree.get_commands()],['동의','성격'])
                 await client.setup_hook();client.tree.sync.assert_not_awaited()
                 cfg.set(1,'command_sync_pending',True);await client.setup_hook();client.tree.sync.assert_not_awaited();self.assertTrue(cfg.get()['command_sync_pending'])
                 response=SimpleNamespace(defer=AsyncMock(),send_message=AsyncMock())

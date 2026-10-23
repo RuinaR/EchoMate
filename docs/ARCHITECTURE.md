@@ -1,5 +1,11 @@
 # 아키텍처
 
+## 2026-10-24 캐릭터 행동과 읽기 전용 명령
+
+`applied_profile`은 서명 검증 후 v1→v2 정규화와 실제 공통 설정을 합친다. `compile_profile`은 반응 접근·수치·제한된 정체성 데이터와 고정된 행동 예시를 생성 정책으로 구성한다. `character.instruction`의 중복 성향 지침은 제거하고 핵심 성격 뒤에 기분의 표현 변화를 적용한다. Runtime/Controller 미리보기는 같은 `effective_character`를 쓰며 동의 없는 관계는 None이다. 사회적 판단/Action/저장소 권한은 이 정책과 분리한다.
+
+`personality_ui`는 실제 owner ID→현재 Settings→민감 자료 필터→ephemeral Embed의 읽기 전용 경로다. 모델이나 개인 자료를 조회하지 않는다. 명령 계약은 `/동의`(본인 동의)·`/성격`(소유자 조회) 두 개이고 명령별 접근 정책도 검토 fingerprint에 포함된다. 기본 역할 권한은 미설정, `/성격` 실행은 실제 소유자 ID 검사다. 원격 조회·등록·클라이언트 표시는 이번 검사 범위 밖이다. [구현·검증 경계](PERSONA-QA.md).
+
 ## 2026-10-24 명령 계약과 부분 실패 보호
 
 `command_contract.py`는 SDK HTTP 원본 JSON의 Application/scope·zero-based 접근 배열을 보존하고 전역 `/동의` 계약을 검증한다. 원격 metadata→검토 fingerprint→소유자 별도 승인→전역 payload 검증/sync→전역 GET 검증→서버별 정리→전체 GET 검증으로 진행한다. API 성공과 클라이언트 표시/실행은 별개다. 조회·변경 lock, 부분 실패/취소 단계 감사·승인 폐기와 pending 유지, 시작 시 자동 실행 금지를 유지한다. 라이브러리 전역 patch/자동 rollback은 없다. [실제 mock 재현·승인 경계](COMMAND-RECOVERY-QA.md).

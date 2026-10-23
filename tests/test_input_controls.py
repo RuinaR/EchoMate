@@ -29,9 +29,10 @@ class InputControls(unittest.TestCase):
         self.app.advanced_profile();self.root.update_idletasks()
         d=next(w for w in self.root.winfo_children() if isinstance(w,tk.Toplevel))
         self.assertFalse(d.winfo_ismapped());return d
-    def test_advanced_uses_four_ranges_two_finite_choices_and_actual_policy(self):
+    def test_advanced_uses_six_ranges_two_finite_choices_and_actual_policy(self):
         d=self.advanced();controls=d._form_controls
-        self.assertEqual(sum(isinstance(w,RangeControl) for w in controls.values()),4)
+        self.assertEqual(sum(isinstance(w,RangeControl) for w in controls.values()),6)
+        self.assertEqual(set(controls),{'calmness','honesty','exclamation','emoji','length','swearing','curiosity','skepticism'})
         self.assertEqual(sum(isinstance(w,SegmentControl) for w in controls.values()),2)
         self.assertFalse(any(isinstance(w,tk.Entry) for w in d.winfo_children()[0].winfo_children()))
         self.assertEqual(controls['length'].choices,('짧게','상황에 맞게'))

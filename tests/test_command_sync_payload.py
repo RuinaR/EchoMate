@@ -25,10 +25,10 @@ class CommandPayload(unittest.IsolatedAsyncioTestCase):
             with patch('discord.http.HTTPClient.request',new=AsyncMock(side_effect=AssertionError('Real Discord forbidden'))) as outbound,patch('aiohttp.ClientSession._request',new=AsyncMock(side_effect=AssertionError('Network forbidden'))),patch.object(client.tree._http,'get_global_commands',side_effect=global_get),patch.object(client.tree._http,'get_guild_commands',side_effect=guild_get),patch.object(client.tree._http,'bulk_upsert_global_commands',side_effect=write),patch.object(client.tree._http,'bulk_upsert_guild_commands',side_effect=guild_write):
                 plan=await client.review_commands(1);await client.apply_commands(1,plan['fingerprint'])
                 self.assertEqual(captured[0][0],None)
-                self.assertEqual([(p['name'],p['type']) for p in captured[0][1]],[('동의',1)])
+                self.assertEqual([(p['name'],p['type']) for p in captured[0][1]],[('동의',1),('성격',1)])
                 self.assertFalse(captured[0][1][0].get('dm_permission',True))
                 self.assertEqual(captured[1],(2,[]))
-                self.assertEqual([p['name'] for p in remote[None]],['동의']);self.assertEqual(remote[2],[])
+                self.assertEqual([p['name'] for p in remote[None]],['동의','성격']);self.assertEqual(remote[2],[])
                 self.assertFalse(self.settings.get()['command_sync_pending']);outbound.assert_not_awaited()
         finally:await client.close()
 

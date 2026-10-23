@@ -1,4 +1,4 @@
-"""Official Bot Token transport; Discord UI only manages the caller's consent."""
+"""Official Bot transport: self consent and owner-only applied persona view."""
 from __future__ import annotations
 import asyncio
 import json
@@ -210,13 +210,19 @@ class EchoClient(discord.Client):
         @app_commands.allowed_installs(guilds=True,users=False)
         async def consent(i:discord.Interaction):await open_consent(self,i)
         self.tree.add_command(app_commands.Command(name='동의',description='내 친밀도·기억·대화 요약의 저장 동의와 삭제',callback=consent))
+        from .personality_ui import open_personality
+        @app_commands.guild_only()
+        @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
+        @app_commands.allowed_installs(guilds=True,users=False)
+        async def personality(i:discord.Interaction):await open_personality(self,i)
+        self.tree.add_command(app_commands.Command(name='성격',description='소유자 전용 · 현재 적용된 캐릭터와 기분 확인',callback=personality))
         @self.tree.error
         async def command_error(i,error):
             missing=isinstance(error,app_commands.CommandNotFound)
             cause=getattr(error,'original',error)
             self.runtime.note('legacy_command_unregistered' if missing else 'consent_command_failed_'+type(cause).__name__)
             message=('이건 이전 버전의 명령이야. 지금은 /동의에서 본인 데이터 설정을 열어 줘. 예전 명령 목록 정리는 소유자가 앱에서 승인해야 해.' if missing else
-                '데이터 설정을 확인하지 못했어. 변경 완료로 간주하지 말고 /동의를 다시 열어 확인해 줘.')
+                '명령을 처리하지 못했어. 변경 완료로 간주하지 말고 현재 상태를 다시 확인해 줘.')
             if not i.response.is_done():await i.response.send_message(message,ephemeral=True)
             else:await i.followup.send(message,ephemeral=True)
 
@@ -250,7 +256,8 @@ class EchoClient(discord.Client):
                 plan['guilds'][str(gid)]=await self._fetch_command_rows(gid)
         except (Exception,asyncio.CancelledError) as exc:
             self.command_status=failure_details(exc,self.command_status['stage']);raise
-        plan['global_after']=['동의'];plan['guild_after']=[]
+        from .command_contract import COMMAND_ACCESS
+        plan['global_after']=list(COMMAND_ACCESS);plan['guild_after']=[];plan['access_policy']=COMMAND_ACCESS
         plan['fingerprint']=hashlib.sha256(json.dumps(plan,sort_keys=True).encode()).hexdigest()
         self.command_review=plan
         self.command_status=dict(status='reviewed',stage='read_complete',global_count=len(plan['global_before']),

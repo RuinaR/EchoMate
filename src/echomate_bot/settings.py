@@ -67,7 +67,7 @@ def validate(cfg):
         raise ValueError("Unknown mood, activity or trusted model")
     if not isinstance(cfg['model_roots'],list) or len(cfg['model_roots'])>8 or any(not isinstance(p,str) or len(p)>1000 or not Path(p).is_absolute() for p in cfg['model_roots']):raise ValueError('Invalid model folders')
     from .character_profiles import validate_profile
-    if cfg['character_profile']:validate_profile(cfg['character_profile'])
+    if cfg['character_profile']:cfg['character_profile']=validate_profile(cfg['character_profile'])
     elif cfg['character_profile']!={}:raise ValueError('Invalid character profile')
     for key, lo, hi in (("warmth", 0, 100), ("cuteness", 0, 100), ("playfulness", 0, 100),
                         ("cooldown", 2, 3600), ("engagement_seconds", 10, 86400),('reminder_grace',0,86400),('memory_plan_grace',0,86400),('memory_date_grace',0,86400),('memory_state_hours',1,72)):

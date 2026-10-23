@@ -111,7 +111,7 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
 
     async def test_profile_edit_export_import_and_cancel_persist_exactly(self):
         app=self.app;app.page='character';app.edit_profile();d=self.dialog()
-        self.fill(d,['Synthetic profile','Display only','존댓말','35','20','자세히']);await self.sync()
+        self.fill(d,['Synthetic profile','Display only','존댓말','35','20','자세히','균형 있게','','','']);await self.sync()
         self.assertFalse(self.c.error)
         cfg=self.c.settings.get();self.assertEqual(cfg['character_profile']['speech'],'polite')
         key=next(k for k in self.c.profiles_view if k!='default')
@@ -133,10 +133,34 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
             app.profile_files();self.fill(self.dialog(),['가져오기']);await self.sync()
         self.assertEqual(set(self.c.profiles_view),keys)
 
+    async def test_unsaved_editor_preview_preserves_draft_and_never_applies(self):
+        self.app.page='character';before=deepcopy(self.c.settings.get())
+        self.app.edit_profile();editor=self.dialog()
+        editor._form_values['name'].set('미저장 확인')
+        editor._form_values['approach'].set('분석부터')
+        with patch.object(self.app,'character_preview',return_value=None) as preview:
+            editor._form_feedback.regions[1]['callback']()
+        self.assertEqual(preview.call_args.kwargs['profile']['approach'],'analytical')
+        self.assertEqual(preview.call_args.kwargs['profile']['name'],'미저장 확인')
+        self.assertEqual(self.c.settings.get(),before);self.assertFalse(self.commands)
+        editor._form_values['name'].set('')
+        with patch.object(self.app,'character_preview') as preview:
+            editor._form_feedback.regions[1]['callback']();preview.assert_not_called()
+        self.assertTrue(editor.winfo_exists());invoke(editor,'<Escape>')
+
+    async def test_preset_cancel_then_apply_keeps_mood_and_model(self):
+        before=deepcopy(self.c.settings.get());self.app.preset_picker()
+        invoke(self.dialog(),'<Escape>');await self.sync()
+        self.assertEqual(self.c.settings.get(),before)
+        self.app.preset_picker();self.fill(self.dialog(),['차분한 논리']);await self.sync()
+        cfg=self.c.settings.get();self.assertEqual(cfg['character_profile']['approach'],'analytical')
+        self.assertEqual(cfg['warmth'],15)
+        for key in ('mood','gender','activity','model'):self.assertEqual(cfg[key],before[key])
+
     async def test_advanced_typed_controls_persist_reopen_cancel_and_failed_write(self):
         app=self.app;app.page='character';original=deepcopy(self.c.settings.get())
         app.advanced_profile();d=self.dialog()
-        self.fill(d,['80','90','15','0','짧게','가벼운 감탄만']);await self.sync()
+        self.fill(d,['80','90','15','0','짧게','가벼운 감탄만','40','35']);await self.sync()
         self.assertFalse(self.c.error);p=self.c.settings.get()['character_profile']
         self.assertEqual((p['calmness'],p['honesty'],p['emoji'],p['length'],p['swearing']),(80,90,0,'short',True))
         from echomate_bot.settings import Settings
@@ -170,10 +194,10 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_profile_write_error_and_old_record_delete_are_not_success(self):
         app=self.app;app.page='character';before=deepcopy(self.c.settings.get())
-        app.edit_profile();d=self.dialog();self.fill(d,['','Display','반말','999','20','균형'])
+        app.edit_profile();d=self.dialog();self.fill(d,['','Display','반말','999','20','균형','균형 있게','','',''])
         self.assertTrue(d.winfo_exists());self.assertEqual(self.c.settings.get(),before);d.destroy()
         with patch.object(ProfileStore,'save',side_effect=OSError('synthetic private path')):
-            app.edit_profile();self.fill(self.dialog(),['Synthetic','Display','반말','30','20','균형']);await self.sync()
+            app.edit_profile();self.fill(self.dialog(),['Synthetic','Display','반말','30','20','균형','균형 있게','','','']);await self.sync()
         self.assertEqual(self.c.error,'OSError');self.assertEqual(self.c.settings.get(),before)
         self.assertNotIn('synthetic private path',str(app.snapshot))
 
@@ -280,7 +304,7 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         self.c.command_review=dict(application='42',global_before=[dict(id='1',name='old',type=1)],guilds={'2':[]},fingerprint='synthetic')
         await self.sync();app.approve_commands();d=self.dialog();self.fill(d,['아니오'])
         self.assertTrue(d.winfo_exists());self.assertFalse(self.c.settings.get()['command_sync_pending'])
-        self.fill(d,['동의로 교체']);await self.sync();self.assertFalse(self.c.settings.get()['command_sync_pending'])
+        self.fill(d,['명령 적용']);await self.sync();self.assertFalse(self.c.settings.get()['command_sync_pending'])
         self.assertEqual(self.commands[-1][0],'command_apply')
         self.assertTrue(d.winfo_exists())
         self.assertIsNone(self.c.client)

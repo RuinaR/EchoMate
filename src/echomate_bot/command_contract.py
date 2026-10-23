@@ -1,4 +1,5 @@
 """Public command shape. Remote metadata is evidence, never an approval."""
+COMMAND_ACCESS={'동의':'self_ephemeral','성격':'owner_ephemeral'}
 
 def rows(commands,application,guild=None):
     result=[]
@@ -22,14 +23,14 @@ def rows(commands,application,guild=None):
 
 
 def consent_contract(commands):
-    """Require a guild-installed, guild-visible slash command, without admin gate.
+    """Require the complete guild-installed slash set, without an admin gate.
 
     Server permission overrides and actual client visibility need separate checks.
     Missing remote context fields are unknown, not proof of the intended scope.
     """
-    return (len(commands)==1 and commands[0]['name']=='동의' and commands[0]['type']==1
-        and commands[0].get('contexts')==[0] and commands[0].get('integration_types')==[0]
-        and commands[0].get('default_member_permissions') is None and not commands[0].get('nsfw',False))
+    return (len(commands)==len(COMMAND_ACCESS) and {c['name'] for c in commands}==set(COMMAND_ACCESS)
+        and all(c['type']==1 and c.get('contexts')==[0] and c.get('integration_types')==[0]
+            and c.get('default_member_permissions') is None and not c.get('nsfw',False) for c in commands))
 
 
 def failure_details(exc,stage):

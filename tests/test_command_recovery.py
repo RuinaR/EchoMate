@@ -22,7 +22,7 @@ class CommandRecovery(unittest.IsolatedAsyncioTestCase):
         state=dict(global_rows=[dict(id='100',application_id='42',name='legacy',description='old',type=1,version='1')],
             guild_rows=[dict(id='101',application_id='42',guild_id='2',name='legacy',description='old',type=1,version='1')])
         async def global_write(app,*,payload):
-            state['global_rows']=bad_global if bad_global is not None else [dict(p,id='200',application_id=str(app),version='2') for p in payload]
+            state['global_rows']=bad_global if bad_global is not None else [dict(p,id=str(200+i),application_id=str(app),version='2') for i,p in enumerate(payload)]
             return state['global_rows']
         async def guild_write(app,guild,*,payload):state['guild_rows']=[];return []
         stack=ExitStack()
@@ -61,7 +61,7 @@ class CommandRecovery(unittest.IsolatedAsyncioTestCase):
         for change in (dict(contexts=[1]),dict(default_member_permissions='0'),dict(type=2),dict(integration_types=[1]),dict(nsfw=True)):
             c=self.client()
             bad=[dict(id='200',application_id='42',name='동의',description='test',type=1,contexts=[0],integration_types=[0],**{})]
-            bad[0].update(change);stack,_,_,_,_,guild_put=self.http(c,bad_global=bad)
+            bad.append(dict(bad[0],id='201',name='성격'));bad[0].update(change);stack,_,_,_,_,guild_put=self.http(c,bad_global=bad)
             try:
                 with stack:
                     plan=await c.review_commands(1)

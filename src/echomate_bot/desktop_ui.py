@@ -440,6 +440,7 @@ class DesktopApp(CompanionViews):
         self.button(410,583,128,34,'저장한 프로필',self.profile_library)
         self.button(548,583,128,34,'로컬 미리보기',self.character_preview)
         self.button(686,583,128,34,'가져오기·내보내기',self.profile_files)
+        self.button(824,583,max(160,w-850),34,'캐릭터 프리셋',self.preset_picker)
         self.toggle(250,638,'성인 유머 · 연령 제한 채널에서만',cfg['adult_humor'],lambda:self.set_value('adult_humor',not cfg['adult_humor']))
         self.button(686,634,128,30,'표현 고급 설정',self.advanced_profile)
         self.text(250,671,'기분·강도는 즉시 저장해요. 팝업은 ‘적용’으로 저장해요.',9,MUTED,width=w-290)
@@ -507,19 +508,26 @@ class DesktopApp(CompanionViews):
     def select_model(self,ids):self.model_id=next(iter(ids),None);self.render()
 
     def edit_profile(self):
-        from .character_profiles import DEFAULT_PROFILE,validate_profile
-        p=dict(self.snapshot['cfg'].get('character_profile') or DEFAULT_PROFILE)
-        from .character_profiles import SHARED_FIELDS
-        p.update({k:self.snapshot['cfg'][k] for k in SHARED_FIELDS})
-        def save(v):
-            p.update(name=v['name'],introduction=v['intro'],speech={'반말':'casual','존댓말':'polite'}[v['speech']],energy=int(v['energy']),humor=int(v['humor']),detail={'간단히':'brief','균형':'balanced','자세히':'detailed'}[v['detail']])
-            validate_profile(p)
-            self.controller.submit('profiles',action='save_apply',key=v['key'],value=p)
+        from .character_profiles import validate_profile,applied_profile,APPROACHES
+        p=applied_profile(self.snapshot['cfg'])
+        def build(v):
+            result=dict(p,name=v['name'],introduction=v['intro'],speech={'반말':'casual','존댓말':'polite'}[v['speech']],energy=int(v['energy']),humor=int(v['humor']),detail={'간단히':'brief','균형':'balanced','자세히':'detailed'}[v['detail']],approach={v:k for k,v in APPROACHES.items()}[v['approach']],tastes=v['tastes'],values=v['values'],habits=v['habits'])
+            return validate_profile(result)
         import secrets
-        def submit(v):v['key']='character-'+secrets.token_hex(5);save(v)
-        self.form('캐릭터 편집 · 복제해서 저장',[('name','캐릭터 이름',p['name']),('intro','소개 · 지시문이 아닌 표시 자료',p['introduction']),('speech','기본 말투 · 반말 / 존댓말','반말' if p['speech']=='casual' else '존댓말'),('energy','반응 에너지 · 0~100',p['energy']),('humor','농담 참여 성향 · 0~100',p['humor']),('detail','설명 · 간단히 / 균형 / 자세히',{'brief':'간단히','balanced':'균형','detailed':'자세히'}[p['detail']])],submit,'적용하면 같은 이름도 별도 복사본으로 저장해요. 닫으면 편집을 취소해요. 권한·개인정보·사실성·코드 출력 제한은 바뀌지 않아요.',controls={
+        def submit(v):return self.controller.submit('profiles',action='save_apply',key='character-'+secrets.token_hex(5),value=build(v))
+        self.form('캐릭터 편집 · 복제해서 저장',[('name','캐릭터 이름',p['name']),('intro','소개 · 지시문이 아닌 표시 자료',p['introduction']),('speech','기본 말투 · 반말 / 존댓말','반말' if p['speech']=='casual' else '존댓말'),('energy','반응 에너지 · 0~100',p['energy']),('humor','농담 참여 성향 · 0~100',p['humor']),('detail','설명 · 간단히 / 균형 / 자세히',{'brief':'간단히','balanced':'균형','detailed':'자세히'}[p['detail']]),('approach','반응 접근 방식',APPROACHES[p['approach']]),('tastes','취향 · 160자 이내',p['tastes']),('values','가치관 · 160자 이내',p['values']),('habits','대화 습관 · 120자 이내',p['habits'])],submit,'적용하면 같은 이름도 별도 복사본으로 저장해요. 닫으면 편집을 취소해요. 권한·개인정보·사실성·코드 출력 제한은 바뀌지 않아요.',controls={
             'speech':choice_field(['반말','존댓말']),'energy':range_field('첫 반응의 활기와 에너지를 조절해요.'),
-            'humor':range_field('상황에 맞는 농담에 얼마나 적극적으로 참여할지 정해요.'),'detail':choice_field(['간단히','균형','자세히'])})
+            'humor':range_field('상황에 맞는 농담에 얼마나 적극적으로 참여할지 정해요.'),'detail':choice_field(['간단히','균형','자세히']),
+            'approach':choice_field(list(APPROACHES.values()),'고민·의견 충돌에 무엇부터 반응할지 정해요. 기분과는 별개예요.')},preview=lambda v:self.character_preview(profile=build(v)))
+
+    def preset_picker(self):
+        from .character_profiles import presets
+        choices=presets();labels={p['name']:k for k,p in choices.items()}
+        def chosen(v):return dict(choices[labels[v['preset']]],**{k:self.snapshot['cfg'][k] for k in ('mood','gender','activity')})
+        self.form('캐릭터 프리셋 · 적용 전 비교',[('preset','반응 방식의 초기값',next(iter(labels)))],
+            lambda v:self.set_value('character_profile',chosen(v)),
+            '모델은 그대로예요. 적용 전에는 운영 설정을 바꾸지 않아요. 적용 후 편집·복제하거나 취소할 수 있어요.',
+            controls={'preset':choice_field(list(labels))},preview=lambda v:self.character_preview(profile=chosen(v)))
 
     def profile_library(self):
         self.controller.submit('profiles')
@@ -598,20 +606,22 @@ class DesktopApp(CompanionViews):
         refresh()
 
     def advanced_profile(self):
-        from .character_profiles import DEFAULT_PROFILE,validate_profile
-        p=dict(self.snapshot['cfg'].get('character_profile') or DEFAULT_PROFILE)
+        from .character_profiles import validate_profile,applied_profile
+        p=applied_profile(self.snapshot['cfg'])
         def save(v):
-            for k in ('calmness','honesty','exclamation','emoji'):p[k]=int(v[k])
+            for k in ('calmness','honesty','exclamation','emoji','curiosity','skepticism'):p[k]=int(v[k])
             p['length']={'상황에 맞게':'adaptive','짧게':'short'}[v['length']]
             p['swearing']={'끔':False,'가벼운 감탄만':True}[v['swearing']]
             validate_profile(p);return self.set_value('character_profile',p)
-        self.form('표현 고급 설정',[(k,label,p[k]) for k,label in (('calmness','차분함'),('honesty','솔직함'),('exclamation','감탄 빈도'),('emoji','답변 속 이모지 빈도'))]+[('length','잡담 길이','상황에 맞게' if p['length']=='adaptive' else '짧게'),('swearing','가벼운 비속어','가벼운 감탄만' if p['swearing'] else '끔')],save,
+        self.form('표현 고급 설정',[(k,label,p[k]) for k,label in (('calmness','차분함'),('honesty','솔직함'),('exclamation','감탄 빈도'),('emoji','답변 속 이모지 빈도'))]+[('length','잡담 길이','상황에 맞게' if p['length']=='adaptive' else '짧게'),('swearing','가벼운 비속어','가벼운 감탄만' if p['swearing'] else '끔'),('curiosity','호기심 · 질문 방식',p['curiosity']),('skepticism','전제 점검 · 다른 설명 살피기',p['skepticism'])],save,
             '편집 중인 값이에요. 적용하면 저장하고, 닫으면 원래 값을 유지해요. 표현은 5단계 강도로 반영돼요. 필수 설명·사실·권한은 바뀌지 않아요.',controls={
                 'calmness':range_field('답변을 얼마나 차분하고 안정적인 톤으로 말할지 정해요.',anchors=('0 · 생동감 있게','50 · 균형 있게','100 · 차분하게')),
                 'honesty':range_field('돌려 말하기보다 결론과 한계를 직접 말하는 정도예요. 사실은 항상 지켜요.',anchors=('0 · 완곡하게','50 · 명료하게','100 · 직접적으로')),
                 'exclamation':range_field('“와”, “오” 같은 짧은 감탄을 얼마나 자주 쓸지 정해요.',anchors=('0 · 거의 안 함','50 · 보통','100 · 자주')),
                 'emoji':range_field('답변 글 안의 🙂 같은 이모지예요. 메시지에 누르는 반응과는 달라요. 반복 웃음 문자는 계속 억제해요.',anchors=('0 · 안 씀','50 · 드물게','100 · 상황에 맞게')),
                 'length':choice_field(['짧게','상황에 맞게'],'잡담을 짧게 끝내거나 상황에 맞는 길이로 이어가요. 필요한 설명은 생략하지 않아요.'),
+                'curiosity':range_field('답을 반복해서 묻는 대신 상대의 이유와 관점을 탐색하는 정도예요.'),
+                'skepticism':range_field('사람을 의심하는 대신 설명의 전제·대안을 점검하는 정도예요.'),
                 'swearing':choice_field(['끔','가벼운 감탄만'],'상황을 향한 가벼운 표현만 허용해요. 사람을 모욕하거나 공격하는 표현은 허용하지 않아요.')})
 
     def profile_files(self):
@@ -626,7 +636,7 @@ class DesktopApp(CompanionViews):
         self.form('프로필 파일',[('action','작업 선택','내보내기')],act,
             '내보내기는 현재 적용한 캐릭터예요. 가져오기는 기존 자료를 덮어쓰지 않고 새 프로필로 보관해요. 저장한 프로필에서 선택해 적용하세요. 토큰·대화·기억은 포함하지 않아요.',controls={'action':choice_field(['내보내기','가져오기'])})
 
-    def character_preview(self):
+    def character_preview(self,profile=None):
         import secrets
         session=secrets.token_hex(12);pending=[False];input_error=['']
         dialog=tk.Toplevel(self.root);dialog.title('Discord 없이 캐릭터 미리보기');dialog.configure(bg=PANEL);dialog.geometry('690x510');dialog.minsize(560,420);dialog.transient(self.root)
@@ -634,15 +644,28 @@ class DesktopApp(CompanionViews):
         entry=tk.Entry(dialog,bg=CARD,fg=FG,insertbackground=FG,relief='flat',font=('맑은 고딕',11),highlightthickness=1,highlightbackground=LINE,highlightcolor=ACCENT);entry.pack(padx=22,fill='x',ipady=8);entry.insert(0,'처음 만난 친구에게 짧게 인사해 줘')
         actions=tk.Canvas(dialog,bg=PANEL,height=48,highlightthickness=0);actions.pack(fill='x',padx=22)
         output=tk.Text(dialog,bg=CARD,fg=FG,relief='flat',wrap='word',font=('맑은 고딕',11),state='disabled');output.pack(padx=22,pady=(0,22),fill='both',expand=True)
-        def generate():
+        from tkinter import ttk
+        selection=tk.StringVar(dialog,value='편집 중인 값' if profile is not None else '현재 적용')
+        selector=ttk.Combobox(dialog,textvariable=selection,state='readonly',values=['편집 중인 값'] if profile is not None else ['현재 적용',*['저장: '+k for k in (self.snapshot or {}).get('profiles',{})]])
+        selector.pack(padx=22,pady=(0,6),fill='x',before=actions)
+        def generate(compare=False):
             if not 1<=len(entry.get().strip())<=1000:
                 input_error[0]='질문은 공백을 제외하고 1~1000자로 입력해 주세요.';return
             input_error[0]=''
             if not pending[0] and not (self.snapshot or {}).get('preview_busy') and not (self.snapshot or {}).get('preview_cleanup_failed') and 1<=len(entry.get())<=1000:
-                pending[0]=True;self.controller.submit('preview',text=entry.get(),session=session)
+                values=dict(text=entry.get(),session=session)
+                if compare:values['compare']=True
+                elif profile is not None:values['profile']=profile
+                elif selection.get().startswith('저장: '):
+                    key=selection.get()[4:];saved=(self.snapshot or {}).get('profiles',{}).get(key)
+                    if saved is None:input_error[0]='프로필 목록이 바뀌었어요. 다시 선택해 주세요.';return
+                    values['profile']=saved;values['profile_source']='saved'
+                pending[0]=True;self.controller.submit('preview',**values)
         feedback=CanvasFeedback(actions,keyboard=True,activate_on_release=True)
         shape=rounded(actions,8,8,137,32,CARD,8);label=actions.create_text(76,24,text='미리보기',fill=FG,font=('맑은 고딕',10))
         feedback.add((8,8,137,32),shape,label,primary=True,callback=generate)
+        compare_shape=rounded(actions,156,8,188,32,CARD,8);compare_label=actions.create_text(250,24,text='4개 프리셋 비교',fill=FG,font=('맑은 고딕',10))
+        feedback.add((156,8,188,32),compare_shape,compare_label,callback=lambda:generate(True))
         entry.bind('<Return>',lambda e:generate())
         old=[''];timer=[None]
         def poll():
@@ -653,7 +676,9 @@ class DesktopApp(CompanionViews):
             if mine and not snap.get('preview_busy'):pending[0]=False
             if value!=old[0]:output.configure(state='normal');output.delete('1.0','end');output.insert('1.0',value);output.configure(state='disabled');old[0]=value
             busy=pending[0] or bool(snap.get('preview_busy') or snap.get('preview_cleanup_failed'))
-            feedback.regions[0]['enabled']=not busy;feedback.paint();actions.itemconfigure(label,text='처리 중…' if busy else '미리보기')
+            for region in feedback.regions:region['enabled']=not busy
+            selector.configure(state='disabled' if busy else 'readonly')
+            feedback.paint();actions.itemconfigure(label,text='처리 중…' if busy else '미리보기')
             timer[0]=dialog.after(400,poll)
         def closed(event):
             if event.widget is dialog and timer[0]:
@@ -661,19 +686,20 @@ class DesktopApp(CompanionViews):
                 except tk.TclError:pass
                 if not self.closing and not self.disposed:self.controller.submit('preview_cancel',session=session)
         dialog.bind('<Destroy>',closed);poll();entry.focus_set()
+        return dialog
     def select_job(self,ids):self.job_id=next(iter(ids),None);self.render()
     def approve_commands(self):
         plan=(self.snapshot or {}).get('command_review')
         if not plan:
             self.controller.submit('command_review');return
         def save(v):
-            if v['confirm']!='동의로 교체':raise ValueError()
+            if v['confirm']!='명령 적용':raise ValueError()
             self.controller.submit('command_apply',fingerprint=plan['fingerprint'])
         def command_label(c):
             return c['name']+' ('+{1:'슬래시',2:'사용자',3:'메시지'}.get(c.get('type',1),'기타')+')'+(' · 접근 범위 '+str(c.get('contexts'))+' · 설치 '+str(c.get('integration_types'))+' · 기본 권한 '+str(c.get('default_member_permissions')))
-        summary='Application '+plan['application']+'\n전역: '+', '.join(command_label(c) for c in plan['global_before'])+' → /동의\n'
+        summary='Application '+plan['application']+'\n전역: '+', '.join(command_label(c) for c in plan['global_before'])+' → /동의, /성격\n'
         summary+='\n'.join('서버 '+g+': '+(', '.join(command_label(c) for c in rows) or '없음')+' → 서버별 명령 없음' for g,rows in plan['guilds'].items())
-        self.form('확인한 명령 변경 승인',[('confirm','동의로 교체 라고 입력','')],save,summary+'\n범위 0=서버, None=응답에 정보 없음. 기본 권한 None=별도 기본 제한 없음. 서버별 권한 덮어쓰기와 실제 화면 표시는 별도 확인이에요.\n승인하면 이 애플리케이션만 변경해요. 전역 /동의를 먼저 재조회하고 성공한 경우에만 서버별 구형 명령을 정리해요. 목록이 바뀌면 재승인이 필요해요. 사용자 자료는 삭제하지 않아요.')
+        self.form('확인한 명령 변경 승인',[('confirm','명령 적용 이라고 입력','')],save,summary+'\n/동의는 본인 데이터, /성격은 실제 소유자 ID 검사 후 본인만 보는 응답이에요. 기본 권한 제한은 없지만 일반 사용자는 /성격 내용을 볼 수 없어요.\n범위 0=서버, None=응답에 정보 없음. 서버별 권한 덮어쓰기와 화면 표시는 별도 확인이에요.\n승인하면 이 애플리케이션만 변경해요. 전역 두 명령을 먼저 재조회하고 성공한 경우에만 서버별 구형 명령을 정리해요. 목록이 바뀌면 재승인이 필요해요. 사용자 자료는 삭제하지 않아요.')
     def draw_status(self,w,h,s):
         if not s:return
         width=(w-282)/3

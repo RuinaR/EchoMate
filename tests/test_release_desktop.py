@@ -173,7 +173,7 @@ class ReleaseTk(unittest.TestCase):
                 app.click(SimpleNamespace(x=260,y=490));self.assertEqual(controller.submit.call_args.kwargs['values'],dict(web_search=True))
                 app.form=Mock()
                 app.snapshot['command_review']=dict(application='999',global_before=[dict(name='echo',type=1)],guilds={'2':[]},fingerprint='synthetic')
-                app.approve_commands();app.form.call_args.args[2](dict(confirm='동의로 교체'))
+                app.approve_commands();app.form.call_args.args[2](dict(confirm='명령 적용'))
                 self.assertEqual(controller.submit.call_args.args,('command_apply',))
                 self.assertEqual(controller.submit.call_args.kwargs['fingerprint'],'synthetic')
                 self.assertTrue(all(y+height<=740 or root.winfo_height()>740 for x,y,width,height,cb in app.hits))

@@ -195,14 +195,14 @@ class CommandAndStorage(unittest.IsolatedAsyncioTestCase):
             await client.tree.on_error(i,app_commands.CommandNotFound('내기억',[]))
             text=i.response.send_message.call_args.args[0]
             self.assertIn('/동의',text);self.assertNotIn('저장소',text)
-            self.assertEqual([c.name for c in client.tree.get_commands()],['동의'])
+            self.assertEqual([c.name for c in client.tree.get_commands()],['동의','성격'])
         finally:await client.close()
 
     async def test_command_review_apply_reread_and_remote_verification(self):
         client=EchoClient(self.settings,self.backend,[2]);client._connection.application_id=42
         old=dict(id='1',name='old',application_id='42',description='legacy',type=1)
         new=dict(id='2',name='동의',application_id='42',description='consent',type=1,contexts=[0],integration_types=[0])
-        client.tree._http.get_global_commands=AsyncMock(side_effect=[[old],[old],[new],[new]])
+        client.tree._http.get_global_commands=AsyncMock(side_effect=[[old],[old],[new,dict(new,id='3',name='성격')],[new,dict(new,id='3',name='성격')]])
         client.tree._http.get_guild_commands=AsyncMock(side_effect=[[old],[old],[]])
         client.tree.sync=AsyncMock()
         try:
@@ -232,7 +232,7 @@ class CommandAndStorage(unittest.IsolatedAsyncioTestCase):
         client=EchoClient(self.settings,self.backend,[2]);client._connection.application_id=42
         old=dict(id='1',name='old',application_id='42',description='legacy',type=1)
         new=dict(id='2',name='동의',application_id='42',description='consent',type=1,contexts=[0],integration_types=[0])
-        client.tree._http.get_global_commands=AsyncMock(side_effect=[[old],[old],[new]])
+        client.tree._http.get_global_commands=AsyncMock(side_effect=[[old],[old],[new,dict(new,id='3',name='성격')]])
         client.tree._http.get_guild_commands=AsyncMock(return_value=[])
         client.tree.sync=AsyncMock(side_effect=[None,OSError('synthetic failure')])
         try:

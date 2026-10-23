@@ -1,5 +1,13 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## 2026-10-24 페르소나 공개 파일 갱신
+
+마감: 전체688검사 OK221.655초, Portable 공개 src/docs149파일·manifest21,553파일 대조, 번들39검사 OK8.141초·두 VBS `/check` PASS. 운영4파일 hash 보존. 캐릭터 강한 차별성 목표 미달·실제 Discord 미검증으로 BLOCKED다.
+
+기존 Portable 후보의 공개 src/docs/README/기본 프로필과 manifest만 갱신했다. 런타임 전체 재빌드/재다운로드/모델 포함은 하지 않았다. 번들 Python의 별도 데이터 홈에서 페르소나·UI·명령 표적39검사 OK8.141초, 두 VBS `/check` 조기 종료 PASS다. 처음 sandbox의 cscript 설정 접근 거부는 실행 성공으로 기록하지 않았고 허용된 동일 `/check` 경로로 재검했다. 실제 Discord는 시작하지 않았다.
+
+이번 번들의 GPU 재로딩·새 프리셋 실제 사용자 클릭·다른 Windows/드라이버는 NOT VERIFIED다. 소스에서 실제 GPU를 확인한 것과 번들 표적검사를 구분한다. 최종 manifest/공개 소스 대조·운영 자료 보존과 전체 회귀 마감은 [PERSONA-QA](PERSONA-QA.md)를 따른다. 기존 일반 배포 BLOCKED와 `/동의` 비표시는 해제하지 않는다.
+
 ## 2026-10-24 명령 경로 변경
 
 명령 계약 모듈과 조회/승인 UI가 변경돼 확정된 공개 파일만 Portable에 반영한다. 전체 런타임 재빌드나 운영 자료/모델 복사는 하지 않는다. [소스/manifest 대조와 번들 표적 검사의 마감 기록](COMMAND-RECOVERY-QA.md)을 따른다. 이전35/44검사를 이번 소스의 실행 근거로 재사용하지 않는다. 실제 Discord와 다른 Windows는 미검증이며 `/동의` 실제 비표시는 차단 사항이다.
