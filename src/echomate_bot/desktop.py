@@ -138,6 +138,9 @@ class LocalController:
         if preview_busy:progress.append(dict(channel='로컬 미리보기',stage='취소·GPU 정리' if getattr(self,'preview_cancelling',False) else '모델 준비' if preparing else 'GPU 작업 대기·처리',seconds=round(time.monotonic()-getattr(self,'preview_started',time.monotonic()),1)))
         snapshot=dict(phase='AI 안전 보호로 정지 · 진단 확인 후 다시 시작' if runtime and runtime.stopped and getattr(client.backend,'failed',False) else '미리보기 취소 중 · GPU 작업을 정리하고 있어요' if getattr(self,'preview_cancelling',False) else '로컬 미리보기 · 모델 준비 중' if preview_busy and preparing else '로컬 미리보기 · GPU 작업 대기·처리 중' if preview_busy else '모델을 준비하고 있어요 · 완료 전에는 답하지 않아요' if preparing else self.phase,error=self.error,notice=getattr(self,'notice',''),cfg=cfg,servers=servers,progress=progress,
                       model_preparing=preparing,
+                      model_load_phase={'registry_preflight':'모델 파일·메모리 여유 확인','framework_imports':'추론 엔진 준비',
+                          'processor':'토크나이저·입력 처리 준비','model_init_weights_nf4':'가중치 읽기·GPU 이동·NF4 변환',
+                          'loaded':'가중치 로딩 완료 · 시험 추론 확인','released':'모델 해제 완료','failed':'모델 준비 실패'}.get(getattr(serving,'load_phase',None),''),
                       preview_busy=preview_busy,preview_session=getattr(self,'preview_session',None),
                       preview_cleanup_failed=getattr(self,'preview_cleanup_failed',False),
                       preview_rejection=getattr(self,'preview_rejection',{}),

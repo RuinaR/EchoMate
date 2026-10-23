@@ -1,5 +1,9 @@
 # 로컬 모델 레지스트리
 
+## 2026-10-23 원본·분할 선택과 추가 메모리 조사
+
+이번 읽기 전용 확인에서 운영 `base`는 HF 캐시 원본이었고 분할 QA 복사본은 자동 선택되지 않았다. UI도 **원본 기본 모델**과 발견한 분할 폴더를 구분한다. 기존 분할 GPU 로딩 private commit 피크13.015GiB/26.157초를 재현했지만 더 낮은 안전한 경로를 입증하지 못했다. Windows pread와 NF4 순차 변환은 이미 라이브러리 기본 동작이며 작은 shard는1.875GiB 최대 텐서의 하한을 받는다. admission/원본/운영 모델은 그대로다. [상세 계측과 기각 근거](RESUMED-MEMORY-UX-QA.md).
+
 ## 2026-10-20 최종 안정화 — 최신
 
 마감: **523회귀 OK58.467초**, 실제20분 혼합 운용1912 mock 답변·GPU10/10·worker0, source 및 Portable의 실제 shard 로딩/모델 선택·미리보기 PASS. 최종 shard peak12.92GiB(최초13.01), 원본31.35GiB. 운영 자료 보존·독립 청자26/32로 **릴리즈 BLOCKED**. 실제 Discord/다른 Windows/Maple/24시간/사람 말투 평가는 NOT VERIFIED. 상세·소스/패키지·Git 마감은 STABILIZATION-QA를 우선한다.

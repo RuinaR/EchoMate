@@ -138,6 +138,7 @@ def native_loader_phases(recorder):
     from transformers.integrations.bitsandbytes import Bnb4bitQuantize
     original_open=models.safe_open
     original_convert=Bnb4bitQuantize.convert
+    original_warmup=models.caching_allocator_warmup
     def opened(*args,**kwargs):
         recorder.mark('safetensors_open_start')
         result=original_open(*args,**kwargs)
@@ -147,5 +148,9 @@ def native_loader_phases(recorder):
         recorder.mark('nf4_convert_start')
         try:return original_convert(self,*args,**kwargs)
         finally:recorder.mark('nf4_convert_end')
-    with patch.object(models,'safe_open',opened),patch.object(Bnb4bitQuantize,'convert',converted):
+    def warmed(*args,**kwargs):
+        recorder.mark('allocator_warmup_start')
+        try:return original_warmup(*args,**kwargs)
+        finally:recorder.mark('allocator_warmup_end')
+    with patch.object(models,'safe_open',opened),patch.object(models,'caching_allocator_warmup',warmed),patch.object(Bnb4bitQuantize,'convert',converted):
         yield

@@ -12,6 +12,14 @@ from echomate_bot.settings import DEFAULTS
 from echomate_bot.character_profiles import DEFAULT_PROFILE
 
 
+def invoke_click(canvas,x,y):
+    """Dispatch a complete Tk press/release without mapping or OS input."""
+    import re
+    for sequence,event_type in (('<ButtonPress-1>','4'),('<ButtonRelease-1>','5')):
+        for command in re.findall(r'\[([^ ]+) ',canvas.bind(sequence)):
+            canvas.tk.call(command,'0','1','0','0','0','0','0','0',str(x),str(y),'','0','','0',str(canvas),event_type,'0','0','0')
+
+
 class RecordSelection(unittest.TestCase):
     def test_list_text_lines_and_partial_row_hit_area_follow_actual_dpi(self):
         from echomate_bot.desktop_ui import SelectionList
@@ -57,8 +65,7 @@ class RecordSelection(unittest.TestCase):
             dialog=next(w for w in root.winfo_children() if isinstance(w,tk.Toplevel))
             self.assertFalse(dialog.winfo_ismapped())
             canvas=next(w for w in dialog.winfo_children() if isinstance(w,tk.Canvas))
-            command=re.search(r'\[([^ ]+) ',canvas.bind('<Button-1>'))[1]
-            for _ in range(2):root.tk.call(command,'0','1','0','0','0','0','0','0','70','24','','0','','0',str(canvas),'4','0','0','0')
+            for _ in range(2):invoke_click(canvas,70,24)
             self.assertEqual(controller.submit.call_count,1)
             ticket=controller.submit.call_args.kwargs['session'];self.assertTrue(ticket)
             dialog.destroy();root.update_idletasks()
@@ -85,8 +92,7 @@ class RecordSelection(unittest.TestCase):
                 # Unmapped windows do not receive generated pointer events.
                 # Invoke Tk's registered event binding with an actual Tcl event
                 # substitution, without mapping a window or sending OS input.
-                command=re.search(r'\[([^ ]+) ',canvas.bind('<Button-1>'))[1]
-                root.tk.call(command,'0','1','0','0','0','0','0','0','200','380','','0','','0',str(canvas),'4','0','0','0')
+                invoke_click(canvas,200,380)
             click();root.update()
             controller.submit.assert_not_called()  # default is visibly nondeletable
             app.snapshot['profiles']={'default':dict(DEFAULT_PROFILE),'saved':dict(DEFAULT_PROFILE,name='합성 새 프로필')}

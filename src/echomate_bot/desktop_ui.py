@@ -141,9 +141,10 @@ class DesktopApp(CompanionViews):
     def __init__(self,root,controller):
         self.root=root;self.controller=controller;self.snapshot=None;self.page='spaces';self.hits=[]
         self.button_fonts={}
+        self.pending_actions={}
         self.guild_id=None;self.channel_ids=set();self.text_mode='silent';self.react_mode='silent';self.inherit=False;self.drafts={};self.scope_baseline=None;self.closing=False;self.show_all=False
         self.canvas=tk.Canvas(root,bg=BG,highlightthickness=0,takefocus=True);self.canvas.pack(fill='both',expand=True)
-        self.feedback=CanvasFeedback(self.canvas)
+        self.feedback=CanvasFeedback(self.canvas,activate_on_release=True)
         self.server_list=SelectionList(self.canvas,self.select_guild)
         self.channel_list=SelectionList(self.canvas,self.select_channels,True)
         self.setup_records()
@@ -156,35 +157,60 @@ class DesktopApp(CompanionViews):
             root.update_idletasks()
             ctypes.windll.dwmapi.DwmSetWindowAttribute(ctypes.windll.user32.GetParent(root.winfo_id()),20,ctypes.byref(dark),4)
         except (AttributeError,OSError):pass
-        self.canvas.bind('<Configure>',lambda e:self.render());self.canvas.bind('<Button-1>',self.click)
+        self.canvas.bind('<Configure>',lambda e:self.render());self.canvas.bind('<Button-1>',self.press)
         self.canvas.bind('<Tab>',self.focus_next);self.canvas.bind('<Return>',self.activate_focus);self.focus_index=-1
-        self.canvas.bind('<Shift-Tab>',self.focus_previous);self.canvas.bind('<space>',self.activate_focus)
+        self.canvas.bind('<Shift-Tab>',self.focus_previous)
+        self.canvas.bind('<KeyPress-space>',self.space_press);self.canvas.bind('<KeyRelease-space>',self.feedback.key_release)
         root.bind('<Control-s>',lambda e:self.save_scope() if self.page=='spaces' else None)
         self.disposed=False
         root.protocol('WM_DELETE_WINDOW',self.close);self.poll_id=root.after(100,self.poll)
     def text(self,x,y,value,size=11,color=FG,bold=False,width=None):
         return self.canvas.create_text(x,y,text=value,anchor='nw',fill=color,font=('맑은 고딕',size,'bold' if bold else 'normal'),width=width or 0)
-    def button(self,x,y,w,h,label,callback,selected=False,primary=False,enabled=True,font_size=10):
+    def button(self,x,y,w,h,label,callback,selected=False,primary=False,enabled=True,font_size=10,navigation=False):
+        action_key=(self.page,label,x,y,self.guild_id,self.model_id,getattr(self,'record_user',None),getattr(self,'record_key',None))
+        if action_key in self.pending_actions:enabled=False;label='처리 중…'
         while font_size>6 and self.button_font(font_size).measure(label)>w-16:font_size-=1
         shape=rounded(self.canvas,x,y,w,h,CARD,8)
         text=self.canvas.create_text(x+w/2,y+h/2,text=label,fill=FG,font=self.button_font(font_size),tags=('button_label',))
-        self.feedback.add((x,y,w,h),shape,text,enabled=enabled,selected=selected,primary=primary,danger=('삭제' in label or '초기화' in label),callback=callback)
-        if enabled:self.hits.append((x,y,w,h,callback))
+        self.feedback.add((x,y,w,h),shape,text,enabled=enabled,selected=selected,primary=primary,navigation=navigation,danger=('삭제' in label or '초기화' in label),callback=lambda:self.invoke_action(callback,action_key))
+        if navigation and selected:self.canvas.create_rectangle(x+2,y+9,x+5,y+h-9,fill=ACCENT,outline='')
+        if enabled:self.hits.append((x,y,w,h,lambda:self.invoke_action(callback,action_key)))
     def button_font(self,size):
         if size not in self.button_fonts:self.button_fonts[size]=tkfont.Font(root=self.root,family='맑은 고딕',size=size,weight='bold')
         return self.button_fonts[size]
     def toggle(self,x,y,label,on,callback):
+        action_key=(self.page,label,x,y,self.guild_id,self.model_id,getattr(self,'record_user',None),getattr(self,'record_key',None))
+        enabled=action_key not in self.pending_actions
         background=rounded(self.canvas,x-4,y-3,294,30,CARD,7)
-        self.feedback.add((x,y,290,28),background,selected=on,callback=callback)
+        self.feedback.add((x,y,290,28),background,enabled=enabled,selected=on,callback=lambda:self.invoke_action(callback,action_key))
         rounded(self.canvas,x,y,38,22,MINT if on else LINE,11)
         self.canvas.create_oval(x+(20 if on else 3),y+3,x+(36 if on else 19),y+19,fill=BG if on else MUTED,outline='')
         self.text(x+50,y,label,10)
-        self.hits.append((x,y,290,28,callback))
+        if enabled:self.hits.append((x,y,290,28,lambda:self.invoke_action(callback,action_key)))
     def click(self,event):
         self.feedback.press(event);self.canvas.focus_set()
         for i,(x,y,w,h,callback) in enumerate(self.hits):
             if x<=event.x<=x+w and y<=event.y<=y+h:
-                self.focus_index=i;callback();self.render();break
+                self.focus_index=i;callback();break
+    def press(self,event):
+        self.canvas.focus_set();self.feedback.press(event)
+        for i,(x,y,w,h,callback) in enumerate(self.hits):
+            if x<=event.x<=x+w and y<=event.y<=y+h:self.focus_index=i;break
+    def invoke_action(self,callback,action_key=None):
+        if action_key is not None and action_key in self.pending_actions:return
+        before=getattr(self.controller,'last_submission',None)
+        result=callback()
+        from concurrent.futures import Future
+        from asyncio import Future as AsyncFuture
+        after=getattr(self.controller,'last_submission',None)
+        future=result if isinstance(result,(Future,AsyncFuture)) else after if after is not before and isinstance(after,(Future,AsyncFuture)) else None
+        if action_key is not None and future is not None and not future.done():self.pending_actions[action_key]=future
+        if not self.disposed:self.render()
+    def space_press(self,event):
+        if 0<=self.focus_index<len(self.hits):
+            box=self.hits[self.focus_index][:4]
+            self.feedback.index=next((i for i,r in enumerate(self.feedback.regions) if r['box']==box),-1)
+        return self.feedback.key_press(event)
     def focus_next(self,event):
         if self.hits:
             if self.focus_index==len(self.hits)-1 and self.page=='spaces':
@@ -312,7 +338,7 @@ class DesktopApp(CompanionViews):
         nav=[('setup','처음 사용 안내'),('models','AI 모델'),('spaces','대화할 곳'),('outputs','응답 방식'),('character','성격과 기분'),*PAGES.items(),('status','진행 상황'),('labs','실험 기능')]
         spacing=min(48,(h-220)//len(nav))
         for index,(page,label) in enumerate(nav):
-            self.button(16,108+index*spacing,164,spacing-5,label,lambda p=page:self.set_page(p),self.page==page)
+            self.button(16,108+index*spacing,164,spacing-5,label,lambda p=page:self.set_page(p),self.page==page,navigation=True)
         self.text(24,h-90,'모델은 내 PC에서 실행',9,MUTED);self.text(24,h-65,'Gemma 4 12B',10)
         s=self.snapshot;cfg=s['cfg'] if s and s.get('cfg') else None
         title={'setup':'처음 사용 안내','models':'내 PC의 AI 모델','spaces':'대화할 곳','outputs':'응답 방식','character':'성격과 기분','status':'지금 무엇을 하고 있나요?','labs':'실험 기능',**PAGES}[self.page]
@@ -331,7 +357,14 @@ class DesktopApp(CompanionViews):
         self.button(w-102,23,78,36,'봇 끄기',lambda:self.controller.submit('stop'),enabled=running)
         error=' · '+s['error'] if s and s['error'] else ''
         phase=s['phase'] if s else '저장된 설정을 읽고 있어요'
-        if phase.startswith('정지'):phase='채널을 고른 뒤 ‘봇 켜기’를 누르면 대화를 시작해요'
+        if phase.startswith('정지'):
+            phase={'setup':'봇 정보 → 모델 → 허용 채널 순서로 준비해 주세요',
+                   'models':'파일 선택과 실제 GPU 준비 상태를 따로 확인해 주세요',
+                   'character':'모델을 바꾸지 않고 말투와 성격을 조절해요',
+                   'status':'실행 중인 작업과 보존된 대화 이력을 구분해요',
+                   'relations':'본인 동의가 있는 관계 자료를 서버별로 관리해요',
+                   'memories':'장기 기억과 요약의 동의·출처·만료를 확인해요',
+                   'reminders':'예약 시간과 발송 상태를 확인해요'}.get(self.page,'허용 채널을 설정한 뒤 봇을 켜 주세요')
         self.text(226,phase_y,self.ellipsize(phase+error,max(100,w-660)),10,MUTED)
         self.button(w-400,phase_y-4,130,28,'상태·오류',self.show_status_detail)
         if cfg and connected:self.toggle(w-200,78,'응답 허용',cfg['enabled'],lambda:self.set_value('enabled',not cfg['enabled']))
@@ -355,7 +388,7 @@ class DesktopApp(CompanionViews):
     def draw_spaces(self,w,h,cfg):
         left=226;sy=143;bottom=h-66;right=w-274;mid=left+225
         for x,width in [(left,210),(mid,right-mid-15),(right,250)]:rounded(self.canvas,x,sy,width,bottom-sy,PANEL)
-        self.text(left+16,sy+16,'가입한 서버',12,bold=True);self.text(mid+16,sy+16,'채널과 진행 중인 스레드',12,bold=True)
+        self.text(left+16,sy+16,'가입한 서버',12,bold=True);self.text(mid+16,sy+16,'채널 · 스레드',12,bold=True)
         self.button(left+126,sy+12,72,28,'새로고침',lambda:self.controller.submit('refresh'))
         if self.snapshot and self.snapshot.get('running'):
             self.button(mid+16,sy+41,190,28,'활동 설정한 곳만 보기' if self.show_all else '전체 목록 · 활동 설정',self.toggle_channel_view)
@@ -399,10 +432,10 @@ class DesktopApp(CompanionViews):
         self.text(250,291,'새 대화에 먼저 참여하는 정도',12,bold=True)
         self.choices(250,321,list(ACTIVITY.items()),cfg['activity'],lambda v:self.set_value('activity',v),125)
         for index,(label,key,step,lo,hi) in enumerate([('다정함','warmth',5,0,100),('귀여움','cuteness',5,0,100),('장난기','playfulness',5,0,100),
-             ('먼저 말할 때 최소 간격','cooldown',10,2,3600),('대화 지속 판단의 유휴 기준','engagement_seconds',60,10,86400)]):
+             ('먼저 말하기 간격','cooldown',10,2,3600),('대화 참여 유지','engagement_seconds',60,10,86400)]):
             self.number(250,382+index*34,label,key,max(lo,cfg[key]),step,lo,hi)
         p=cfg.get('character_profile') or {'name':'EchoMate'}
-        self.text(250,559,'캐릭터 · '+p['name'],10,MUTED)
+        self.text(250,559,self.ellipsize('캐릭터 · '+p['name'],w-290,10),10,MUTED)
         self.button(250,583,150,34,'프로필 편집·복제',self.edit_profile)
         self.button(410,583,128,34,'저장한 프로필',self.profile_library)
         self.button(548,583,128,34,'로컬 미리보기',self.character_preview)
@@ -415,9 +448,13 @@ class DesktopApp(CompanionViews):
         from .onboarding import GUIDE
         rounded(self.canvas,226,143,w-252,h-210,PANEL)
         self.text(250,166,'나만의 Discord 봇을 준비해요',14,bold=True)
-        self.text(250,212,GUIDE,11,width=w-300)
-        self.button(250,h-190,190,36,'봇 정보 등록' if not cfg else '봇 정보는 안전하게 저장됨',self.setup_credentials,enabled=not bool(cfg))
+        for y,title,body in ((214,'1. 내 봇 정보 등록','공식 Developer Portal에서 봇을 만든 뒤\n본인 사용자 ID와 토큰을 안전하게 등록해요.'),
+                             (304,'2. 모델과 캐릭터 선택','설치한 모델 폴더를 확인하고 말투를 골라요.\n모델 파일과 개인 자료는 배포판에 포함되지 않아요.'),
+                             (394,'3. 활동할 채널 설정','대화할 곳에서 허용 범위를 저장해요.\n준비를 마친 뒤 직접 봇을 켜 주세요.')):
+            self.text(250,y,title,11,bold=True);self.text(250,y+30,body,10,MUTED,width=w-300)
+        self.button(250,h-190,190,36,'봇 정보 등록' if not cfg else '봇 정보 등록됨',self.setup_credentials,enabled=not bool(cfg))
         self.button(450,h-190,150,36,'모델 확인하기',lambda:self.set_page('models'))
+        self.button(610,h-190,150,36,'연결 준비 자세히',lambda:self.form('Discord 연결 준비 안내',[],lambda values:None,GUIDE,read_only=True))
         self.text(250,h-130,'연결·서버 조회는 자동 실행하지 않아요. 준비 후 ‘대화할 곳’에서 직접 새로고침하세요.',9,MUTED,width=w-290)
 
     def setup_credentials(self):
@@ -434,13 +471,18 @@ class DesktopApp(CompanionViews):
         self.button(250,233,140,34,'모델 폴더 선택',self.choose_model_folder,enabled=not busy)
         self.button(400,233,110,34,'다시 검색',lambda:self.controller.submit('models'))
         official=any(m['compatible'] and 'models--google--gemma-4-12B-it' in m['path'] for m in self.snapshot.get('models',[]))
-        self.button(520,233,130,34,'기본 모델 사용',lambda:self.set_value('model','base'),enabled=official and not busy)
+        self.button(520,233,130,34,'원본 기본 모델',lambda:self.set_value('model','base'),enabled=official and not busy)
         entries=self.snapshot.get('models',[])
-        if not entries:self.text(250,295,'설치된 모델을 찾지 못했어요. 모델을 models 폴더에 넣거나 설치한 폴더를 선택하세요.',10,MUTED,width=w-290)
+        self.model_list.empty_hint='모델 목록이 비어 있어요\n모델 폴더를 선택해 주세요'
         self.model_list.set_items([dict(id=m['id'],label=m['name'],hint=m['format']+' · '+('파일 검사 통과' if m['compatible'] else '사용 불가')) for m in entries])
         self.model_list.selected={self.model_id} if self.model_id else set();self.model_list.redraw()
         self.model_list.place(x=250,y=290,width=280,height=max(90,h-435))
+        if self.model_id and not any(m['id']==self.model_id for m in entries):self.model_id=None;self.model_list.selected=set()
         selected=next((m for m in entries if m['id']==self.model_id),None)
+        if not selected:
+            self.text(550,295,'선택한 모델의 상세 정보',12,bold=True,width=w-590)
+            self.text(550,333,'왼쪽에서 모델을 선택하세요.\n아직 목록이 없다면 설치한 폴더를 지정해 주세요.',10,MUTED,width=w-590)
+        phase=self.snapshot.get('model_load_phase')
         if selected:
             sharded=bool(selected.get('largest_shard_bytes',0) and selected['largest_shard_bytes']<selected['bytes'])
             self.text(550,295,selected['format']+f" · {selected['bytes']/1024**3:.1f}GiB"+(' · 분할 가중치' if sharded else ''),11,bold=True)
@@ -453,8 +495,9 @@ class DesktopApp(CompanionViews):
             current=cfg['model']==selected['id'] or cfg['model']=='base' and 'models--google--gemma-4-12B-it' in selected['path']
             self.text(550,494,'현재 설정된 모델이에요' if current else '목록 선택만으로는 모델이 바뀌지 않아요',8,MUTED,width=w-590)
             self.button(550,540,150,34,'검증 후 적용',lambda:self.set_value('model',selected['id']),enabled=selected['compatible'] and not busy)
-        if self.snapshot.get('preview_busy'):self.text(250,h-138,'미리보기 창을 닫아 취소하거나 완료된 뒤 모델을 변경해 주세요.',9,MUTED,width=w-290)
-        self.text(250,h-107,'예상 VRAM 약 10GB + 시스템 여유 · 실제 지원 검증은 RTX 4070 Ti SUPER 16GB에 한정돼요.',9,MUTED,width=w-290)
+        if busy and phase:self.text(250,h-138,phase,9,ACCENT,width=w-290)
+        elif self.snapshot.get('preview_busy'):self.text(250,h-138,'미리보기 완료 또는 취소 후 모델을 변경해 주세요.',9,MUTED,width=w-290)
+        self.text(250,h-107,'GPU와 Windows 커밋 여유를 함께 확인해요.\n검증 환경: RTX 4070 Ti SUPER 16GB · RAM 32GB',9,MUTED,width=w-290)
 
     def choose_model_folder(self):
         from tkinter import filedialog
@@ -484,7 +527,7 @@ class DesktopApp(CompanionViews):
         dialog=tk.Toplevel(self.root);dialog.title('저장한 캐릭터');dialog.configure(bg=PANEL);dialog.geometry('540x490');dialog.transient(self.root)
         canvas=tk.Canvas(dialog,bg=PANEL,highlightthickness=0);canvas.pack(fill='both',expand=True)
         canvas.create_text(24,22,text='프로필을 고르고 적용하세요',anchor='nw',fill=FG,font=('맑은 고딕',13,'bold'))
-        feedback=CanvasFeedback(canvas,keyboard=True)
+        feedback=CanvasFeedback(canvas,keyboard=True,activate_on_release=True)
         selected=['default']
         def select_profile(ids):
             selected[0]=next(iter(ids),'default');refresh_feedback()
@@ -551,7 +594,7 @@ class DesktopApp(CompanionViews):
                         try:dialog.after_cancel(job)
                         except tk.TclError:pass
         dialog.protocol('WM_DELETE_WINDOW',close)
-        canvas.bind('<Button-1>',click);canvas.bind('<Button-1>',feedback.press,add='+');dialog.bind('<Escape>',lambda e:close());dialog.bind('<Destroy>',closed)
+        dialog.bind('<Escape>',lambda e:close());dialog.bind('<Destroy>',closed)
         refresh()
 
     def advanced_profile(self):
@@ -597,10 +640,10 @@ class DesktopApp(CompanionViews):
             input_error[0]=''
             if not pending[0] and not (self.snapshot or {}).get('preview_busy') and not (self.snapshot or {}).get('preview_cleanup_failed') and 1<=len(entry.get())<=1000:
                 pending[0]=True;self.controller.submit('preview',text=entry.get(),session=session)
-        feedback=CanvasFeedback(actions,keyboard=True)
+        feedback=CanvasFeedback(actions,keyboard=True,activate_on_release=True)
         shape=rounded(actions,8,8,137,32,CARD,8);label=actions.create_text(76,24,text='미리보기',fill=FG,font=('맑은 고딕',10))
         feedback.add((8,8,137,32),shape,label,primary=True,callback=generate)
-        actions.bind('<Button-1>',lambda e:generate() if 8<=e.x<=145 and 8<=e.y<=40 else None);actions.bind('<Button-1>',feedback.press,add='+');entry.bind('<Return>',lambda e:generate())
+        entry.bind('<Return>',lambda e:generate())
         old=[''];timer=[None]
         def poll():
             snap=self.snapshot or {};mine=snap.get('preview_session')==session
@@ -635,12 +678,15 @@ class DesktopApp(CompanionViews):
         width=(w-282)/3
         for index,(label,value) in enumerate([('처리 중인 요청',str(s['pending'])),('진행 중인 대화',str(s['contexts'])),('최근 응답 시간',str(s['latency'])+'초' if s['latency'] is not None else '아직 없음')]):
             x=226+index*(width+15);rounded(self.canvas,x,143,width,100,PANEL)
-            self.text(x+16,158,label,10,MUTED);self.text(x+16,191,value,24,bold=True)
+            size=24
+            while size>10 and (self.button_font(size).metrics('linespace')>42 or self.button_font(size).measure(value)>width-32):size-=1
+            self.text(x+16,158,label,10,MUTED);self.text(x+16,191,value,size,bold=True)
         q=s.get('scheduler',{});statistics=s.get('statistics',{})
-        self.text(242,264,f"GPU 실행 {q.get('running',0)} · 대기 {q.get('waiting',0)} · 오늘 응답 {statistics.get('responses_today',0)} · 반응 {statistics.get('reactions_today',0)}",10,MUTED)
+        self.text(242,254,self.ellipsize(f"GPU 실행 {q.get('running',0)} · 대기 {q.get('waiting',0)}",270,9),9,MUTED)
+        self.text(530,254,self.ellipsize(f"오늘 응답 {statistics.get('responses_today',0)} · 반응 {statistics.get('reactions_today',0)}",w-756,9),9,MUTED)
         totals=s.get('runtime_totals',{})
-        self.text(242,282,f"이번 실행 처리 {totals.get('finished',0)} · 실패/불확실 전송 {statistics.get('uncertain',0)} · 취소 {q.get('counts',{}).get('cancelled',0)} · 만료 {q.get('counts',{}).get('expired',0)} · 기존 종류 미기록 {statistics.get('legacy_today',0)}",8,MUTED,width=w-300)
-        self.button(w-430,252,180,30,'개인정보 없는 진단 저장',lambda:self.controller.submit('diagnostics'))
+        self.text(242,280,self.ellipsize(f"이번 실행 처리 {totals.get('finished',0)} · 실패/불확실 전송 {statistics.get('uncertain',0)} · 취소 {q.get('counts',{}).get('cancelled',0)} · 만료 {q.get('counts',{}).get('expired',0)} · 기존 종류 미기록 {statistics.get('legacy_today',0)}",w-300,8),8,MUTED)
+        self.button(w-214,252,188,30,'비식별 진단 저장',lambda:self.controller.submit('diagnostics'))
         jobs=s.get('jobs',[])
         states={'waiting':'보충 대기','running':'처리 중','sent':'전송 완료','completed':'완료','silence':'침묵·보관 생략','failed':'실패','cancelled':'취소'}
         self.job_list.empty_hint='아직 처리한 요청이 없어요'
@@ -687,8 +733,8 @@ class DesktopApp(CompanionViews):
         if not cfg:return
         rounded(self.canvas,226,143,w-252,h-210,PANEL)
         self.text(250,168,'어떤 방식으로 답할까요?',18,bold=True)
-        self.text(250,215,'대화할 채널에서 사용할 응답 방식을 골라 주세요. 변경하면 바로 적용돼요.',11,MUTED,width=w-310)
-        for i,(key,label,hint) in enumerate([('text','글로 답하기','질문에 답하거나 대화를 이어가요.'),('reactions','이모지로 가볍게 반응하기','허용 범위에서 실제 메시지 반응을 추가해요. 직접 요청도 적용돼요.'),('web_search','인터넷 근거 검색','공개 주제어로 위키·뉴스 원문을 찾고 로컬 AI로 검토해요. 최신성·출처가 부족하면 확답하지 않아요.')]):
+        self.text(250,215,'앱 전체의 응답 기능을 정해요.\n채널별 허용 범위는 ‘대화할 곳’에서 설정해요.',11,MUTED,width=w-310)
+        for i,(key,label,hint) in enumerate([('text','글로 답하기','질문에 답하거나 대화를 이어가요.'),('reactions','이모지로 가볍게 반응하기','허용한 메시지에 Unicode 반응을 남겨요.'),('web_search','인터넷 근거 검색','공개 정보의 근거를 찾고, 확인 실패도 안내해요.')]):
             y=285+i*90;self.toggle(250,y,label,cfg[key],lambda k=key:self.set_value(k,not cfg[k]));self.text(300,y+36,hint,10,MUTED,width=w-355)
         self.button(250,h-205,180,30,'명령 목록 확인 · 정리',self.approve_commands)
         self.text(250,h-155,'명령 변경: 목록 확인 → 대상 검토 → 직접 승인 · 연결 시 자동 변경하지 않음',9,MUTED,width=w-300)
@@ -705,21 +751,30 @@ class DesktopApp(CompanionViews):
         self.text(250,485,'일반 대화와 Unicode 이모지는 이 기능을 켜지 않아도 사용할 수 있어요.\n실험 결과는 틀릴 수 있으며, Lottie 형식의 이미지 분석은 아직 지원하지 않아요.',11,MUTED,width=w-310)
     def poll(self):
         if self.disposed:return
+        import time
+        if self.feedback.down or self.feedback.key_armed is not None:
+            if time.monotonic()-self.feedback.pressed_at<2:
+                self.poll_id=self.root.after(60,self.poll);return
+            self.feedback.blur(None)
+        changed=False
+        for key,future in list(self.pending_actions.items()):
+            if future.done():self.pending_actions.pop(key);changed=True
         try:
-            while True:self.snapshot=self.controller.updates.get_nowait()
+            while True:self.snapshot=self.controller.updates.get_nowait();changed=True
         except queue.Empty:pass
         if self.snapshot and not self.snapshot.get('cfg') and not getattr(self,'_setup_shown',False):
             self.page='setup';self._setup_shown=True
-        self.refresh_lists()
+        if changed:self.refresh_lists()
         if self.page in PAGES:
-            import time
             if time.monotonic()-getattr(self,'_records_refreshed_at',0)>5:self.refresh_records()
-        self.render();self.poll_id=self.root.after(400,self.poll)
+        if changed:self.render()
+        self.poll_id=self.root.after(400,self.poll)
     def destroy(self):
         if self.disposed:return
         self.disposed=True
         self.root.after_cancel(self.poll_id)
         self.hits.clear();self.drafts.clear();self.snapshot=None
+        self.pending_actions.clear()
         self.button_fonts.clear()
         self.root.destroy()
     def close(self):

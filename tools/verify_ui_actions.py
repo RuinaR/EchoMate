@@ -64,13 +64,13 @@ def collect(app):
     finally:app.button=original;app.toggle=original_toggle
     return entries
 
-async def run(output):
+async def run(output,pages=PAGES):
     def source_hashes():
         paths=[*Path('src').rglob('*.py'),Path(__file__),Path('tests/test_ui_workflows.py')]
         return {p.as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     sources=source_hashes()
     rows=[]
-    for page in PAGES:
+    for page in pages:
         first=await fixture(page)
         try:targets=collect(first.app)
         finally:await first.asyncTearDown()
@@ -81,7 +81,8 @@ async def run(output):
                 # are injected boundaries, explicitly recorded in the report.
                 backend=SimpleNamespace(model=None,failed=False,prepare_mode=AsyncMock(),close=AsyncMock(),text=AsyncMock(return_value='합성 미리보기'))
                 with patch('discord.http.HTTPClient.request',new=AsyncMock(side_effect=offline_discord_request)) as sdk_http,patch('aiohttp.ClientSession._request',new=AsyncMock(side_effect=AssertionError('External network forbidden'))) as outbound,patch('echomate_bot.inference.LocalBackend',return_value=backend),patch('tkinter.filedialog.askdirectory',return_value=''),patch('tkinter.filedialog.askopenfilename',return_value=''),patch('tkinter.filedialog.asksaveasfilename',return_value=''):
-                    x,y,w,h=target['rect'];case.app.click(SimpleNamespace(x=x+w/2,y=y+h/2))
+                    x,y,w,h=target['rect'];event=SimpleNamespace(x=x+w/2,y=y+h/2)
+                    case.app.press(event);case.app.feedback.release(event)
                     await case.sync()
                     outbound.assert_not_awaited()
                     dialogs=[v for v in case.root.winfo_children() if isinstance(v,workflows.tk.Toplevel)]
@@ -91,8 +92,11 @@ async def run(output):
                         if dialog.bind('<Escape>'):workflows.invoke(dialog,'<Escape>')
                         else:dialog.destroy()
                     await case.sync()
+                expected_error='봇 연결 후 명령 목록을 확인해 주세요' if target['label']=='명령 목록 확인 · 정리' and case.c.client is None else ''
+                operations=[op for op,kw in case.commands[before:]]
+                safe_offline_block=bool(expected_error and case.c.error==expected_error and operations==['command_review'] and sdk_http.await_count==0)
                 rows.append(dict(page=page,method=target['method'],line=target['line'],label=target['label'],
-                    passed=not bool(case.c.error),sdk_http_mock_calls=sdk_http.await_count,external_network_calls=outbound.await_count,
+                    passed=safe_offline_block if expected_error else not bool(case.c.error),expected_error=expected_error,sdk_http_mock_calls=sdk_http.await_count,external_network_calls=outbound.await_count,
                     commands=[op for op,kw in case.commands[before:]],popups_cancelled=len(dialogs),
                     controller_error=case.c.error,seconds=time.monotonic()-started))
             except Exception as exc:
@@ -107,5 +111,5 @@ async def run(output):
     if not result['passed']:raise SystemExit(1)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',required=True)
-    asyncio.run(run(p.parse_args().output))
+    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--page',choices=PAGES);a=p.parse_args()
+    asyncio.run(run(a.output,(a.page,) if a.page else PAGES))

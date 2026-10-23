@@ -1,5 +1,6 @@
 """Small Canvas controls. Values remain draft data until the form is applied."""
 import math
+import time
 import tkinter as tk
 from tkinter import font as tkfont
 
@@ -8,18 +9,20 @@ PANEL='#121b28';CARD='#182333';FG='#e9eff9';MUTED='#94a4bb';ACCENT='#9b91ff'
 
 class CanvasFeedback:
     """Repaint only interactive items, never a page, database or model."""
-    def __init__(self,canvas,keyboard=False):
+    def __init__(self,canvas,keyboard=False,activate_on_release=False):
         self.canvas=canvas;self.regions=[];self.pointer=None;self.down=False;self.index=-1
+        self.activate_on_release=activate_on_release;self.armed=None;self.key_armed=None;self.pressed_at=0
         canvas.bind('<Motion>',self.motion,add='+');canvas.bind('<Leave>',self.leave,add='+')
         canvas.bind('<ButtonPress-1>',self.press,add='+');canvas.bind('<ButtonRelease-1>',self.release,add='+')
         canvas.bind('<FocusIn>',lambda e:self.paint(),add='+');canvas.bind('<FocusOut>',self.blur,add='+')
         if keyboard:
             canvas.configure(takefocus=True)
             canvas.bind('<Left>',lambda e:self.move(-1));canvas.bind('<Right>',lambda e:self.move(1))
-            canvas.bind('<Return>',self.activate);canvas.bind('<space>',self.activate)
-    def clear(self):self.regions=[];self.index=-1
-    def add(self,box,background,text=None,*,enabled=True,selected=False,primary=False,danger=False,callback=None):
-        region=dict(box=box,background=background,text=text,enabled=enabled,selected=selected,primary=primary,danger=danger,callback=callback)
+            canvas.bind('<Return>',self.activate)
+            canvas.bind('<KeyPress-space>',self.key_press);canvas.bind('<KeyRelease-space>',self.key_release)
+    def clear(self):self.regions=[];self.index=-1;self.armed=None;self.key_armed=None;self.down=False
+    def add(self,box,background,text=None,*,enabled=True,selected=False,primary=False,danger=False,navigation=False,callback=None):
+        region=dict(box=box,background=background,text=text,enabled=enabled,selected=selected,primary=primary,danger=danger,navigation=navigation,callback=callback)
         self.regions.append(region);self.paint([region]);return region
     def hit(self):
         if self.pointer is None:return None
@@ -31,13 +34,25 @@ class CanvasFeedback:
         for region in (previous,current):
             if region is not None and not any(region is item for item in changed):changed.append(region)
         self.paint(changed)
-    def leave(self,e):self.pointer=None;self.down=False;self.paint()
-    def blur(self,e):self.pointer=None;self.down=False;self.paint()
+    def leave(self,e):self.pointer=None;self.paint()
+    def blur(self,e):self.pointer=None;self.down=False;self.armed=None;self.key_armed=None;self.paint()
     def press(self,e):
-        self.down=True;self.motion(e);r=self.hit()
+        self.down=True;self.pressed_at=time.monotonic();self.motion(e);r=self.hit();self.armed=r if r and r['enabled'] else None
         if r and r['enabled']:self.index=self.regions.index(r)
         self.paint()
-    def release(self,e):self.down=False;self.motion(e)
+    def release(self,e):
+        armed=self.armed;self.armed=None;self.down=False;self.motion(e)
+        if self.activate_on_release and armed is not None and self.hit() is armed and any(r is armed for r in self.regions) and armed['enabled']:
+            if armed['callback']:armed['callback']()
+    def key_press(self,e):
+        if self.key_armed is None and 0<=self.index<len(self.regions):
+            r=self.regions[self.index]
+            if r['enabled']:self.key_armed=r;self.pressed_at=time.monotonic();self.paint()
+        return 'break'
+    def key_release(self,e):
+        armed=self.key_armed;self.key_armed=None;self.paint()
+        if armed is not None and 0<=self.index<len(self.regions) and self.regions[self.index] is armed and armed['enabled'] and armed['callback']:armed['callback']()
+        return 'break'
     def move(self,d):
         choices=[i for i,r in enumerate(self.regions) if r['enabled']]
         if choices:self.index=choices[(choices.index(self.index)+d)%len(choices)] if self.index in choices else choices[0]
@@ -54,12 +69,14 @@ class CanvasFeedback:
         for r in (self.regions if only is None else only):
             i=self.regions.index(r)
             active=r is hit and r['enabled'];focused=i==self.index and self.canvas.focus_get() is self.canvas
-            state='disabled' if not r['enabled'] else 'pressed' if active and self.down else 'hover' if active else 'selected' if r['selected'] else 'normal'
+            state='disabled' if not r['enabled'] else 'pressed' if active and self.down and r is self.armed or r is self.key_armed else 'hover' if active else 'selected' if r['selected'] else 'normal'
             r['state']=state
             if state=='disabled':fill='#151d29';outline='#303b4b';color='#718096'
             elif r['danger']:fill={'pressed':'#71394a','hover':'#573040'}.get(state,'#332332');outline='#dc7e94';color='#ffb3c0'
             elif r['primary']:fill={'pressed':'#766bd2','hover':'#b0a8ff'}.get(state,ACCENT);outline=ACCENT;color='#0b1018'
-            else:fill={'pressed':'#3e3b65','hover':'#303b51'}.get(state,'#2d2b4d' if r['selected'] else CARD);outline=ACCENT if r['selected'] else '#3a4860';color=ACCENT if r['selected'] else FG
+            else:
+                fill={'pressed':'#3e3b65','hover':'#303b51'}.get(state,'#2d2b4d' if r['selected'] else '#0e1521' if r['navigation'] else CARD)
+                outline=ACCENT if r['selected'] else '' if r['navigation'] else '#3a4860';color=ACCENT if r['selected'] else FG
             self.canvas.itemconfigure(r['background'],fill=fill,outline=ACCENT if focused else outline,width=2 if focused or r['selected'] else 1)
             if r['text']:self.canvas.itemconfigure(r['text'],fill=color)
         self.canvas.configure(cursor='hand2' if hit and hit['enabled'] else '')

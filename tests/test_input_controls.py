@@ -77,7 +77,8 @@ class InputControls(unittest.TestCase):
         normal=next(r for r in feedback.regions if r['enabled'] and not r['selected'] and not r['primary'])
         x,y,_,_=normal['box'];feedback.motion(SimpleNamespace(x=x+3,y=y+3));self.assertEqual(normal['state'],'hover')
         feedback.press(SimpleNamespace(x=x+3,y=y+3));self.assertEqual(normal['state'],'pressed')
-        feedback.release(SimpleNamespace(x=x+3,y=y+3));self.assertEqual(normal['state'],'hover')
+        with patch.dict(normal,callback=Mock()):
+            feedback.release(SimpleNamespace(x=x+3,y=y+3));self.assertEqual(normal['state'],'hover')
         with patch.object(canvas,'focus_get',return_value=canvas):
             feedback.index=feedback.regions.index(normal);feedback.paint()
             self.assertEqual(canvas.itemcget(normal['background'],'width'),'2.0')

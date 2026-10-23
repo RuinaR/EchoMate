@@ -143,7 +143,7 @@ class CompanionViews:
                 completion_timer[0]=dialog.after_idle(finish);return
             dialog.destroy()
         before_footer=set(canvas.find_all())
-        feedback=CanvasFeedback(canvas,keyboard=True);dialog._form_feedback=feedback
+        feedback=CanvasFeedback(canvas,keyboard=True,activate_on_release=True);dialog._form_feedback=feedback
         if not read_only:
             shape=rounded(canvas,352,footer,92,30,CARD,8);label=canvas.create_text(398,footer+15,text='닫기',fill=FG,font=fonts[2])
             feedback.add((352,footer,92,30),shape,label,callback=close)
@@ -171,9 +171,6 @@ class CompanionViews:
         def click(event):
             dragging[0]=event.x>=565
             if dragging[0]:canvas.yview_moveto(event.y/max(1,canvas.winfo_height()));thumb();return
-            if footer<=canvas.canvasy(event.y)<=footer+30:
-                if 352<=event.x<=444 and not read_only:close()
-                elif 456<=event.x<=556:save()
         def drag(event):
             if dragging[0]:canvas.yview_moveto(event.y/max(1,canvas.winfo_height()));thumb()
         def closed(event):
@@ -255,7 +252,7 @@ class CompanionViews:
         setting={'relations':'relations_auto','memories':'memory_auto','reminders':'reminders_enabled'}[self.page]
         self.toggle(246,160,{'relations':'교류에 따라 친밀도 갱신','memories':'대화에서 자동 기억 저장','reminders':'자연어 알림 예약 허용'}[self.page],cfg[setting],lambda:self.set_value(setting,not cfg[setting]))
         self.button(w-212,153,164,30,'목록 새로고침',self.refresh_records)
-        self.text(246,200,'서버',10,MUTED);self.text(462,200,'교류한 사람 · ID로 구분',10,MUTED);self.text(680,200,'기록 · '+tz,9,MUTED)
+        self.text(246,200,'서버',10,MUTED);self.text(462,200,'사람 · 동의 상태',10,MUTED);self.text(680,200,'기록 · '+tz,9,MUTED)
         self.server_list.place(x=240,y=230,width=200,height=max(100,h-480))
         data=(self.snapshot or {}).get('companion',{})
         if data.get('guild')!=self.guild_id:data={}

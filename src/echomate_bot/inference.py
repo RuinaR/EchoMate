@@ -108,6 +108,7 @@ class LocalBackend:
         if torch is not None:
             from .loader_memory import release_idle_cuda
             release_idle_cuda(torch)
+        self.load_phase='released'
 
     def load(self):
         if self.model is not None:return
@@ -120,11 +121,14 @@ class LocalBackend:
             try:self.unload()
             except Exception as cleanup:
                 self.failed=True;self.cleanup_failure=type(cleanup).__name__
+            self.load_phase='failed'
             raise
 
     def _load_impl(self):
         started=time.monotonic()
-        observe=getattr(self,'load_observer',lambda phase:None)
+        def observe(phase):
+            self.load_phase=phase
+            getattr(self,'load_observer',lambda phase:None)(phase)
         observe('registry_preflight')
         from .model_registry import ModelRegistry
         entry=ModelRegistry(self.model_roots).resolve(self.model_id);model_path=entry.path

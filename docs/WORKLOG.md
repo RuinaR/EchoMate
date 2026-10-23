@@ -1,5 +1,13 @@
 # 작업 로그
 
+## 2026-10-23 — 메모리 계측·Windows UI 입력 수명주기 재개
+
+- 시작 main/local/remote `046ed12` clean. 사용자 재개 지시로 잠정 중단 해제. 운영 선택은 원본 `base`; 자동 전환하지 않음.
+- 기존 분할 GPU 준비26.157초/private high-water13.015GiB. allocator warmup 계측 추가, Windows pread·NF4 순차 변환은 기존 라이브러리 동작임을 확인. 추가 절감 미입증으로 계산/안전 기준 유지.
+- 공통 release/Space/드래그 취소·Future 중복 잠금·idle redraw 생략. 초기 설정·모델 빈 상태·고배율 캐릭터/진행/응답/관계 겹침 수정. 실제 비활성 Desktop의 owned HWND만 렌더.
+- SDK sync를 실제 직렬화하고 HTTP만 mock하는 검사를 추가. 원격 `/동의` 문제는 미확정으로 유지. 처음 UI 색상/누름 전용 테스트 실패와 미연결 명령 차단을 구분해 보존.
+- 검사 명령·수치·실패·Portable·데이터 보존 및 다음 승인 경계는 [재개 통합 QA](RESUMED-MEMORY-UX-QA.md)에 누적. 실제 Discord와 운영 자료 변경 없음. 정식 릴리즈 BLOCKED.
+
 ## 2026-10-20 잠정 중단 인수인계 — 문서만 변경
 
 시작 main/로컬·원격 `d6bd50e` clean. 사용자의 실제 Discord 명령 정리 후 `/동의` 포함 모든 명령 비표시 관찰을 미해결로 기록했다. 현재 install/review/apply/setup_hook 및 설치된 SDK sync의 전역/서버 분기와 기존 QA를 읽기 전용 점검했다. 명령 정리 검사는 fetch/sync AsyncMock의 흐름 검사이며 실제 등록/표시 증거가 아님을 명확히 했다. 당시 실행 버전·Application·원격 목록/응답은 확인하지 않았고 원인을 단정하지 않았다.

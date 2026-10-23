@@ -250,7 +250,10 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         listing.callback({'custom'});listing.selected={'custom'}
         canvas=d.winfo_children()[0]
         command=re.search(r'\[([^ ]+) ',canvas.bind('<Button-1>'))[1]
-        def click(x):canvas.tk.call(command,'0','1','0','0','0','0','0','0',str(x),'380','','0','','0',str(canvas),'4','0','0','0')
+        def click(x):
+            for sequence,kind in (('<Button-1>','4'),('<ButtonRelease-1>','5')):
+                for binding in re.findall(r'\[([^ ]+) ',canvas.bind(sequence)):
+                    canvas.tk.call(binding,'0','1','0','0','0','0','0','0',str(x),'380','','0','','0',str(canvas),kind,'0','0','0')
         click(80);await self.sync();self.assertEqual(self.c.settings.get()['character_profile']['name'],'Synthetic')
         app.profile_library();d=self.dialog();canvas=d.winfo_children()[0]
         listing=next(w for w in canvas.winfo_children() if isinstance(w,SelectionList));listing.callback({'custom'})
