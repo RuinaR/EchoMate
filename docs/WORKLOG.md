@@ -2,7 +2,7 @@
 
 ## 2026-10-24 BF16 저장·희소 loss·실제12B 학습 가능성
 
-f243675 clean→PEFT FP32 embedding 중첩 분석→라이브러리 무수정 frozenBF16/전체loss와 gradient 동일한 선택 logits→tinyNF4 저장/재개→실제12B64/128 backward/재개→별도원본16train/8개발자료32step/전후GPU 생성→사실 경계3/4→3/4·인격 미달로 기각. 연구6fce56e만 채택하고 운영 생성/모델은 유지한다. 측정 샘플 RAM 보존을256개로 제한하고 JSONL 전체 기록·진단 보존 대조를 추가했다. 첫 시간 기반 대조의 재시작 수 차이는 고정240반복/4재시작으로 보완했다. 7200초 CPU ON/OFF 진행 중이며 최종 회귀/Portable/보존/실경과는 [이번 QA](TRAINING-FEASIBILITY-V2-QA.md)에 누적한다.
+f243675 clean→PEFT FP32 embedding 중첩 분석→라이브러리 무수정 frozenBF16/전체loss와 gradient 동일한 선택 logits→tinyNF4 저장/재개→실제12B64/128 backward/재개→별도원본16train/8개발자료32step/전후GPU 생성→원시 출력의 허위 상태·인격 미달/유효 응답 비교 한계로 기각. 연구6fce56e만 채택하고 운영 생성/모델은 유지한다. 측정 샘플 RAM 보존을256개로 제한하고 JSONL 전체 기록·진단 보존 대조를 추가했다. 첫 시간 기반 대조의 재시작 수 차이는 고정240반복/4재시작으로 보완했다. 7200초 CPU ON/OFF 진행 중이며 최종 회귀/Portable/보존/실경과는 [이번 QA](TRAINING-FEASIBILITY-V2-QA.md)에 누적한다.
 
 ## 2026-10-24 학습 예산·진단 할당 누수 분석
 

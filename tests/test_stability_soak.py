@@ -9,6 +9,33 @@ from echomate_bot.loader_memory import MemoryRecorder,memory_snapshot
 
 
 class StabilitySoak(unittest.IsolatedAsyncioTestCase):
+    def test_daily_reminder_quota_is_expected_veto_without_deleting_history(self):
+        from collections import Counter
+        from datetime import datetime,timezone
+        from echomate_bot.runtime import Event
+        from echomate_bot.companion_store import CompanionStore
+        from verify_stability_soak import reminder_probe
+        with tempfile.TemporaryDirectory(dir='local_data') as folder:
+            store=CompanionStore(Path(folder)/'companion.sqlite3');counts=Counter()
+            for i in range(31):reminder_probe(store,Event(1000+i,2,3,4,'합성 예약',datetime.now(timezone.utc)),counts)
+            self.assertEqual(counts['reminder_cancel'],30);self.assertEqual(counts['reminder_limit_veto'],1)
+            with store.db() as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM reminders').fetchone()[0],30)
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM reminders WHERE status='cancelled'").fetchone()[0],30)
+
+    async def test_diagnostic_wrappers_reject_failed_workload_after_preserving_report(self):
+        from unittest.mock import AsyncMock,patch
+        import compare_retention
+        import verify_retention_soak
+        with tempfile.TemporaryDirectory(dir='local_data') as folder:
+            for module,call,report_name in ((compare_retention,lambda p:compare_retention.compare(p,False),'retention-private.json'),
+                (verify_retention_soak,lambda p:verify_retention_soak.verify(p,60),'retention-summary.json')):
+                root=Path(folder)/module.__name__;root.mkdir()
+                with patch.object(module,'run',AsyncMock(return_value=dict(passed=False,iterations=0))):
+                    with self.assertRaisesRegex(RuntimeError,'complete safely'):await call(root)
+                saved=json.loads((root/report_name).read_text('utf-8'))
+                self.assertFalse(saved.get('result',saved)['passed'])
+
     async def test_measurement_history_is_bounded_but_stream_keeps_all_samples(self):
         from verify_stability_soak import run
         with tempfile.TemporaryDirectory(dir='local_data') as folder:

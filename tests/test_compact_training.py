@@ -6,6 +6,20 @@ import unittest
 
 
 class CompactData(unittest.TestCase):
+    def test_generation_channels_are_blocked_without_stripping_special_tokens(self):
+        from compact_training import visible_result
+        class Tokenizer:
+            eos_token_id=1;unk_token_id=0
+            def __init__(self,raw):self.raw=raw
+            def convert_tokens_to_ids(self,text):return 106
+            def decode(self,ids,skip_special_tokens):
+                if skip_special_tokens:raise AssertionError('Must inspect raw channel tokens')
+                return self.raw
+        self.assertEqual(visible_result(Tokenizer('안녕<turn|>'),[42,106]),dict(format_status='visible',text='안녕'))
+        for raw in ('<|channel>thought\n비공개 채널<turn|>','thought\n<channel|>채널 내용<turn|>'):
+            self.assertEqual(visible_result(Tokenizer(raw),[42,106])['format_status'],'blocked_channel')
+        self.assertEqual(visible_result(Tokenizer('끝나지 않음'),[42])['format_status'],'incomplete')
+
     def test_full_export_rejects_duplicate_source_and_prompt_label_training(self):
         from compact_training import load_full_records
         source=Path('tests/fixtures/conditioned_curriculum.json');data=json.loads(source.read_text('utf-8'))

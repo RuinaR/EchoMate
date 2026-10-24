@@ -30,6 +30,7 @@ async def verify(root,seconds,released=False):
     gc.collect();result['runtime_refs_alive_after_return']=sum(r() is not None for r in refs)
     assert result['runtime_refs_alive_after_return']==0
     (Path(root)/'retention-summary.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
+    if not result['passed']:raise RuntimeError('Elapsed workload did not complete safely')
     print(json.dumps(result))
 
 

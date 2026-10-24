@@ -2,7 +2,7 @@
 
 ## 2026-10-24 실제12B 학습 API 가능·품질 후보 기각 — RELEASE BLOCKED
 
-frozenBF16/정답 위치 logits는 실제12B64/128token backward·저장/재개를 통과했다. 원본16개32step 어댑터는 개발8개에서 인격·사실성 동시 개선이 없어 미채택이다. 짧은 API 가능성과 전체 Runtime1800token 학습은 구분하며 후자는 현재 계획 예산 미충족이다. 앱/운영 설정/DB/모델은 그대로다. 실경과2시간 CPU/mock 진단 보존 ON/OFF 진행 중·판정 미확정. [최신 실제 QA](TRAINING-FEASIBILITY-V2-QA.md).
+frozenBF16/정답 위치 logits는 실제12B64/128token backward·저장/재개를 통과했다. 원본16개32step 어댑터는 개발8개에서 인격·사실성 동시 개선이 없어 미채택이다. 짧은 API 가능성과 전체 Runtime1800token 학습은 구분하며 후자는 현재 계획 예산 미충족이다. 앱/운영 설정/DB/모델은 그대로다. 첫약73분run의quota fixture실패를보존하고 수정된도구로새2시간CPU/mock ON/OFF를검증한다. 판정미확정. [최신 실제 QA](TRAINING-FEASIBILITY-V2-QA.md).
 
 ## 2026-10-24 진단 누수·학습 사전 검증 — RELEASE BLOCKED
 

@@ -32,12 +32,17 @@ def run(model_path,output,tiny_report,scale=False,compact=None,curriculum=None,s
     from qlora_recipe import prepare_frozen_bf16,supervised_loss
     entry=ModelValidator().validate(model_path)
     if not entry.compatible:raise ValueError('Validated local model required')
-    source=Path(entry.path);rows={};index=json.loads((source/'model.safetensors.index.json').read_text())
+    source=Path(entry.path);rows={};headers={};index=json.loads((source/'model.safetensors.index.json').read_text())
     for name in sorted(set(index['weight_map'].values())):
         with (source/name).open('rb') as f:
-            size=struct.unpack('<Q',f.read(8))[0];rows.update({k:v for k,v in json.loads(f.read(size)).items() if k!='__metadata__'})
+            size=struct.unpack('<Q',f.read(8))[0];raw_header=f.read(size);headers[name]=hashlib.sha256(raw_header).hexdigest()
+            rows.update({k:v for k,v in json.loads(raw_header).items() if k!='__metadata__'})
     config=json.loads((source/'config.json').read_text());budget=estimate(rows,config['text_config'],sequence=1800 if curriculum else (128 if compact else 64),frozen_bf16=True,supervised_tokens=48 if curriculum else (32 if compact else 16),last_layers=suffix_layers)
     report=dict(status='NOT_STARTED',budget=budget,stages=[],source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),real_discord=False,quality='NOT_VERIFIED')
+    from importlib.metadata import version
+    report.update(versions={n:version(n) for n in ('torch','transformers','peft','bitsandbytes')},header_hashes=headers,
+        config_sha256=hashlib.sha256((source/'config.json').read_bytes()).hexdigest(),
+        dependency_sha256={n:hashlib.sha256((repo/'tools'/n).read_bytes()).hexdigest() for n in ('qlora_recipe.py','training_budget.py','compact_training.py')})
     model=None;optimizer=None;lease=None;recorder=None;loss=None;params=None;started=time.monotonic()
     try:
         health=check_resources();report['before']=memory_snapshot();report['health']=health
@@ -60,11 +65,12 @@ def run(model_path,output,tiny_report,scale=False,compact=None,curriculum=None,s
                 regressions=compile_records(tokenizer,repo/'tests/fixtures/compact_training.json')
                 records.extend(dict(r,cohort='compact_consumed_regression') for r in regressions if r['split']=='validation')
                 report['data']['prior_consumed_regression']=8
+            report['evaluation_contract']=dict(max_new_tokens=128,max_time=45,do_sample=False,terminal_tokens='app EOS/end-of-turn',visible_channel='actual app visible(), not complete send eligibility')
 
 
         def sample():
             row=memory_snapshot()
-            if torch.cuda.is_initialized():row.update(gpu_allocated=torch.cuda.memory_allocated(),gpu_reserved=torch.cuda.memory_reserved())
+            if torch.cuda.is_initialized():row.update(gpu_allocated=torch.cuda.memory_allocated(),gpu_reserved=torch.cuda.memory_reserved(),gpu_peak_allocated=torch.cuda.max_memory_allocated(),gpu_peak_reserved=torch.cuda.max_memory_reserved())
             return row
         def stage(name):
             torch.cuda.synchronize();health=check_resources();row=dict(name=name,seconds=time.monotonic()-started,health=health,**sample())
@@ -95,9 +101,11 @@ def run(model_path,output,tiny_report,scale=False,compact=None,curriculum=None,s
             # Avoid a full duplicate of frozen base tensors: compare bounded
             # sentinels, plus all base parameter version counters around steps.
             frozen=[(p,p._version,p.detach().flatten()[:16].cpu().clone()) for n,p in model.named_parameters() if not p.requires_grad]
+            from collections import Counter
+            report['base_storage_numel_by_dtype']=dict(Counter({str(dtype):sum(p.numel() for n,p in model.named_parameters() if not p.requires_grad and p.dtype==dtype) for dtype in {p.dtype for n,p in model.named_parameters() if not p.requires_grad}}))
             report.update(trainable=sum(p.numel() for n,p in params),embedding_dtype=str(model.get_input_embeddings().weight.dtype),tied_head=model.get_input_embeddings().weight is model.get_output_embeddings().weight)
             if records:
-                report['before_quality_private']=evaluate(model,[r for r in records if r['split']=='validation'],root/'baseline-generations.jsonl',stage)
+                report['before_quality_private']=evaluate(model,[r for r in records if r['split']=='validation'],tokenizer,root/'baseline-generations.jsonl',stage)
                 stage('baseline_development_generation')
                 batches=[(r['input_ids'],r['labels']) for r in records if r['split']=='train']
             else:batches=[(list(range(2,66)),[-100]*48+list(range(50,66)))]
@@ -131,13 +139,16 @@ def run(model_path,output,tiny_report,scale=False,compact=None,curriculum=None,s
             torch.testing.assert_close(expected,actual,atol=.002,rtol=.002)
             optimizer=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=.0001)
             optimizer.load_state_dict(torch.load(root/'optimizer.pt',map_location='cpu',weights_only=True))
+            frozen=[(p,p._version,p.detach().flatten()[:16].cpu().clone()) for n,p in model.named_parameters() if not p.requires_grad]
             epoch()
+            assert all(p._version==v and torch.equal(p.detach().flatten()[:16].cpu(),saved) for p,v,saved in frozen)
+            report['base_versions_both_epochs_unchanged']=True
             assert all(int(s['step'])==2*len(batches) for s in optimizer.state.values());stage('resumed_final_step')
             report.update(status='12B_SHORT_BACKWARD_RESUME_PASS_NOT_QUALITY',roundtrip=True)
             if records:
-                report['after_quality_private']=evaluate(model,[r for r in records if r['split']=='validation'],root/'candidate-generations.jsonl',stage)
+                report['after_quality_private']=evaluate(model,[r for r in records if r['split']=='validation'],tokenizer,root/'candidate-generations.jsonl',stage)
                 for field in ('before_quality_private','after_quality_private'):
-                    for row in report[field]:row['text']=tokenizer.decode(row['output_ids'],skip_special_tokens=True)
+                    for row in report[field]:row['raw_text']=tokenizer.decode(row['output_ids'],skip_special_tokens=False)
                 model.save_pretrained(root/'candidate-final',safe_serialization=True)
                 stage('candidate_saved_not_applied')
                 report['status']='12B_FULL_SUFFIX_TRAINED_REQUIRES_QUALITY_REVIEW' if curriculum else '12B_COMPACT_TRAINED_REQUIRES_QUALITY_REVIEW'
@@ -174,6 +185,6 @@ def run(model_path,output,tiny_report,scale=False,compact=None,curriculum=None,s
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--model',required=True);p.add_argument('--output',required=True);p.add_argument('--tiny-report',required=True);p.add_argument('--scale',action='store_true');p.add_argument('--compact');p.add_argument('--curriculum');p.add_argument('--suffix-layers',type=int,choices=[4]);a=p.parse_args()
     import faulthandler
-    faulthandler.dump_traceback_later(900,exit=True)
+    faulthandler.dump_traceback_later(1200 if a.curriculum else 900,exit=True)
     with patch('socket.socket.connect',side_effect=AssertionError('No network')),patch('socket.getaddrinfo',side_effect=AssertionError('No network')):
         run(a.model,a.output,a.tiny_report,a.scale,a.compact,a.curriculum,a.suffix_layers)

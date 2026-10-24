@@ -50,6 +50,6 @@
 |실제12B 짧은 준비·학습|PASS|별도frozenBF1664/128token backward/저장·재개·16자료32step; [새근거](TRAINING-FEASIBILITY-V2-QA.md). 앱기본경로나전체길이학습인증아님|
 |전체Runtime1800token 학습|BLOCKED|frozenBF16/선택logits 계획도21.808GiB; 실제실행없음·별도host/activation근거필요|
 |조건부합성pilot자료|PASS|직접작성MIT schema2 train52/개발validation8·15scenario그룹분리/byte hash/최신동의receipt계약; 실제CPU토크나이저60개/최대1800tokens·정답경계PASS, 학습아님; 최종316개소비0|
-|실제어댑터 인격·사실성A/B|FAIL|compact16train/8개발질문·32step, 명시적사실경계3/4→3/4·인격미달로기각. 기존316개보존·운영적용없음|
+|실제어댑터 인격·사실성A/B|FAIL|compact16train/8개발질문·32step, raw/visible평가를구분해교정; 후보유효형식의예약4개중확정위반3·인격개선근거미달로기각. 기존316개보존·운영적용없음|
 
 상세근거/실행조건/완료1시간·잔여8시간/GPU운용은 [이번QA](TRAINING-STABILITY-QA.md)를따른다. 진단타입누수를고친것과모든Runtime누수·대화품질해결은구분한다.

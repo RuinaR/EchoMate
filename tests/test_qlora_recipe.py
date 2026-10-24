@@ -51,10 +51,13 @@ class SelectedLoss(unittest.TestCase):
     def test_bf16_plan_removes_conversion_overlap_but_retains_reserves(self):
         from training_budget import estimate,GIB
         rows={'model.language_model.embed_tokens.weight':dict(shape=[100,32],dtype='BF16'),
+              'model.language_model.norm.weight':dict(shape=[32],dtype='BF16'),
               'model.language_model.layers.0.self_attn.q_proj.weight':dict(shape=[32,32],dtype='BF16')}
         cfg=dict(num_hidden_layers=2,hidden_size=32,vocab_size=100)
         baseline=estimate(rows,cfg);candidate=estimate(rows,cfg,frozen_bf16=True,supervised_tokens=8)
         self.assertEqual(candidate['prepared_bytes'],baseline['prepared_bytes']-6400)
+        self.assertEqual(candidate['fp32_parameters'],32)
+        self.assertEqual(candidate['bf16_parameters'],3200)
         self.assertEqual(candidate['upcast_overlap_bytes'],0)
         self.assertEqual(candidate['safety_bytes'],2*GIB)
         self.assertEqual(candidate['allocator_driver_bytes'],GIB)

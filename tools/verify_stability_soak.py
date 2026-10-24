@@ -65,6 +65,28 @@ def batch_matches(sent,expected):
             all(x['author']==expected.get(x['source']) and x['kind']=='TEXT' for x in sent))
 
 
+def reminder_probe(store,event,counts):
+    """Exercise accepted cancellation AND the real daily quota, never bypass it."""
+    g=str(event.guild);u=str(event.author);now=store.clock();receipts=[]
+    with store.db() as db:
+        before=db.execute('SELECT COUNT(*) FROM reminders WHERE guild=? AND requester=?',(g,u)).fetchone()[0]
+        daily=db.execute('SELECT COUNT(*) FROM reminders WHERE guild=? AND requester=? AND created_at>?',(g,u,now-86400)).fetchone()[0]
+    try:reminder=store.reserve_reminder(event,now+60,'UTC','합성 점검 알림',receipts=receipts)
+    except ValueError as exc:
+        if str(exc)!='Daily reminder limit' or daily!=30:raise
+        with store.db() as db:
+            after=db.execute('SELECT COUNT(*) FROM reminders WHERE guild=? AND requester=?',(g,u)).fetchone()[0]
+        if after!=before or receipts:raise AssertionError('Denied reminder created data or receipt')
+        counts['reminder_limit_veto']+=1
+    else:
+        if daily>=30 or len(receipts)!=1:raise AssertionError('Reminder quota/receipt contract')
+        store.change_reminder(event.guild,event.author,reminder['reminder_id'],cancel=True)
+        with store.db() as db:
+            status=db.execute('SELECT status FROM reminders WHERE reminder_id=?',(reminder['reminder_id'],)).fetchone()[0]
+        if status!='cancelled':raise AssertionError('Reminder not cancelled')
+        counts['reminder_cancel']+=1
+
+
 async def capacity_probe(root,backend):
     """32 completed synthetic histories, then one actual GPU reply at capacity."""
     root=private_path(root);root.mkdir(parents=True,exist_ok=False)
@@ -149,9 +171,7 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
                 if store.add_memory(2,uid,channel,'삭제 뒤 오래된 작업의 정보','explicit',source=base+6,observed=stamp.timestamp(),require_consent=True):raise AssertionError('Deleted memory recreated by stale job')
                 counts['memory_delete']+=1
             if i%15==0:
-                reminder=store.reserve_reminder(event,time.time()+60,'UTC','합성 점검 알림')
-                store.change_reminder(2,uid,reminder['reminder_id'],cancel=True)
-                counts['reminder_cancel']+=1
+                reminder_probe(store,event,counts)
                 with sqlite3.connect(store.path) as locked:
                     locked.execute('BEGIN IMMEDIATE')
                     try:store.set_consent(2,uid,'relationships',True)

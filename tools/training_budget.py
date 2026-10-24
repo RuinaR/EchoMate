@@ -18,12 +18,13 @@ def estimate(rows,cfg,*,rank=4,sequence=64,frozen_bf16=False,supervised_tokens=N
     if rank not in (2,4,8) or type(sequence) is not int or not 8<=sequence<=2048:raise ValueError('Bounded probe sizes required')
     if supervised_tokens is not None and (type(supervised_tokens) is not int or not 1<=supervised_tokens<sequence):raise ValueError('Invalid supervised positions')
     if last_layers is not None and (type(last_layers) is not int or not 1<=last_layers<=cfg['num_hidden_layers']):raise ValueError('Invalid trainable suffix')
-    quantized=0;floating=0;largest_cast=0;targets=[]
+    quantized=0;floating=0;embedding_parameters=0;largest_cast=0;targets=[]
     for name,value in rows.items():
         shape=value['shape'];n=math.prod(shape)
         if len(shape)==2 and any(name.endswith('.'+part+'.weight') for part in LINEARS):quantized+=n
         else:
             floating+=n
+            if name.endswith('.embed_tokens.weight'):embedding_parameters+=n
             if value['dtype'] in ('BF16','F16'):largest_cast=max(largest_cast,n*2)
         if '.language_model.' in name and name.endswith(('.q_proj.weight','.v_proj.weight')):
             if len(shape)!=2:raise ValueError('Invalid linear target')
@@ -33,7 +34,9 @@ def estimate(rows,cfg,*,rank=4,sequence=64,frozen_bf16=False,supervised_tokens=N
             targets.append(dict(name=name,shape=shape,adapter_parameters=rank*sum(shape)))
     if not targets:raise ValueError('No text q/v adapter targets')
     # 4.5 bits/linear parameter includes a conservative NF4 scale allowance.
-    prepared=math.ceil(quantized*9/16)+floating*(2 if frozen_bf16 else 4)
+    # Only embedding BF16 is a required observed contract of this recipe.
+    # Reserve FP32 for other floating weights, including loader keep-fp32 lists.
+    prepared=math.ceil(quantized*9/16)+floating*4-(embedding_parameters*2 if frozen_bf16 else 0)
     if frozen_bf16:largest_cast=0
     adapter=sum(x['adapter_parameters'] for x in targets)
     adapter_state=adapter*20 # fp32 parameters, grads, Adam moments, save copy
@@ -43,8 +46,8 @@ def estimate(rows,cfg,*,rank=4,sequence=64,frozen_bf16=False,supervised_tokens=N
     allocator_driver=GIB;safety=2*GIB
     return dict(rank=rank,sequence=sequence,batch=1,checkpointing=True,frozen_bf16=frozen_bf16,supervised_tokens=supervised_tokens,last_layers=last_layers,
         frozen_prefix_gradient_proof_required=last_layers is not None,quantized_parameters=quantized,
-        non_quantized_parameters=floating,fp32_parameters=0 if frozen_bf16 else floating,
-        bf16_parameters=floating if frozen_bf16 else 0,adapter_parameters=adapter,target_count=len(targets),targets=targets,
+        non_quantized_parameters=floating,fp32_parameters=floating-(embedding_parameters if frozen_bf16 else 0),
+        bf16_parameters=embedding_parameters if frozen_bf16 else 0,adapter_parameters=adapter,target_count=len(targets),targets=targets,
         prepared_bytes=prepared,upcast_overlap_bytes=largest_cast,adapter_state_bytes=adapter_state,
         backward_planning_bytes=backward_workspace,allocator_driver_bytes=allocator_driver,safety_bytes=safety,
         planning_required_vram=max(prepared+largest_cast,prepared+adapter_state+backward_workspace)+allocator_driver+safety,

@@ -30,7 +30,18 @@ def compile_records(tokenizer,source):
     return records
 
 
-def evaluate(model,records,output=None,on_case=None):
+def visible_result(tokenizer,output_ids):
+    """Same terminal/visible-channel contract as the app, never strip to allow."""
+    from echomate_bot.inference import visible
+    end=tokenizer.convert_tokens_to_ids('<turn|>')
+    if end is None or end==tokenizer.unk_token_id:raise ValueError('Gemma end-of-turn token required')
+    if not output_ids or output_ids[-1] not in (end,tokenizer.eos_token_id):return dict(format_status='incomplete',text=None)
+    raw=tokenizer.decode(output_ids,skip_special_tokens=False)
+    try:return dict(format_status='visible',text=visible(raw))
+    except ValueError:return dict(format_status='blocked_channel',text=None)
+
+
+def evaluate(model,records,tokenizer,output=None,on_case=None):
     import time
     import torch
     rows=[];model.eval()
@@ -42,10 +53,13 @@ def evaluate(model,records,output=None,on_case=None):
         def end(self):pass
     for record in records:
         ids=torch.tensor([record['prompt']],device='cuda');clock=FirstToken();start=time.monotonic()
-        with torch.no_grad():out=model.generate(input_ids=ids,max_new_tokens=96,do_sample=False,use_cache=True,streamer=clock)
+        with torch.no_grad():out=model.generate(input_ids=ids,max_new_tokens=128,max_time=45,do_sample=False,use_cache=True,streamer=clock,
+            eos_token_id=[tokenizer.eos_token_id,tokenizer.convert_tokens_to_ids('<turn|>')],pad_token_id=tokenizer.eos_token_id)
         elapsed=time.monotonic()-start
         rows.append(dict(group=record['group'],character=record['character'],cohort=record.get('cohort','compact_development'),output_ids=out[0,len(record['prompt']):].cpu().tolist(),
             seconds=elapsed,ttft=None if clock.first is None else clock.first-start))
+        rows[-1].update(visible_result(tokenizer,rows[-1]['output_ids']))
+        rows[-1]['raw_text']=tokenizer.decode(rows[-1]['output_ids'],skip_special_tokens=False)
         if output:
             with Path(output).open('a',encoding='utf-8') as stream:stream.write(json.dumps(rows[-1])+'\n')
         if on_case:on_case('evaluation_'+str(len(rows)))
