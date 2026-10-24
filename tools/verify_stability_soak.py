@@ -85,7 +85,7 @@ async def capacity_probe(root,backend):
     finally:await runtime.close();await mock.close()
 
 
-async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_interval=60):
+async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_interval=60,observe=None):
     if not 0<seconds<=86400 or period<=0 or gpu_interval<1 or restart_interval<=0:raise ValueError('Invalid soak duration')
     root=private_path(root);root.mkdir(parents=True,exist_ok=False)
     started=time.monotonic();counts=Counter();samples=[];traces=[];gpu_rows=[];errors=[]
@@ -184,6 +184,7 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
                     import torch
                     s.update(gpu_allocated=torch.cuda.memory_allocated(),gpu_reserved=torch.cuda.memory_reserved())
                 s.update(seconds=time.monotonic()-started,tasks=len(asyncio.all_tasks()),threads=threading.active_count(),flows=len(runtime.conversations.flows),states=len(runtime.states),message_index=len(runtime.conversations.message_flow),queue=mock.pending,choice_cache=len(getattr(backend,'_choice_cache',{})))
+                if observe is not None:observe(runtime,traces,s)
                 samples.append(s);next_sample=elapsed+5
                 atomic_private_json(root/'progress.json',dict(elapsed_seconds=s['seconds'],iterations=i,counts=dict(counts),sample=s))
             transport.sent.clear() # inspection fixture must not create a fake leak
