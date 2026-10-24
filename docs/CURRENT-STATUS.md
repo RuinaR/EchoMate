@@ -2,7 +2,12 @@
 
 ## 2026-10-24 실제12B 학습 API 가능·품질 후보 기각 — RELEASE BLOCKED
 
-frozenBF16/정답 위치 logits는 실제12B64/128token backward·저장/재개를 통과했다. 원본16개32step 어댑터는 개발8개에서 인격·사실성 동시 개선이 없어 미채택이다. 짧은 API 가능성과 전체 Runtime1800token 학습은 구분하며 후자는 현재 계획 예산 미충족이다. 앱/운영 설정/DB/모델은 그대로다. 첫약73분run의quota fixture실패를보존하고 수정된도구로새2시간CPU/mock ON/OFF를검증한다. 판정미확정. [최신 실제 QA](TRAINING-FEASIBILITY-V2-QA.md).
+frozenBF16/정답 위치 logits는 실제12B64/128token backward·저장/재개를 통과했다. 원본16개32step 어댑터는 개발8개에서 인격·사실성 동시 개선이 없어 미채택이다. 짧은 API 가능성과 전체 Runtime1800token 학습은 구분하며 후자는 현재 계획 예산 미충족이다. 앱/운영 설정/DB/모델은 그대로다. 첫약73분run의quota fixture실패 뒤 새CPU/mock ON/OFF도4195.469/4204.969초에서 자원 안전 중단했다. 2시간/8시간 PASS가 아니며 후속 측정 guard는 중단 순간의 실제 수치와 원인을 저장한다. 긴 입력 suffix는12.799GiB>관측12.690GiB라 실제12B 로딩 없이 BLOCKED다. [최신 실제 QA](TRAINING-FEASIBILITY-V2-QA.md).
+
+
+### 이번 차수 최종 판정
+
+최신 전체837검사 OK305.583초. 2시간 목표는 quota fixture 실패 뒤 재실행도 약70분에서 자원 안전 중단해 미완료다. 진단 보존이 메모리 증가 일부에 영향을 주지만 누수 없음/8시간 PASS로 확정하지 않는다. 실제12B 짧은32step 학습은 가능했으나 품질 후보는 기각했고 긴 문맥 suffix는 자원 미달로 로딩0회다. Portable 공개170쌍/manifest21,572 전체hash 감사·운영/소비장부5hash 보존의 정확한 범위는 [최종 QA](TRAINING-FEASIBILITY-V2-QA.md)를 따른다. 앱src/운영모델은 그대로이며 실제 Discord0. 다음은 안전 중단 순간의 수치를 보존하는 새 guard로 bounded 운용과, 자원이 충분한 별도 실행의 full-context 학습/독립 평가다.
 
 ## 2026-10-24 진단 누수·학습 사전 검증 — RELEASE BLOCKED
 

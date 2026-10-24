@@ -72,7 +72,7 @@ train은 노력/실패·정직성·확인되지 않은 공동 등산·전화 미
 
 별도 tracer 탐색에서는 private 증가와 tracer metadata 약5~6MiB가 추가됐다. net 할당 상위에 lazy import와 pathlib intern table약1.25MiB가 있었다. tracer 실행 시간/재시작이 다른 초기 결과와 실제2시간의 크기를 직접 비교하지 않는다. 원문 allocation 경로는 private에만 저장한다.
 
-최초 `6fce56e`의 실경과7200초 CPU/mock ON/OFF 두 run은 아래 예약 quota fixture 문제로 약73분에서 실패 종료했다. 수정 도구의 새7200초 run으로 다시 검증하며, 완료 전 PASS로 쓰지 않는다. GPU 작업은 모두 종료했다. 각기 다른 임시 설정/SQLite·모의 transport이며 사용자 Desktop/운영 DB/Discord와 분리한다.5초 전후 샘플에서 자체private>256MiB/전체RAM<3GiB/commit<2GiB면 그 자체 검사만 실패 종료한다. `checkpoint.json`과 각 progress/stream을 확인하며 완료 전 PASS로 쓰지 않는다.2시간도8시간/GPU 장기/실서버 인증이 아니다.
+최초 `6fce56e`의 실경과7200초 CPU/mock ON/OFF 두 run은 아래 예약 quota fixture 문제로 약73분에서 실패 종료했다. 수정 도구의 새7200초 run도 아래의 자원 안전 기준으로 중단돼 2시간 PASS가 아니다. GPU 작업은 모두 종료했다. 각기 다른 임시 설정/SQLite·모의 transport이며 사용자 Desktop/운영 DB/Discord와 분리한다.5초 전후 샘플에서 자체private>256MiB/전체RAM<3GiB/commit<2GiB면 그 자체 검사만 실패 종료한다. `checkpoint.json`과 각 progress/stream을 확인하며 완료 전 PASS로 쓰지 않는다.2시간도8시간/GPU 장기/실서버 인증이 아니다.
 
 ## 현재 회귀·재개
 
@@ -114,10 +114,36 @@ trace 보존은 양군 모두 켠 추가2400회/40재시작 대조에서 deep_si
 
 새 fixture는 제품 제한/시계를 바꾸거나 사용자/예약 이력을 돌려 한도를 회피하지 않는다. 본인의 당일 생성 수를 확인해30개에서 정확한 Daily reminder limit만 기대하고, 거절 뒤 행 수 불변·실행 영수증0을 확인해 reminder_limit_veto로 센다. 다른 ValueError/DB 실패는 그대로 실패다. 허용된 생성은 영수증1/실제cancelled를 확인하고, DB 잠금 복구도 계속 검증한다. 임시 DB의31회 요청에서30개 취소 이력 보존·1회 거절을 회귀로 확인했고 관련8검사 OK6.087초다.
 
-원래 두 프로세스가 종료한 뒤 tinyNF4 suffix(448trainable)에서 실제 prefix_requires_grad=False·유한 gradient·base 불변·저장/Adam step2 재개를 확인했다. 이후 긴 입력12B의 가용VRAM을 새로 조회한 결과11.914GiB<새계획12.799GiB라 **새12B model load0회/BLOCKED**다. 집계값으로만 판단하고 다른 프로그램의 원인/상태를 추정하지 않는다. 모델/안전 여유/시스템 설정을 바꿔 강행하지 않았다. 다음은 GPU 없이 수정 fixture의 새2시간 실경과 검증이다.
+원래 두 프로세스가 종료한 뒤 tinyNF4 suffix(448trainable)에서 실제 prefix_requires_grad=False·유한 gradient·base 불변·저장/Adam step2 재개를 확인했다. 이후 긴 입력12B의 가용VRAM을 새로 조회한 결과11.914GiB<새계획12.799GiB라 **새12B model load0회/BLOCKED**다. 집계값으로만 판단하고 다른 프로그램의 원인/상태를 추정하지 않는다. 모델/안전 여유/시스템 설정을 바꿔 강행하지 않았다. 이후 GPU 없이 수정 fixture의 새2시간 실경과 검증을 시도했으나 아래와 같이 자원 안전 중단했다.
 
 ### 수정 도구의 현재 체크포인트
 
-c3ec377 전체835검사 OK295.095초다. 원래 실행src는f243675 그대로이며, 새로운835개 기능/도구 회귀도 인격·실서버 품질 PASS가 아니다. 새 retained-two-hour-quota/released-two-hour-quota는c3ec377의7200초 run이고 완료 전 판정 보류다. full-quota-final.log·checkpoint.json·각 progress/samples.jsonl을 private에 보존한다. 이후 같은 코드의 성공 회귀는 이유 없이 반복하지 않는다.
+c3ec377 전체835검사 OK295.095초다. 원래 실행src는f243675 그대로이며, 새로운835개 기능/도구 회귀도 인격·실서버 품질 PASS가 아니다. 새 retained-two-hour-quota/released-two-hour-quota는c3ec377의7200초 목표 run이며 약70분에서 안전 중단돼 FAIL이다. full-quota-final.log·checkpoint.json·각 progress/samples.jsonl을 private에 보존한다. 이후 같은 코드의 성공 회귀는 이유 없이 반복하지 않는다.
 
-큰 trace의 마지막 샘플 시점은 양군 종료 직전 약5초 범위에서 달랐으며, Private 차이는 allocator/관측 시점 영향도 포함한다. deep_size ON/OFF의 post-close 추가GC 뒤 private도37.547/36.566MiB로 달랐다. 단일 대조의 약0.59~0.98MiB 차이를 보편적인 인과 효과 크기로 확정하지 않는다. 양군 모두 GC 뒤 남은 프로젝트 객체는 enum 상수뿐이었다. 최종2시간 후반의 지속 증가 여부를 별도 확인한다.
+큰 trace의 마지막 샘플 시점은 양군 종료 직전 약5초 범위에서 달랐으며, Private 차이는 allocator/관측 시점 영향도 포함한다. deep_size ON/OFF의 post-close 추가GC 뒤 private도37.547/36.566MiB로 달랐다. 단일 대조의 약0.59~0.98MiB 차이를 보편적인 인과 효과 크기로 확정하지 않는다. 양군 모두 GC 뒤 남은 프로젝트 객체는 enum 상수뿐이었다. 2시간 후반의 지속 증가 여부는 이번에도 확인하지 못했다.
+
+
+## 최종 장시간 결과 — 자원 안전 중단 / 2시간 미완료
+
+수정 fixture의 ON/OFF는 각각 **4195.469초/3476반복/69재시작**, **4204.969초/3531반복/69재시작**에서 guard 오류로 exit1 종료했다. 서로 다른 실행 시간을 합쳐 2시간이나 8시간 PASS로 만들지 않는다. 오류는 자체 private>256MiB / 시스템 RAM<3GiB / commit<2GiB 중 하나의 동일 안전 reserve 검사였다. 이전 guard가 예외를 먼저 발생시켜 **unsafe sample과 어느 branch인지는 남기지 못했다**. 마지막 안전 샘플만으로 원인을 확정하거나 다른 앱에 원인을 돌리지 않는다. 후속 guard는 실제 sample·threshold·reason을 private safety-stop.json에 저장하고 ResourceLimitError로 종료하도록 수정했다. 이미 끝난 실행의 누락 근거를 소급 생성하지 않았다.
+
+진단 보존 ON private25.305→40.719MiB(max40.820), OFF25.355→29.613MiB(max29.711)였다. ON의 구간별 증가율은0–20분 약0.595,20–40분 -0.009,40–60분0.019,60분 이후0.017MiB/분, OFF는0.076/0.006/0.018/0.004였다. 초기 증가가 둔화됐지만 지속 누수 없음/전체 원인 해결의 증거는 아니다. pointer type23·샘플의 퇴역 Runtime 참조0·종료 잔류 Task0·큐0을 관측했다. 실패 wrapper는 반환 후 retention-summary를 쓰지 못했으므로 이 두 run의 반환 후 weakref 검사 PASS로 확대하지 않는다. ON thread4–5/handle229–239, OFF4–6/229–242였다. 마지막 trace 추정6,891,262/10,566bytes와 import/tracer/allocator 대조는 증가 일부를 설명하지만 나머지를 전부 정상이라고 확정하지 않는다.
+
+다른 프로그램에 접근하거나 종료하지 않았고 안전 기준을 낮추지 않았다. 종료 후 집계 RAM/commit 여유가 회복된 관측도 중단 순간의 원인/향후 안정성을 증명하지 않는다. 새 guard의 RAM/commit/private 세 경계는 오류 주입으로 저장된 수치와 reason을 확인했다. 별도 짧은 fixture는 실제 API로8합성 사용자 각각30개 취소 이력을 만든 뒤15반복에서 quota 거절/행 불변/영수증0을 확인했다. 시계·한도·사용자 이력은 우회하지 않았다. 이 짧은 성공은 2시간 운용 증거가 아니다.
+
+## 긴 입력 학습의 최종 admission / 다음 재개
+
+소형 NF4 suffix는 실제 GPU에서448trainable·prefix_requires_grad=False·유한 gradient·기본 텐서 불변·저장/Adam step2 재개를 통과했다(2.266초). 그러나 **실제12B/1800token 마지막4층 학습은 실행하지 않았다**. embedding BF16/나머지 비양자화 FP32 reserve의 보수적 계획은12.798603GiB다. 직전 가용11.914GiB와 안전 중단 후 집계12.690430GiB 모두 미달해 두 admission은 model_load_attempts=0/BLOCKED다. 측정 여유를 깎거나 다른 앱/시스템을 변경해 통과시키지 않았다. 전체48층 긴 입력 계획도 미달이다.
+
+실제12B32step 후보의 private peak14.344GiB/working peak5.825GiB,100ms 관측 GPU allocated/reserved7.357/7.533GiB,stage 최고47°C는 앞선 안전한 짧은 학습의 기록이다. 이 수치를 긴 입력의 최대치로 재사용하지 않는다. 추가 GPU/장시간 재시도는 종료했다. 다음은 충분한 집계 자원이 지속되는 별도 실행에서 새 guard를 사용하는2시간→8시간 mock 운용, 그다음 tiny 증명/보수적 admission을 통과한 경우에만 전체 문맥 suffix 학습과 원천 분리 독립 품질 평가다. 최종316개 소비0, 운영 Gemma/no-LoRA 유지, 실제 Discord/새 GUI/다른 Windows/Portable GPU/장기 GPU는 미검증이다.
+
+
+### 이번 차수 최종 마감
+
+최종 연구 소스의 전체 회귀 **837검사 OK305.583초**(`full-final-frozen.log`)다. 새 안전 중단 기록/실제 quota 사전 이력의 표적10검사는18.006초 통과했다. 앱 실행src는 시작f243675와 byte 내용이 같고 운영 기본모델/프로필·저장 스키마·권한·Runtime 생성은 바꾸지 않았다. 따라서 연구 학습의 성공과 운영 LoRA 지원/실제 대화 개선은 구분한다. 새 GUI/실제 Runtime GPU→SDK mock 통합을 이번 도구 변경의 재검증으로 주장하지 않는다. 기존 SDK mock을 포함한 기능 회귀는 실행했지만 이번 GPU 학습은 독립 도구다.
+
+Portable에는 변경된 공개 문서/README만 증분 반영했다. public src/docs168파일+README/기본프로필 **170쌍**, manifest **21,572파일**을 전체 SHA256·크기·목록·금지 파일 경계로 감사한다(`portable-final.json`). 연구 도구·학습 fixture·어댑터·원문 출력은 번들에 넣지 않는다. 번들83검사는 이전 f243675의 동일 실행 소스 근거로 보존하며 재실행한 것으로 세지 않는다. 다른 Windows/새 사용자 환경/실제 Portable GPU는 NOT VERIFIED다.
+
+작업 전후 운영설정/bootstrap/두DB/최종평가소비장부 **5개 SHA256 동일**(`preserved-final.json`). 기존 모델/LoRA는 읽기만 했고 전체 가중치 hash 검증을 했다는 주장은 하지 않는다. 최종 미사용316개는 유지했다. 공개 staged 목록/내용과 private 경계·링크·diff를 검사한 소스/합성 fixture/문서만 일반 main push한다. 시작f243675→연구6fce56e→prefix증명eb7c38d→계약/quota교정c3ec377→중간기록0c6a6d3 뒤 최종 마감 commit은 Git main HEAD로 식별한다. 문서 안에 자신의 commit hash를 넣기 위한 순환 amend는 하지 않는다.
+
+**RELEASE BLOCKED 유지**: 인격 수렴/자유 생성 허위 주장·한국어 판별 신뢰도·사회적 판단·2시간/8시간 완료·긴 문맥 학습 품질·다른 Windows·실제 Discord `/동의` 접근은 남아 있다. 추가 승인 요청 없이 가능한 안전한 연구는 이 차수에서 마감했다. 다음 실행은 보존자료/최신 HEAD 확인→새 guard의 실제 자원 stop 증거를 포함한 bounded 운용→안전 자원이 충분할 경우에만 full suffix proof/학습→학습에 사용하지 않은 원천 분리 검증 순서다. 실제 Discord는 계속 최후반 별도 승인 대상이다.

@@ -2,7 +2,12 @@
 
 ## 2026-10-24 BF16 저장·희소 loss·실제12B 학습 가능성
 
-f243675 clean→PEFT FP32 embedding 중첩 분석→라이브러리 무수정 frozenBF16/전체loss와 gradient 동일한 선택 logits→tinyNF4 저장/재개→실제12B64/128 backward/재개→별도원본16train/8개발자료32step/전후GPU 생성→원시 출력의 허위 상태·인격 미달/유효 응답 비교 한계로 기각. 연구6fce56e만 채택하고 운영 생성/모델은 유지한다. 측정 샘플 RAM 보존을256개로 제한하고 JSONL 전체 기록·진단 보존 대조를 추가했다. 첫 시간 기반 대조의 재시작 수 차이는 고정240반복/4재시작으로 보완했다. 7200초 CPU ON/OFF 진행 중이며 최종 회귀/Portable/보존/실경과는 [이번 QA](TRAINING-FEASIBILITY-V2-QA.md)에 누적한다.
+f243675 clean→PEFT FP32 embedding 중첩 분석→라이브러리 무수정 frozenBF16/전체loss와 gradient 동일한 선택 logits→tinyNF4 저장/재개→실제12B64/128 backward/재개→별도원본16train/8개발자료32step/전후GPU 생성→원시 출력의 허위 상태·인격 미달/유효 응답 비교 한계로 기각. 연구6fce56e만 채택하고 운영 생성/모델은 유지한다. 측정 샘플 RAM 보존을256개로 제한하고 JSONL 전체 기록·진단 보존 대조를 추가했다. 첫 시간 기반 대조의 재시작 수 차이는 고정240반복/4재시작으로 보완했다. 새7200초 CPU ON/OFF도 약70분에서 자원 안전 중단했으며 최종 회귀/Portable/보존/실경과는 [이번 QA](TRAINING-FEASIBILITY-V2-QA.md)에 누적한다.
+
+
+### 최종 검증·중단 근거
+
+최신 전체837검사 OK305.583초. 2시간 목표는 quota fixture 실패 뒤 재실행도 약70분에서 자원 안전 중단해 미완료다. 진단 보존이 메모리 증가 일부에 영향을 주지만 누수 없음/8시간 PASS로 확정하지 않는다. 실제12B 짧은32step 학습은 가능했으나 품질 후보는 기각했고 긴 문맥 suffix는 자원 미달로 로딩0회다. Portable 공개170쌍/manifest21,572 전체hash 감사·운영/소비장부5hash 보존의 정확한 범위는 [최종 QA](TRAINING-FEASIBILITY-V2-QA.md)를 따른다. 앱src/운영모델은 그대로이며 실제 Discord0. 다음은 안전 중단 순간의 수치를 보존하는 새 guard로 bounded 운용과, 자원이 충분한 별도 실행의 full-context 학습/독립 평가다.
 
 ## 2026-10-24 학습 예산·진단 할당 누수 분석
 

@@ -2,7 +2,7 @@
 
 ## 2026-10-24 실험 전용12B frozenBF16/LoRA
 
-기본 앱은 여전히 Gemma4/no-LoRA다. 별도 연구 도구의 BF16 frozen base·NF4·q/v rank4는 실제12B64/128token backward/저장·재개,16개 합성 자료32step을 통과했다. 전체Runtime1800token 학습이나 앱 LoRA 선택 지원으로 확대하지 않는다. 인격/사실성 A/B는 기준 미달로 어댑터를 운영에 적용하지 않았다. 소형 모델/API 성공과 안전 예산/생성 품질은 [이번 QA](TRAINING-FEASIBILITY-V2-QA.md)로 구분한다.
+기본 앱은 여전히 Gemma4/no-LoRA다. 별도 연구 도구의 BF16 frozen base·NF4·q/v rank4는 실제12B64/128token backward/저장·재개,16개 합성 자료32step을 통과했다. 전체Runtime1800token 학습이나 앱 LoRA 선택 지원으로 확대하지 않는다. 마지막4층 긴 입력 후보는 tiny NF4 prefix 증명만 통과했고 계획12.799GiB>최종 관측12.690GiB로 실제12B 로딩0회/BLOCKED다. 인격/사실성 A/B는 기준 미달로 어댑터를 운영에 적용하지 않았다. 소형 모델/API 성공과 안전 예산/생성 품질은 [이번 QA](TRAINING-FEASIBILITY-V2-QA.md)로 구분한다.
 
 ## 2026-10-24 학습 사전 검증의 범위
 
