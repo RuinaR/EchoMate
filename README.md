@@ -1,5 +1,7 @@
 # EchoMate
 
+원천 확보와 실제12B SFT·고정참조 DPO를 검증했지만, 인격·사실성의 공동 개선이 부족해 두 후보를 기각했습니다. 운영 no-LoRA를 유지합니다. [실제 자료·학습·한계](docs/ADVANCED-CHARACTER-QA.md), [장기 개발 계획](docs/ADVANCED-CHARACTER-ROADMAP.md).
+
 QLoRA 자원 Admission은 기존 안전 여유를 유지합니다. 준비 검사 checkpointing 수정·전체GPU 학습 자원 검증·기각한 품질 후보의 범위는 [최신 감사 QA](docs/QLORA-ADMISSION-QA.md)를 따릅니다. 정식 릴리즈는 BLOCKED입니다.
 
 ## 2026-10-25 실제 QLoRA 재개·유휴 캐시 검증 — RELEASE BLOCKED

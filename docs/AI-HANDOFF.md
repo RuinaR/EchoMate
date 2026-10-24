@@ -1,5 +1,10 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-25 Advanced Character 원천·SFT·선호도 학습 — RELEASE BLOCKED
+
+연구 `1813a17`, 전체929검사 OK260.722초. Topical8628/600가족큐·LongMemEval500·미표기Beyond500/CharacterBench250을선별확보하고사용자추가지시대로혼합1350참조/842가족을구성했다. 새80응답(train64/dev16)·선호72쌍(train56/dev16), 혼합분류축기반32미학습초안이다. 실제12B SFT16step/813.453초·단일base고정SFT참조DPO14step/1165.360초·정확재개를완료했지만허위기억/약속·인격수렴때문에둘다기각했다. GPUreserved피크8.904/7.809GiB, 기존2GiB여유유지. 미표기원문을대량SFT정답으로복제하지않았고NC조건/개인정보/출처를유지한다. no-LoRA·앱src·운영자료·독립56/최종316유지,실제Discord0. [상세권리·자료·실측·마감](ADVANCED-CHARACTER-QA.md), [Phase별계획·재개](ADVANCED-CHARACTER-ROADMAP.md).
+
+
 ## 2026-10-25 준비 검사 train/checkpoint 불일치 해결·실제12B 자원 검증
 
 연구 `84ff0f3`(선행 `6a2015c`), 전체913개 OK248.654초. 연구 `6a2015c` 이후 준비 backward가 eval이라 checkpointing이 비활성인 원인을 수정했다. bounded opt-in checkpoint-input 예산12.693GiB(기존2GiB 여유 포함)으로 전체GPU64응답/16step/105.515초·저장/재개 exact를 완료했다. reserved피크8.904GiB/free단계최소4,923MiB. 별도80원본응답(train64/dev16)의 CPU I/O fresh·warm 학습은 완료했지만 인격 수렴/조회실패 단정 때문에 모두기각했다. no-LoRA·앱src·기존376/독립56/최종316·운영자료는유지한다. [상세실측·실패·재개·마감](QLORA-ADMISSION-QA.md). RELEASE BLOCKED.

@@ -1,5 +1,7 @@
 # 공개 원천 확보·조건부 정답 편집 — 2026-10-25
 
+후속 원천/미표기 혼합 참조·실제 SFT/DPO와 기각 결과는 [Advanced QA](ADVANCED-CHARACTER-QA.md)를 따른다. 원본ED의NC4.0과ParlAI task의BY4.0 표시 충돌도 확인했으며, 더 느슨한 표기로 기존ED seed 제외를 해제하지 않았다. 아래는 당시 BST 확보/편집 기록이다.
+
 후속 실제188/전체264응답 학습·캐시 후보·품질 미채택은 [재개 QA](QLORA-RESUME-QA.md)를 따른다. 아래의 로딩0회는 이전 차수 당시 자원 미달 기록이다.
 
 시작 local/main/remote `8a348d42ba0e6a3c0933514daa82686486b1269f`, clean. RELEASE BLOCKED. 실행 앱src·운영 no-LoRA·프로필·DB schema·큐·동의·송신 경로는 변경하지 않았다. 실제 Discord 인증/조회/Gateway/명령/송신0회다. 다른 프로그램의 목록/창/화면/입력/내부/네트워크는 조사·조작하지 않았다. 시스템 집계와 자체 테스트만 읽었다.

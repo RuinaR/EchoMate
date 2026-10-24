@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 2026-10-25 격리된 preference 연구 경로
+
+`tools/preference_pairs.py`는 기존 SFT source/split·정답 마스크를 상속하고 독립/최종의 relabel을 거절한다. `preference_learning.py`는 고정 초기SFT reference scalar와 completion logps 합 기반 DPO를 순차 RNG 재생으로 계산한다. `run_preference_pilot.py`는 단일12B·단일graph·기존자원guard·optimizer/RNG checkpoint를 검증하는 연구CLI다. 앱/Controller/Runtime/설정/미리보기에서 import하거나 운영 adapter로 자동선택하지 않는다. 혼합 source pointer는 라이선스/가족/분할을 유지하고 raw target·메모리·송신 권한을 만들지 않는다. 실제 품질 미달로 두 새 adapter는 미채택이며, 지속 상태·다중턴 통합은 [계획](ADVANCED-CHARACTER-ROADMAP.md)의 미검증 설계다. [실측/한계](ADVANCED-CHARACTER-QA.md).
+
 ## 2026-10-24 Windows 진단 타입 수명
 
 loader_memory는 Windows Structure/WinDLL prototype을 잠금 안에서 한 번 만들고 값 객체만 샘플링한다. 매번 새 Structure의 POINTER가 ctypes 전역 캐시에 보존되던 누수를 제거했다. telemetry의 working-set MiB도 같은 카운터를 쓰며 오류는 None이다. 시스템 집계/자체 프로세스만 읽고 admission·생성·동의·송신 계약은 바꾸지 않는다. 학습 도구와 curriculum은 앱/프로필/모델 선택 UI에 연결하지 않는다. [재현과 검증](TRAINING-STABILITY-QA.md).
