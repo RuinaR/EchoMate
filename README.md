@@ -1,5 +1,7 @@
 # EchoMate
 
+QLoRA 자원 Admission은 기존 안전 여유를 유지합니다. 준비 검사 checkpointing 수정·전체GPU 학습 자원 검증·기각한 품질 후보의 범위는 [최신 감사 QA](docs/QLORA-ADMISSION-QA.md)를 따릅니다. 정식 릴리즈는 BLOCKED입니다.
+
 ## 2026-10-25 실제 QLoRA 재개·유휴 캐시 검증 — RELEASE BLOCKED
 
 전체264응답·399token·66유효 학습 단계와 체크포인트 완전 일치를 확인했습니다. 계산 전 유휴 CUDA 캐시 정리를 검증해 기존2GiB 안전 기준을 유지했고, GPU peak allocated/reserved는11.986/12.182GiB였습니다. 하지만 실제 생성에서 조회 상태 단정·시점/화자 오류가 남아 어댑터는 미채택입니다. 기본 no-LoRA와 독립/최종 평가를 유지합니다. 기분·관계·후속 대화32응답은 별도 미학습 초안으로 보강했습니다. [실제 학습·비교·기각·한계](docs/QLORA-RESUME-QA.md).

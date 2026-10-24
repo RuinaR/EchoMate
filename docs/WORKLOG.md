@@ -1,5 +1,15 @@
 # 작업 로그
 
+## 2026-10-25 준비 검사 train/checkpoint 불일치 해결·실제12B 자원 검증
+
+연구 `84ff0f3`(선행 `6a2015c`), 전체913개 OK248.654초. 연구 `6a2015c` 이후 준비 backward가 eval이라 checkpointing이 비활성인 원인을 수정했다. bounded opt-in checkpoint-input 예산12.693GiB(기존2GiB 여유 포함)으로 전체GPU64응답/16step/105.515초·저장/재개 exact를 완료했다. reserved피크8.904GiB/free단계최소4,923MiB. 별도80원본응답(train64/dev16)의 CPU I/O fresh·warm 학습은 완료했지만 인격 수렴/조회실패 단정 때문에 모두기각했다. no-LoRA·앱src·기존376/독립56/최종316·운영자료는유지한다. [상세실측·실패·재개·마감](QLORA-ADMISSION-QA.md). RELEASE BLOCKED.
+
+
+## 2026-10-25 초기 QLoRA Admission 감사 — 후속 실험은 위 최신 기록
+
+사전14.195GiB와 reserved12.182GiB+안전2GiB의 차이는 약13.844MiB다. 이전 성공의 집계free 변화+안전여유는14.455GiB로 더 커서, 과도한 사전 요구량이 입증되지 않았다. 임계값은 유지했다. 항목별 회계·기본OFF phase 계측·관측 실패 증거의 library 결합을 보강했다. 실제 tinyNF4 phase18개/저장·재개 metric·가중치 완전 일치,12B 추가실행은free14,260MiB<필요14,536MiB로model_load0/BLOCKED다. 신규 원본10원천40응답(train32/dev8)·실제token/mask를검사했지만미학습이다. 기존376/독립56/최종316·no-LoRA·운영자료를유지했다. [근거·회귀·Portable·다음실행](QLORA-ADMISSION-QA.md).
+
+
 ## 2026-10-25 실제학습 재개·계산전 유휴캐시 후보
 
 연구e6fef4c·최종890검사 OK251.922초·운영/장부5hash 보존. GPU child는모두종료했고최종Portable/Git근거는재개QA를따른다.
