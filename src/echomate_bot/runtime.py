@@ -1192,6 +1192,11 @@ class Runtime:
             flow=self.conversations.flows.get(self.key(event))
             if flow and (speech_eligible or reaction_only):flow.engaged=True;self.activity_changed()
             command_answer=None;summary_guard=None;summary_id=None;memory_guard=None;generation_guard=None
+            operation_receipts=[];subject_guard=None;subject_snapshot=None;dependency_stale=False
+            if self.companion:
+                try:
+                    subject_snapshot=await asyncio.to_thread(self.companion.subject_snapshot,event.guild,event.author,relationship=cfg['relations_auto'])
+                except (OSError,RuntimeError,sqlite3.Error):self.note('subject_snapshot_unavailable')
             from .capabilities import public_state,describe,model_facts,VISUAL,visual_guard
             observation='present_not_analyzed' if event.assets or event.visual_inputs_present else 'not_provided'
             if not event.assets and event.reply_to:
@@ -1222,10 +1227,12 @@ class Runtime:
                 if request_kind(event.content):
                     try:
                         _,recent=state.snapshot(channel_id=event.channel,thread_id=None)
-                        command_answer=await asyncio.to_thread(handle_request,self.companion,event,cfg,self.transport.bot_id,recent=recent)
+                        command_answer=await asyncio.to_thread(handle_request,self.companion,event,cfg,self.transport.bot_id,recent=recent,receipts=operation_receipts)
                     except asyncio.CancelledError:
                         await asyncio.shield(asyncio.to_thread(self.companion.delete_source,event.guild,event.id));raise
-                    except (OSError,RuntimeError,ValueError,sqlite3.Error):command_answer='처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
+                    except (OSError,RuntimeError,ValueError,sqlite3.Error):
+                        operation_receipts.clear()
+                        command_answer='처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
                 else:
                     try:
                         memory_version=await asyncio.to_thread(self.companion.consent_version,event.guild,event.author,'memory')
@@ -1364,7 +1371,22 @@ class Runtime:
                         generated=await self.response_pipeline.respond(self,event,context,character,
                             fresh=lambda:self.fresh(event,state,version,revision),visual=observation)
                         answer=generated.text;generation_guard=generated.fresh
-                    else:answer=await self.backend.text(context,character)
+                    else:
+                        if subject_snapshot is None and self.companion and (capability_view['own_consent'] is not None or character.get('_familiarity') is not None):
+                            try:
+                                subject_snapshot=await asyncio.to_thread(self.companion.subject_snapshot,event.guild,event.author,relationship=cfg['relations_auto'])
+                                if capability_view['own_consent'] is not None and any(subject_snapshot[k][0]!=v for k,v in capability_view['own_consent'].items()):
+                                    self.note('subject_evidence_changed');return
+                            except (OSError,RuntimeError,sqlite3.Error):
+                                self.note('subject_snapshot_unavailable');return
+                        subject_guard=subject_snapshot
+                        if subject_guard is not None:
+                            try:
+                                if subject_guard!=await asyncio.to_thread(self.companion.subject_snapshot,event.guild,event.author,relationship=cfg['relations_auto']):
+                                    self.note('subject_evidence_changed');return
+                            except (OSError,RuntimeError,sqlite3.Error):
+                                self.note('subject_snapshot_unavailable');return
+                        answer=await self.backend.text(context,character)
                 finally:
                     if indicator:
                         indicator.cancel();await asyncio.gather(indicator,return_exceptions=True)
@@ -1405,7 +1427,18 @@ class Runtime:
                     self.stage(event,'sending',started)
                     try:
                         async def delivery_current():
+                            nonlocal dependency_stale
                             if not await self.fresh(event,state,version,revision,require_adult=adult_for_turn):return False
+                            if memory_guard and not await asyncio.to_thread(self.companion.memory_evidence_current,event.guild,event.author,event.channel,*memory_guard):
+                                self.note('memory_evidence_changed');return False
+                            try:
+                                for receipt in operation_receipts:
+                                    if not await asyncio.to_thread(receipt.current,self.companion):
+                                        dependency_stale=True;self.note('operation_receipt_changed');return False
+                                if subject_guard is not None and subject_guard!=await asyncio.to_thread(self.companion.subject_snapshot,event.guild,event.author,relationship=cfg['relations_auto']):
+                                    dependency_stale=True;self.note('subject_evidence_changed');return False
+                            except (OSError,RuntimeError,sqlite3.Error):
+                                dependency_stale=True;self.note('delivery_evidence_unavailable');return False
                             if generation_guard and not await generation_guard():
                                 self.note('generation_evidence_changed');return False
                             if capability_answer is not None:
@@ -1415,12 +1448,11 @@ class Runtime:
                                 if new_view!=old_view:self.note('capability_state_changed');return False
                             if summary_guard and await asyncio.to_thread(self.companion.digest_consent,event.guild,summary_guard)!=summary_guard:return False
                             if summary_id and not await asyncio.to_thread(self.companion.has_digest,event.guild,event.channel,event.author,summary_id):return False
-                            if memory_guard and not await asyncio.to_thread(self.companion.memory_evidence_current,event.guild,event.author,event.channel,*memory_guard):
-                                self.note('memory_evidence_changed');return False
                             return True
                         sent=await self.transport.execute(event,action,self.library,delivery_current)
                     except Exception:
-                        self.note('send_failed');raise
+                        if not dependency_stale or action.kind!=Kind.TEXT:self.note('send_failed')
+                        raise
                     self.ledger.completed(event,"sent")
                     if social and flow and flow.status=='candidate' and action.kind!=Kind.REACTION:
                         self.conversations.observe(flow,event);flow.direct_peers.add(event.author)
@@ -1459,6 +1491,8 @@ class Runtime:
                     self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
                 except Exception as exc:
                     self.ledger.completed(event,"failed_or_uncertain")
+                    if dependency_stale and action.kind==Kind.TEXT:
+                        active_trace.get().outcome='cancelled';self.note('evidence_superseded');return
                     # Transient failures do not make a Unicode emoji invalid.
                     if action.asset and getattr(exc,'code',None)==10014:self.blocked_assets.add((event.guild,action.asset))
                     raise

@@ -39,6 +39,23 @@ class PrivacyStore:
             r=db.execute('SELECT version FROM consent_choices WHERE guild=? AND user=? AND category=? AND enabled=1',(str(guild),str(user),category)).fetchone()
             return r[0] if r else None
 
+    def subject_snapshot(self,guild,user,*,relationship=False):
+        """Read one subject's epochs, including disabled/re-consented choices.
+
+        Private in-flight dependency, never a model or diagnostic payload.
+        """
+        with self.db() as db:
+            db.execute('BEGIN')
+            rows={r['category']:(bool(r['enabled']),r['version']) for r in db.execute(
+                'SELECT category,enabled,version FROM consent_choices WHERE guild=? AND user=?',
+                (str(guild),str(user))) if r['category'] in CATEGORIES}
+            result={k:rows.get(k,(False,0)) for k in CATEGORIES}
+            if relationship and result['relationships'][0]:
+                row=db.execute('SELECT affinity FROM relationships WHERE guild=? AND user=?',
+                               (str(guild),str(user))).fetchone()
+                result['familiarity']=row[0] if row else 50
+            return result
+
     def data_counts(self,guild,user):
         with self.db() as db:
             result={key:db.execute('SELECT COUNT(*) FROM '+table+' WHERE guild=? AND user=?',(str(guild),str(user))).fetchone()[0]

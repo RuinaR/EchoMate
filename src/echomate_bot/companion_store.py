@@ -138,7 +138,7 @@ COMMIT;
             if require_consent and not db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='relationships' AND enabled=1",(str(guild),str(user))).fetchone():raise ValueError('본인의 친밀도 저장 동의가 필요해요')
             db.execute('INSERT INTO relationships(guild,user,affinity) VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET affinity=excluded.affinity',(str(guild),str(user),value))
 
-    def add_memory(self,guild,user,channel,summary,kind='explicit',*,source=None,observed=None,tz='Asia/Seoul',expires=None,status='active',policy=None,conversation_id=None,require_consent=False,source_event=None):
+    def add_memory(self,guild,user,channel,summary,kind='explicit',*,source=None,observed=None,tz='Asia/Seoul',expires=None,status='active',policy=None,conversation_id=None,require_consent=False,source_event=None,receipts=None):
         positive_id(guild);positive_id(user);positive_id(channel)
         if kind not in ('plan','state','goal','preference','explicit') or status not in ('active','disabled','uncertain'):raise ValueError('Invalid memory kind/status')
         if not safe_subject_text(summary):raise ValueError('Sensitive, third-party or unsupported memory')
@@ -165,11 +165,18 @@ COMMIT;
             if not source.startswith('manual:') and cutoff is not None and observed<=cutoff:return None
             if source_event is not None and not self.register_source_parts(db,source_event):return None
             old=db.execute('SELECT memory_id FROM memories WHERE guild=? AND source=? AND kind=?',(g,source,kind)).fetchone()
-            if old:return old[0]
+            if old:
+                if receipts is not None:
+                    from .operation_receipts import memory_receipt
+                    receipts.append(memory_receipt(db,'memory_saved',guild,user,channel,old[0]))
+                return old[0]
             if db.execute('SELECT COUNT(*) FROM memories WHERE guild=? AND user=?',(g,u)).fetchone()[0]>=100 or db.execute('SELECT COUNT(*) FROM memories').fetchone()[0]>=5000:raise ValueError('Memory limit')
             key=secrets.token_hex(8)
             db.execute('INSERT INTO memories VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(key,g,u,kind,summary,source,str(channel),now,now,observed,observed,start,end,expires,tz,when.precision,1 if start else 0,1 if status=='active' else .5,status,'source_channel','kind_default'))
             if conversation_id:db.execute('INSERT INTO memory_flows VALUES(?,?)',(key,conversation_id))
+            if receipts is not None:
+                from .operation_receipts import memory_receipt
+                receipts.append(memory_receipt(db,'memory_saved',guild,user,channel,key))
             return key
 
     def register_source_parts(self,db,event):
@@ -186,7 +193,7 @@ COMMIT;
         db.execute('''DELETE FROM source_parts WHERE NOT EXISTS(SELECT 1 FROM memories m WHERE m.guild=source_parts.guild AND m.source=source_parts.source)
             AND NOT EXISTS(SELECT 1 FROM reminders r WHERE r.guild=source_parts.guild AND r.source=source_parts.source AND r.status IN ('scheduled','processing'))''')
 
-    def extract(self,event,tz,*,text=None,policy=None):
+    def extract(self,event,tz,*,text=None,policy=None,receipts=None):
         if not self.automatic_allowed(event.guild,event.author,'memory'):return None
         observed=min(p.timestamp.timestamp() for p in (getattr(event,'raw_parts',()) or (event,)))
         with self.db() as db:
@@ -207,6 +214,9 @@ COMMIT;
                     if not db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='memory' AND enabled=1 AND at<=?",(str(event.guild),str(event.author),observed)).fetchone():return None
                     db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(event.guild),row['source']))
                     db.execute('DELETE FROM memories WHERE memory_id=?',(row['memory_id'],))
+                    if receipts is not None:
+                        from .operation_receipts import memory_receipt
+                        receipts.append(memory_receipt(db,'memory_removed',event.guild,event.author,event.channel,row['memory_id'],row))
                 return row['memory_id']
             when=parse_when(text,event.timestamp,tz)
             if not when.start:return None
@@ -217,8 +227,11 @@ COMMIT;
                 db.execute('INSERT OR IGNORE INTO tombstones VALUES(?,?)',(str(event.guild),row['source']))
                 grace=(policy or {}).get('memory_date_grace',86400) if when.precision=='date' else (policy or {}).get('memory_plan_grace',3600)
                 db.execute('UPDATE memories SET summary=?,source=?,observed_at=?,last_confirmed_at=?,updated_at=?,event_start_at=?,event_end_at=?,expires_at=?,timezone=?,temporal_precision=? WHERE memory_id=?',(text[:300],str(event.id),event.timestamp.timestamp(),event.timestamp.timestamp(),self.clock(),when.start.timestamp(),when.end.timestamp(),when.end.timestamp()+grace,tz,when.precision,row['memory_id']))
+                if receipts is not None:
+                    from .operation_receipts import memory_receipt
+                    receipts.append(memory_receipt(db,'memory_saved',event.guild,event.author,event.channel,row['memory_id']))
             return row['memory_id']
-        return self.add_memory(event.guild,event.author,event.channel,text[:300],kind,source=event.id,observed=observed,tz=tz,policy=policy,conversation_id=getattr(event,'conversation_id',None),require_consent=True,source_event=event)
+        return self.add_memory(event.guild,event.author,event.channel,text[:300],kind,source=event.id,observed=observed,tz=tz,policy=policy,conversation_id=getattr(event,'conversation_id',None),require_consent=True,source_event=event,receipts=receipts)
 
     def memories(self,guild,user=None,channel=None,query='',kind=None,*,conversation_id=None,allow_user_archive=False,include_expired=False):
         now=self.clock();sql='SELECT * FROM memories WHERE guild=?';args=[str(guild)]
@@ -311,13 +324,16 @@ COMMIT;
         # No data backups are restored automatically. WAL checkpoint is best effort.
         with self.db() as db:db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
 
-    def forget_memories(self,guild,user):
+    def forget_memories(self,guild,user,*,receipts=None):
         self.set_consent(guild,user,'memory',False)
         with self.db() as db:
             db.execute('INSERT OR IGNORE INTO memory_optouts VALUES(?,?)',(str(guild),str(user)))
             db.execute('INSERT INTO memory_cutoffs VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(str(guild),str(user),self.clock()))
             db.execute('DELETE FROM memories WHERE guild=? AND user=?',(str(guild),str(user)))
             self.prune_source_parts(db)
+            if receipts is not None:
+                from .operation_receipts import memory_receipt
+                receipts.append(memory_receipt(db,'memory_cleared',guild,user,''))
 
     def users(self,guild):
         with self.db() as db:return [dict(r) for r in db.execute('SELECT * FROM relationships WHERE guild=? ORDER BY last_at DESC LIMIT 100',(str(guild),))]
@@ -348,7 +364,7 @@ COMMIT;
             db.execute('DELETE FROM '+area+' WHERE guild=?'+(' AND '+column+'=?' if u else ''),(g,u) if u else (g,))
             if area=='relationships':db.execute('DELETE FROM relationship_events WHERE guild=?'+(' AND user=?' if u else ''),(g,u) if u else (g,))
 
-    def reserve_reminder(self,event,due,tz,text):
+    def reserve_reminder(self,event,due,tz,text,*,receipts=None):
         now=self.clock();g=str(event.guild);u=str(event.author)
         if not safe_subject_text(text) or due<=now or due-now>366*86400:raise ValueError('Invalid or private reminder')
         dedup=f'{event.guild}:{event.id}'
@@ -357,6 +373,9 @@ COMMIT;
             existing=db.execute('SELECT * FROM reminders WHERE deduplication_key=?',(dedup,)).fetchone()
             if existing:
                 if existing['status']!='scheduled':raise ValueError('Request already closed')
+                if receipts is not None:
+                    from .operation_receipts import reminder_receipt
+                    receipts.append(reminder_receipt(existing))
                 return dict(existing)
             if not self.register_source_parts(db,event) or db.execute('SELECT 1 FROM tombstones WHERE guild=? AND source=?',(g,str(event.id))).fetchone():raise ValueError('Request withdrawn')
             if db.execute("SELECT COUNT(*) FROM reminders WHERE guild=? AND requester=? AND status IN ('scheduled','processing')",(g,u)).fetchone()[0]>=10:raise ValueError('Active reminder limit')
@@ -364,7 +383,11 @@ COMMIT;
             if db.execute("SELECT COUNT(*) FROM reminders WHERE status IN ('scheduled','processing')").fetchone()[0]>=1000:raise ValueError('Global reminder limit')
             key=secrets.token_hex(12)
             db.execute('INSERT INTO reminders(reminder_id,guild,channel,thread,parent,requester,target,created_at,due_at,timezone,text,status,deduplication_key,source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(key,g,str(event.channel),str(event.channel) if event.parent else None,str(event.parent) if event.parent else None,u,u,now,due,tz,text,'scheduled',dedup,str(event.id)))
-            return dict(db.execute('SELECT * FROM reminders WHERE reminder_id=?',(key,)).fetchone())
+            row=dict(db.execute('SELECT * FROM reminders WHERE reminder_id=?',(key,)).fetchone())
+            if receipts is not None:
+                from .operation_receipts import reminder_receipt
+                receipts.append(reminder_receipt(row))
+            return row
 
     def reminders(self,guild,user=None,*,active=False):
         sql='SELECT * FROM reminders WHERE guild=?';args=[str(guild)]
@@ -372,7 +395,7 @@ COMMIT;
         if active:sql+=" AND status='scheduled'"
         with self.db() as db:return [dict(r) for r in db.execute(sql+" ORDER BY CASE status WHEN 'scheduled' THEN 0 WHEN 'processing' THEN 0 WHEN 'failed' THEN 1 ELSE 2 END,due_at LIMIT 1000",args)]
 
-    def change_reminder(self,guild,user,key,*,due=None,text=None,cancel=False,owner=False):
+    def change_reminder(self,guild,user,key,*,due=None,text=None,cancel=False,owner=False,receipts=None):
         if due is not None and not self.clock()<due<=self.clock()+366*86400:raise ValueError('Invalid reminder date')
         if text is not None and not safe_subject_text(text):raise ValueError('Unsafe reminder text')
         with self.db() as db:
@@ -386,6 +409,9 @@ COMMIT;
             else:
                 if due is not None:db.execute('UPDATE reminders SET due_at=? WHERE reminder_id=?',(due,key))
                 if text is not None:db.execute('UPDATE reminders SET text=? WHERE reminder_id=?',(text,key))
+            if receipts is not None:
+                from .operation_receipts import reminder_receipt
+                receipts.append(reminder_receipt(db.execute('SELECT * FROM reminders WHERE reminder_id=?',(key,)).fetchone()))
 
     def due(self,grace):
         now=self.clock()
