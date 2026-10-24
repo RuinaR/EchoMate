@@ -1,5 +1,12 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-24 기능 안정성·대화 품질 집중 — 최신 / BLOCKED
+
+시작 local/main/remote58128e7 clean. 예약 permissions await 뒤 기한/grace를 놓치는 결함과 마지막 processing-read await 뒤 기한을 보강했다. 시작 Runtime의6회귀 중3실패(실제 SDK mock의 늦은 송신1 포함)→현재 보호 확인. 일시정지는 원래 callback 보호가 있어 새 수정 성과로 세지 않는다. 긴 카드 background100자 절단·vocabulary/opening 조건 누락은 원문/900·6000토큰 예산을 보존하며 수정했다. 실제 Gemma34호출/Runtime32/SDK32: 배경 이유0/4→4/4, 새 질문에서 배경별 복귀 조건4/4, 없는 음식 취향0/4 양쪽. 일상 인격 수렴은 남고 전체 p95는10.938→13.793초, 출력 길이도 달라 속도 개선 주장은 없다. 합성 한국어68사례/25그룹은 주석·oracle 계약이며 NLP 판별 정확도가 아니다. 최종316개 보존·운영 schema/추가 생성 호출 없음. [실행 조건·채택/미검증·전체/Portable](STABILITY-DIALOGUE-QA.md). 실제 Discord는 후반 별도 승인까지 연기하며 지금 조회/복구하지 않는다.
+
+
+실행 단계 `8af87e1`/`dec2787`: 최종788검사 OK240.115초·번들46검사 OK6.273초, 공개165쌍/manifest21,567 대조·두 VBS check exit0·운영4파일 hash 동일. 소스 사용 시 앱 재시작 필요·DB 마이그레이션 없음. 실제 Discord/새 GUI/번들 GPU 검증은 수행하지 않았다.
+
 ## 2026-10-24 자율 개발 — 실행·조회 근거 보호 채택 / BLOCKED
 
 시작 main/local/remote7dcea2e clean. 코드 commit의 실행 Receipt와 명시 목록 ReadReceipt를 기존 최종 fresh에 연결했다. 저장 삭제/예약 취소·변경/동의·관계 철회 뒤 오래된 안내 송신, 읽은 기억 삭제 후 목록 재노출을 재현·수정했다. 본인 epoch(철회·재동의 포함)·실제 행/범위·빈 조회를 검증하며 정상 본인 조회와 다른 범주/사용자/서버 격리를 유지한다. schema/운영 마이그레이션·추가 GPU 호출0. 무효화는 취소/원인별 진단으로 표시하되 부분 TEXT_REACTION 송신은 기존 실패/불확실 처리를 유지한다.

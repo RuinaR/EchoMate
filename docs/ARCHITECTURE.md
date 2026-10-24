@@ -1,5 +1,10 @@
 # 아키텍처
 
+## 2026-10-24 알림 전달 기한과 가상 자료 가용성
+
+Runtime.deliver_reminders의 within_scope는 권한 await 전후·최종 processing read 뒤 최신 시계/grace/설정/허용 범위를 검사한다. claim/finish·불확실 송신 at-most-once 계약과 schema는 유지한다. character_card.augment는 지속 말투/인사 자료를 core로 넣고 가상 background를 임의100자 절단하지 않는다. 기존 실제 토큰 budget/부가 항목 제거/상위 정책과 원문 보존을 재사용한다. 이는 새 추론 단계나 사회적 참여 권한이 아니다. [재현·GPU·한계](STABILITY-DIALOGUE-QA.md).
+
+
 ## 2026-10-24 코드 실행·명시 조회의 송신 근거
 
 기존 Store write transaction에서만 만드는 불변 Receipt를 companion.handle_request의 선택 인자로 수집한다. 실제 행·범위·동의 epoch를 보존하고 transport의 마지막 fresh에서 새로운 SQLite read snapshot으로 대조한다. 명시 목록은 ReadReceipt로 기존 query 결과(표시 상한/빈 결과)와 관련 범주 동의를 검증한다. 기본 자유 생성은 본인 동의/허용된 관계 snapshot을 전후 대조한다. 자료는 요청 RAM에만 있으며 모델의 ID/도구/권한 제안으로 만들지 않는다. DB schema·원본 reply·기존 memory_guard·단일 Worker/모델·프로필 prompt는 유지한다. 부분 TEXT_REACTION 송신은 원자 취소로 취급하지 않는다. [재현·실제 SDK·한계](OPERATION-EVIDENCE-QA.md).
