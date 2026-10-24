@@ -1,5 +1,10 @@
 # 릴리즈 후보 전수 감사 — 2026-10-19
 
+## 2026-10-24 현재 게이트 안내
+
+이 문서의 과거 후보 감사와 dist 폴더명은 현재 RELEASE CANDIDATE 승인을 의미하지 않는다. 현재 DEVELOPMENT / RELEASE BLOCKED이며 [필수 추적표](RELEASE-CHECKLIST.md)와 [최신 QA](RELEASE-READINESS-QA.md)를 따른다. 실제 Discord·다른 Windows·장시간·대화 품질 차단을 유지한다.
+
+
 ## 2026-10-19 후속 릴리즈 — 현재 기준
 
 이 문서 아래는0ddb4df 이전 감사 기록이다. 일일100 차단 원인은 확인됐고 최신 사용자 지시에 따라 상한·편집 UI를 완전히 제거했다. 신규 다중 턴 요약/공개 검색 범위와 실제 증거는 후속 QA를 따른다. 전체 실사용 판정은 여전히 NOT VERIFIED다.

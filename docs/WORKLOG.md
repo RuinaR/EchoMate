@@ -1,5 +1,10 @@
 # 작업 로그
 
+## 2026-10-24 릴리즈 요구사항·공식sampling 진단·독립 안정화
+
+4587355 clean에서 릴리즈 필수12영역/25세부 항목을 분리했다. 새 개발 입력4×캐릭터4×3조건의 Runtime48/SDK48·Gemma53추론을 비교했으나 sampling의 인격/사실성 동시 개선은 미달이다. 기본 생성은 유지하고 평가 도구67f8823·CPU API probe e9b0d2e만 채택했다. soak의 잘못된 전역 완료 순서 검사를 정확한 원본 multiplicity/작성자 binding으로 고쳤으며 제품 경주 해결로 주장하지 않는다. 전체808검사 OK243.511초·번들65검사 OK12.792초·격리 UI30행/55이미지를 확인했다. [최종 soak/Portable/보존·실패와 다음 단계](RELEASE-READINESS-QA.md).
+
+
 ## 2026-10-24 인격 대비·주장 추출·기억 query 경주
 
 e88637f clean→CFG/CAD 공식 연구·설치 구현 확인→일반 빈/상위3개 query 경주 재현/보호→동일 한 모델의 CFG/기분·관계3턴/claim 추출→낮은 형식 통과·높은 비용 확인→별도 잡담/미래 부탁/실제 GPU memory race→CFG 미채택·형식 울타리2건 offline원인 분리. 총69호출/SDK33송신은 품질 정답 수가 아니다. 최초799전체 중 기존 pipeline 진단 회귀1건을 고쳐 실제 기본 생성 소비 때만 새 guard를 활성화했다. 실패 fixture/로그는 보존하며 최종 검사는 [이번 QA](CONSISTENCY-CLAIMS-QA.md)를 따른다. 실제 Discord0·최종316개 미사용·운영 자료 보존.

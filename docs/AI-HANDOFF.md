@@ -1,5 +1,10 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-24 정식 릴리즈 추적·sampling 기각 — 최신 / RELEASE BLOCKED
+
+시작4587355 clean. 12개 필수 영역의 [릴리즈 추적표](RELEASE-CHECKLIST.md)를 기준으로 DEVELOPMENT / RELEASE BLOCKED를 유지한다. 도구67f8823은 공식sampling 두 seed를 동일 Runtime/SDK mock에서 비교하고 전체 Portable hash를 읽기 감사한다. e9b0d2e는 초소형CPU 어댑터 저장/복원 API만 확인하며12B/NF4 학습·품질 검증이 아니다. 실제 GPU53추론/48 Runtime·SDK 응답에서 sampling의 인격/사실성 동시 개선이 없어 운영 소스/기본greedy를 보존했다. 전체808검사 OK243.511초·번들65검사 OK12.792초·현재 격리 UI30행/55이미지·운영4파일hash 동일. 초기soak의 완료 순서 가정과 첫 번들의 private 경로 오류는 도구/실행 오류이며 제품 수정 성과로 세지 않는다. 최종20분 soak/Portable/Git와 실행 명령·다음 우선순위는 [이번 QA](RELEASE-READINESS-QA.md)를 우선한다. 실제 Discord0·최종316개 소비0, 새 모델/의존성/운영 DB 변경0. 이번에는 앱 실행 코드가 바뀌지 않아 재시작/마이그레이션 불필요하다.
+
+
 ## 2026-10-24 인격 대비·한국어 추출·일반 기억 선택 — 최신 / BLOCKED
 
 시작 main/local/remotee88637f clean. 기본 생성의 MemorySelection(query/범위/동의 epoch/실제 상위3행)을 송신 전 재검증해 빈 조회 뒤 삽입/순위 변경 stale 송신을 차단했다. 실제 소비한 기본 backend.text 경로에만 활성화하고 이모지/닫힌 안내/기본 비활성 실험 파이프라인의 독립 계약은 보존한다. 실제 SDK 원본 GET 뒤 삽입은 GPU에서 기존1→수정0송신. CFG1.5는 같은 모델/두 cache에서 열린 갈등·기분/관계3턴·가벼운 잡담을 비교했지만 지연/메모리 비용·거짓 미래 기억 약속 때문에 기각했다. 두 실행69호출(응답34+기존 재시도2+추출29+probe4), SDK33송신. 원자 추출은 strict 계약7/27·완전 주석 일치0이고 일부 주석 해석도 모호하다. 실패 원문 보존을 보강했고 한 겹 JSON 울타리의2사례 offline복구만 확인했다. 일반 파서 정확도로 확대하지 않는다. 최종316개 보존·실제 Discord0. [실행본·실패/수정·전체/Portable·후속](CONSISTENCY-CLAIMS-QA.md).
