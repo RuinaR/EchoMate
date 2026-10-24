@@ -103,3 +103,31 @@ def read_receipt(kind,event,rows,consent):
     if any((r['guild'],r[owner],r['channel'])!=(str(event.guild),str(event.author),str(event.channel)) for r in rows):
         raise ValueError('Read acknowledgement scope')
     return ReadReceipt(kind,event.guild,event.author,event.channel,read_values(kind,rows),read_epochs(kind,consent))
+
+
+@dataclass(frozen=True)
+class MemorySelection:
+    """Same permitted retrieval, including an empty or top-three selection.
+
+    Query prose stays in request RAM and is never logged or sent to a model by
+    this guard. Reuse the Store's filters/ranking rather than a second index.
+    """
+    guild:int
+    user:int
+    channel:int
+    query:str
+    conversation_id:str
+    archive:bool
+    values:tuple
+    consent_version:int
+
+    def current(self,store):
+        rows=[dict(row) for row in self.values]
+        def valid(values):
+            if values:return store.memory_evidence_current(self.guild,self.user,self.channel,values,self.consent_version)
+            return store.subject_snapshot(self.guild,self.user)['memory']==(True,self.consent_version)
+        if not valid(rows):return False
+        current=store.memories(self.guild,self.user,self.channel,self.query,
+                               conversation_id=self.conversation_id,allow_user_archive=self.archive)[:3]
+        return (read_values('memory',current)==self.values and
+                valid(current))

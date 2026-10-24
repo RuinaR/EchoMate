@@ -1199,7 +1199,7 @@ class Runtime:
             flow=self.conversations.flows.get(self.key(event))
             if flow and (speech_eligible or reaction_only):flow.engaged=True;self.activity_changed()
             command_answer=None;summary_guard=None;summary_id=None;memory_guard=None;generation_guard=None
-            operation_receipts=[];subject_guard=None;subject_snapshot=None;dependency_stale=False
+            operation_receipts=[];subject_guard=None;subject_snapshot=None;dependency_stale=False;memory_selection=None;selection_guard=None
             if self.companion:
                 try:
                     subject_snapshot=await asyncio.to_thread(self.companion.subject_snapshot,event.guild,event.author,relationship=cfg['relations_auto'])
@@ -1243,9 +1243,16 @@ class Runtime:
                 else:
                     try:
                         memory_version=await asyncio.to_thread(self.companion.consent_version,event.guild,event.author,'memory')
+                        archive=bool(re.search(r'내\s*(?:약속|일정|목표|취향|기억)',event.content))
                         remembered=await asyncio.to_thread(self.companion.memories,event.guild,event.author,event.channel,event.content,
-                            conversation_id=event.conversation_id,allow_user_archive=bool(re.search(r'내\s*(?:약속|일정|목표|취향|기억)',event.content)))
-                        if not await self.automatic_subject_allowed(event.guild,event.author,'memory'):remembered=[]
+                            conversation_id=event.conversation_id,allow_user_archive=archive)
+                        permitted=await self.automatic_subject_allowed(event.guild,event.author,'memory')
+                        if not permitted:remembered=[]
+                        elif memory_version is not None:
+                            from .operation_receipts import MemorySelection,read_values
+                            remembered=remembered[:3]
+                            memory_selection=MemorySelection(event.guild,event.author,event.channel,event.content,event.conversation_id,
+                                                             archive,read_values('memory',remembered),memory_version)
                         if remembered:
                             remembered=remembered[:3]
                             if not await asyncio.to_thread(self.companion.memory_evidence_current,event.guild,event.author,event.channel,remembered,memory_version):
@@ -1393,6 +1400,9 @@ class Runtime:
                                     self.note('subject_evidence_changed');return
                             except (OSError,RuntimeError,sqlite3.Error):
                                 self.note('subject_snapshot_unavailable');return
+                        selection_guard=memory_selection
+                        if selection_guard and not await asyncio.to_thread(selection_guard.current,self.companion):
+                            self.note('memory_selection_changed');return
                         answer=await self.backend.text(context,character)
                 finally:
                     if indicator:
@@ -1438,6 +1448,8 @@ class Runtime:
                             if not await self.fresh(event,state,version,revision,require_adult=adult_for_turn):return False
                             if memory_guard and not await asyncio.to_thread(self.companion.memory_evidence_current,event.guild,event.author,event.channel,*memory_guard):
                                 self.note('memory_evidence_changed');return False
+                            if selection_guard and not await asyncio.to_thread(selection_guard.current,self.companion):
+                                dependency_stale=True;self.note('memory_selection_changed');return False
                             try:
                                 for receipt in operation_receipts:
                                     if not await asyncio.to_thread(receipt.current,self.companion):

@@ -24,6 +24,7 @@ NO_RESPONSE = {
     'legacy_command_unregistered':'이전 명령이에요. /동의로 본인 데이터 설정을 열어 주세요',
     'capability_state_changed':'설명 도중 기능·동의 상태가 바뀌어 오래된 안내를 보내지 않았어요',
     'operation_receipt_changed':'저장·예약 결과가 바뀌어 이전 완료 안내를 취소했어요',
+    'memory_selection_changed':'답변에 사용할 기억 조회 결과가 바뀌어 이전 응답을 취소했어요',
     'subject_evidence_changed':'본인 동의·관계가 바뀌어 이전 정보로 만든 답변을 취소했어요',
     'subject_snapshot_unavailable':'본인 정보의 최신 근거를 확인할 수 없어요',
     'delivery_evidence_unavailable':'최종 저장소 확인에 실패해 답변을 전송하지 않았어요',
