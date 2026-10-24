@@ -1,5 +1,10 @@
 # 로컬 모델 레지스트리
 
+## 2026-10-25 새376응답 자료의 학습 admission — BLOCKED
+
+새 학습264/개발56의 전체토큰/마스크를 확인했다. 실제train최대399/정답44의 기존NF4 frozenBF16 q/v rank4계획14.195160GiB가 가용12.936523GiB를 초과하여 모델로딩0회로중단했다. 새학습/adapter/생성A/B는없고 no-LoRA선택은변경하지않는다. 한LR1e-4/66유효step은향후계획이며성공측정이아니다. [출처/계약/자원/한계](PUBLIC-TRAINING-DATA-QA.md).
+
+
 ## 2026-10-24 연구용349token·결정적 checkpoint
 
 단일 resident12B/NF4 frozenBF16의 전체 텍스트q/v rank4/alpha8/dropout0.05·accum4·정답위치loss에서128/256/349token backward와3LR의16유효 step/저장/재생을 확인했다. 결정성 설정은 연구 child에만 적용하며 앱의 추론/로딩을 변경하지 않는다. 인격·사실성 동시 개선이 없어 세 후보 모두 운영 미채택, no-LoRA 유지다. v4 학습 자료104개/최대399token은 CPU export만 확인했고 GPU 학습은 아니다. 정확한 원천·비결정성 실패·메모리·미검증은 [신규 QA](DATASET-QLORA-QA.md)를 따른다.

@@ -1,5 +1,14 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-25 공개 데이터·새 정답 자료 — 최신 / RELEASE BLOCKED
+
+연구c507567·최종 전체875검사 OK281.831초. 운영/소비장부5hash 보존, source/문서/Portable 마감은 신규 QA를 따른다.
+
+시작8a348d4 clean/main·원격 일치. 공식 BST38,101,408bytes·고정 공개hash/CC BY4.0을 새 확보했다. 기존 평가1,300원천 및 공유seed 전이 가족을 배제해 후보1,838/1,773 component, 그중56원천에서224개 새 한국어 target을 개별 작성했다. 기존 v4와합계376(학습264/개발56/별도56),90가족/92상황변형이다. 원문/정답은 private에만 두고 새로운 CC BY파생을MIT로 바꾸지 않는다. claim/lineage/마스크 감사는 의미/인간 품질 보증이 아니다. 기분·관계 불균형은 남아 있다.
+
+실제 토크나이저 학습최대399/정답44, 한LR1e-4·rank4·accum4·66유효step 계획을 고정했으나 admission14.195GiB>가용12.936523GiB로 BLOCKED_STATIC_VRAM/model_load_attempts0이다. 새 GPU 학습/추론/품질/독립 생성0, 최종316개 보존이다. 실제 앱src·운영자료·기본no-LoRA는 유지했고 Discord/다른앱접근0이다. 최종회귀·Portable·보존은 [신규 QA](PUBLIC-TRAINING-DATA-QA.md)를 따른다. private local_data/public-training-20261025/checkpoint.json의 새출력경로·해시·재개명령으로 이어간다. 다음은 기분/관계/여러턴·행동 차이 원천을 보강하고 안전한 새 자원 조건에서만 동일pilot을 실행하는 것이다.
+
+
 ## 2026-10-24 조건부 자료·결정적12B 재개 — 최신 / RELEASE BLOCKED
 
 시작e0e8e82 clean·원격 일치. 연구b56d231/39dab96과 후속 v4는 원본34원천 가족/36상황 변형/152응답(학습104/개발24/별도24)·출처/근거span/카드anchor/저장대상 결합·실제 토크나이저 마스크를 검사한다. 앞선 v1의64개를 실제349token/NF4/BF16/qv rank4·accum4·epoch1로5e-5/1e-4/2e-4 비교했다. CUDA backward 비결정성을 재현한 뒤 자체 child의 결정성 설정 조합에서 실제3후보 모두 optimizer/scheduler/RNG 재개 metric/가중치 완전 일치를 확인했다. 세 후보는 인격 수렴·조회 상태 오류 등으로 모두 미채택이며 v4는 아직 학습하지 않았다. 별도24개 GPU/최종316개 소비0. 최신 전체862검사 OK258.800초.
