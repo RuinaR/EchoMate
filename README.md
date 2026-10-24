@@ -2,7 +2,10 @@
 
 ## 2026-10-24 진단 메모리 누수 수정·학습 사전 검증 — BLOCKED
 
-반복 메모리 조회가 ctypes 타입을 계속 보존하던 누수를 수정했습니다. 실제12B 학습은 현재 VRAM 계획 예산을 충족하지 못해 실행하지 않았고, 작은 Unified의 CPU/NF4 역전파·저장·재개만 검증했습니다. 학습 전후 대화 품질 개선을 주장하지 않습니다. 전체818회귀/번들83검사와 원본 합성 자료·할당 출처 분석을 확인했습니다. [실제 측정·한계·재개](docs/TRAINING-STABILITY-QA.md), [릴리즈 게이트](docs/RELEASE-CHECKLIST.md).
+반복 메모리 조회의 ctypes 타입 보존 누수와 부분 JSON 쓰기 실패 뒤 임시 파일 잔류를 수정했습니다. 실경과1시간 CPU/mock3108회·59재시작에서 오류·잔류 Task0을 확인했지만, private 메모리 증가가 남아8시간/GPU 장기 인증은 아닙니다. 실제12B 학습은 VRAM 계획 미충족으로 보류했고 소형 Unified CPU/NF4 역전파·저장·재개만 검증했습니다. 원본 합성52train/8개발 validation은 실제 토크나이저의 입력·정답 경계를 확인했으며 학습 전후 대화 품질 개선을 주장하지 않습니다. [실제 측정·회귀·Portable·재개](docs/TRAINING-STABILITY-QA.md), [릴리즈 게이트](docs/RELEASE-CHECKLIST.md).
+
+
+최종 기능 회귀 **825검사 OK241.772초**, 번들83검사 OK13.133초. 공개 src/docs167파일·README/기본 프로필 포함169쌍과 Portable manifest21,571파일은 [마감 QA](docs/TRAINING-STABILITY-QA.md)의 감사 범위를 따른다.
 
 
 ## 2026-10-24 릴리즈 게이트·생성 방식 비교 — RELEASE BLOCKED

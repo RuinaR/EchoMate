@@ -2,7 +2,12 @@
 
 ## 2026-10-24 학습 예산·진단 할당 누수 분석
 
-`9561e78` clean에서 시작해 ctypes 포인터 캐시 증가 두 경로를 재현하고 `72546e4`로 수정했다. 정적12B 학습 예산 미충족으로 실제 학습은 보류하고 소형 Unified CPU/NF4 저장·재개를 확인했다. 32차원 fallback과64차원 정렬 조건을 구분했다. 도구 `675f517`에 MIT 원본 합성 train24/개발 validation8과 byte hash·범위 회귀, 자체 할당 추적을 추가했다. 전체818검사 OK247.043초·번들83검사 OK13.133초. [최종 실경과 비교·Portable·보존·재개](TRAINING-STABILITY-QA.md). 운영 자료·최종316개·실제 Discord 상태는 변경하지 않았다.
+`9561e78` clean에서 시작해 ctypes 포인터 캐시 증가 두 경로를 재현하고72546e4로 수정했다. 부분 저장 실패의 temp 잔류84c47d8도 오류 주입 후 수정했다. 실제12B VRAM 계획 미충족으로 학습을 보류하고 소형 Unified CPU/NF4 저장·재개만 확인했다.32차원 fallback과64차원 정렬 조건을 구분했다. 도구675f517/d547c84/d33b1af는 MIT 원본 합성 자료를 schema2 train52/개발 validation8로 보강하고 실제 추론 prefix와 학습 label 경계를 일치시킨다.60개 CPU tokenization 최대1800tokens·학습0회다.
+
+실경과1시간 CPU/mock3108반복/59재시작 오류·잔류 Task0, private25.23→41.10MiB·후반 증가 둔화 관측.8시간/GPU/전체 누수 해결로 부르지 않는다. [최종 회귀·번들83·Portable·보존·재개](TRAINING-STABILITY-QA.md)에 근거를 누적했다. 운영 자료·최종316개·실제 Discord 상태는 변경하지 않았고 인격/사실성 개선을 주장하지 않는다.
+
+
+최종 기능 회귀 **825검사 OK241.772초**, 번들83검사 OK13.133초. 공개 src/docs167파일·README/기본 프로필 포함169쌍과 Portable manifest21,571파일은 [마감 QA](TRAINING-STABILITY-QA.md)의 감사 범위를 따른다.
 
 
 ## 2026-10-24 릴리즈 요구사항·공식sampling 진단·독립 안정화

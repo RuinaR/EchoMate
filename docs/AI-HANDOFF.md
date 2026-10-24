@@ -2,7 +2,14 @@
 
 ## 2026-10-24 학습 자원·진단 누수 — 최신 / RELEASE BLOCKED
 
-시작 `9561e78`, clean. 실행 `72546e4`는 시스템/추론 메모리 조회가 매번 만든 ctypes 타입을 보존하던 누수를 수정했다. 반복 조회의 타입/private 증가가 사라졌고, 기존 admission·생성·동의·송신 계약을 유지했다. 도구 `675f517`은 12B 학습 계획14.53GiB가 가용12.70GiB를 넘어 실제 준비·학습을 보류하고, 소형 Unified CPU/NF4 저장·Adam 재개만 확인했다. 원본 MIT 합성 train24/개발 validation8은 기존1650개/최종316개와 별개다. 전체818검사 OK247.043초·번들83검사 OK13.133초. 할당 추적·실경과 비교·최종 Portable/보존/재개 명령은 [이번 QA](TRAINING-STABILITY-QA.md)를 우선한다. 앱 재시작 필요, DB 마이그레이션 없음. 다음은 CPU offload의 host 예산/gradient 사전 검증과 수정 Runtime의1시간/8시간 확대다. 실제 어댑터 품질 A/B·Discord는 미실행이며 정식 BLOCKED를 유지한다. 부분 JSON 쓰기 실패 뒤 temp 잔류도84c47d8에서 수정했고, 1시간 run의 메모리 버전과 별도 오류 회귀 범위를 QA에 구분했다. 현재 별도1시간 CPU/mock 검사가 진행 중이며 결과는 미확정이다. private checkpoint/progress를 확인하고 완료 전 PASS로 쓰지 않는다.
+시작 `9561e78`, clean. 실행 `72546e4`는 반복 메모리 조회의 ctypes 타입 보존 누수를, `84c47d8`은 부분 JSON 쓰기 예외 뒤 임시 파일 잔류를 수정했다. 기존 admission·권한·생성·송신 계약은 유지한다. 실제12B 준비/학습은 계획14.53GiB>당시 가용12.70GiB로 보류했고 소형 Unified CPU/NF4 저장·Adam 재개만 확인했다. 학습 어댑터/대화 품질 A/B는 없다.
+
+실경과 CPU/mock 3600.016초·3108반복·59재시작에서 오류/잔류 Task/반환 후 Runtime 참조0. private25.23→41.10MiB·마지막20분 회귀기울기약0.018MiB/분으로 증가가 남아8시간/GPU 장기 합격으로 확대하지 않는다. 메모리 run 버전은72546e4/675f517이며 후속 저장 예외 수정은 별도 회귀다. MIT 원본 자료는 d547c84→d33b1af에서 schema2 train52/개발 validation8로 확장하고 현재 공통 기능 상태/캐릭터 컴파일러·실제 토크나이저로60개 정답 마스킹을 확인했다. 최대1800tokens로64token smoke 예산을 그대로 적용할 수 없다. 기존1650개/최종 미사용316개는 학습하지 않았다.
+
+최종 회귀·번들83·Portable 전체hash·보존/공개 감사는 [이번 QA](TRAINING-STABILITY-QA.md)를 우선한다. 앱 재시작 필요, DB 마이그레이션 없음. 다음은 inference-aligned1800token 학습 예산과 CPU offload의 host RAM/commit·tied head/gradient 계약을 작은 독립 모델에서 먼저 확인하고, 안전한 경우에만12B 준비/독립 품질 비교로 진행한다. 장시간은8시간/주기적GPU가 남아 있다. 실제 Discord는 최후반 별도 승인까지 미실행, `/동의` 비표시·인격 수렴·일반 허위 주장·사회적 판단 차단은 유지한다.
+
+
+최종 기능 회귀 **825검사 OK241.772초**, 번들83검사 OK13.133초. 공개 src/docs167파일·README/기본 프로필 포함169쌍과 Portable manifest21,571파일은 [마감 QA](TRAINING-STABILITY-QA.md)의 감사 범위를 따른다.
 
 
 ## 2026-10-24 정식 릴리즈 추적·sampling 기각 — 최신 / RELEASE BLOCKED

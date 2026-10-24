@@ -2,7 +2,10 @@
 
 ## 2026-10-24 진단 누수·학습 사전 검증 — RELEASE BLOCKED
 
-메모리 카운터 두 경로의 ctypes 타입 보존 누수를 `72546e4`에서 수정했다. 현재12B 학습은 VRAM 계획 미충족으로 BLOCKED이며, 작은 Unified CPU/NF4 API만 PASS다. 실제 학습 어댑터나 인격·사실성 A/B 개선은 없고 기본 생성을 유지한다. 전체818/번들83은 기능 근거이며 대화 품질·실제 Discord·다른 Windows·장시간 차단을 해제하지 않는다. [실제 근거와 다음 단계](TRAINING-STABILITY-QA.md).
+메모리 카운터의 ctypes 타입 보존 누수72546e4·부분 JSON 쓰기 실패의 임시 파일 잔류84c47d8을 수정했다. 실경과1시간 CPU/mock3108반복/59재시작에서 오류·잔류 Task·반환 후 Runtime 참조0이지만 private25.23→41.10MiB로 소폭 증가가 남는다.8시간/GPU 장기 인증은 아니다. 실제12B 학습은 VRAM 계획 미충족 BLOCKED, 작은 Unified CPU/NF4 API만 PASS다. 실제 학습 어댑터/인격·사실성 A/B 개선은 없고 기본 생성을 유지한다. 원본 조건부 자료52train/8개발 validation의 입력·정답 마스크를 실제 토크나이저로 확인했으며 최대1800tokens다. 전체 회귀·번들83·Portable/보존의 정확한 마감은 [최신 QA](TRAINING-STABILITY-QA.md). 실제 Discord·다른 Windows·8시간·대화 품질 차단을 해제하지 않는다.
+
+
+최종 기능 회귀 **825검사 OK241.772초**, 번들83검사 OK13.133초. 공개 src/docs167파일·README/기본 프로필 포함169쌍과 Portable manifest21,571파일은 [마감 QA](TRAINING-STABILITY-QA.md)의 감사 범위를 따른다.
 
 
 ## 2026-10-24 정식 릴리즈 추적 — DEVELOPMENT / RELEASE BLOCKED

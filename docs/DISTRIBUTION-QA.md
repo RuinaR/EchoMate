@@ -2,7 +2,7 @@
 
 ## 2026-10-24 진단 누수 수정 증분
 
-공개 실행 소스 loader_memory/telemetry/settings를 증분 복사해 번들 Python81검사 OK13.133초를 확인했다. 학습 도구·합성 curriculum·임시 어댑터·모델·진단 원문은 번들에 넣지 않는다. 최신 문서/manifest·전체 hash·VBS /check·자료 보존의 마감은 [이번 QA](TRAINING-STABILITY-QA.md)를 따른다. 앱 재시작 필요, DB 마이그레이션 없음. 새 GUI/번들12B GPU/다른 Windows를 검증한 것은 아니다.
+공개 실행 소스 loader_memory/telemetry/settings를 증분 복사해 번들 Python83검사 OK13.133초를 확인했다. 학습 도구·합성 curriculum·임시 어댑터·모델·진단 원문은 번들에 넣지 않는다. 최신 문서/manifest·전체 hash·VBS /check·자료 보존의 마감은 [이번 QA](TRAINING-STABILITY-QA.md)를 따른다. 앱 재시작 필요, DB 마이그레이션 없음. 새 GUI/번들12B GPU/다른 Windows를 검증한 것은 아니다.
 
 
 ## 2026-10-24 전체 Portable 파일 감사·최신 문서 증분

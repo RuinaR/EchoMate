@@ -77,11 +77,11 @@
 
 수정 후20분은1200.016초/1038반복, 독립reply2076·범위/중복 veto2076·재시작19·errors/잔류 Task0으로 통과했다. 포인터 타입은 전 샘플23개, 관측한 퇴역 Runtime0·반환 후 Runtime weakref0이다. private26,550,272→41,906,176 bytes(약25.3→40.0MiB), 마지막 측정 trace 약7,253,928 bytes였다. 이전26.5→42.4MiB와 단순 비율 개선으로 주장하지 않는다. 새 observer의 deep-size/weakref도 할당에 영향을 주며, 누수 원인 하나가 제거됐어도 진단/allocator 등의 증가를 더 오래 확인해야 한다.
 
-이 결과를 바탕으로 별도 CPU/mock **실경과3600초** run을 시작했다. GPU 실험은 모두 종료했고 중복 모델/학습/추론 부하는 없다. 자체 progress·RAM/commit/포인터/퇴역 객체만 감시하며 불안정하면 이 테스트만 중단한다. 실제 완료 결과는 완료 후 기록한다. 1시간 통과도8시간/실제 Discord/GPU 장시간 운용 PASS가 아니다.
+이 결과를 바탕으로 별도 CPU/mock **실경과3600초** run을 시작했다. GPU 실험은 모두 종료했고 중복 모델/학습/추론 부하는 없다. 자체 progress·RAM/commit/포인터/퇴역 객체만 감시하며 불안정하면 이 테스트만 중단한다. 완료 결과는 아래 최종 실경과 절에 기록했다. 1시간 통과도8시간/실제 Discord/GPU 장시간 운용 PASS가 아니다.
 
 ## 마감·재개
 
-최종 전체/번들·20분·Portable·보존/공개 감사·재개 절차는 실제 완료 후 누적한다. 정식 릴리즈는BLOCKED이며 인증된 Discord 조회/Gateway/명령/송신은0회다. 게임/다른 프로그램의 상태·FPS·제재 위험을 인증한 것이 아니며 시스템 집계 자원과 자체 테스트 프로세스만 확인했다.
+최종 전체/번들·20분/1시간·Portable·보존/공개 감사·재개 절차는 아래 마감 절을 따른다. 정식 릴리즈는BLOCKED이며 인증된 Discord 조회/Gateway/명령/송신은0회다. 게임/다른 프로그램의 상태·FPS·제재 위험을 인증한 것이 아니며 시스템 집계 자원과 자체 테스트 프로세스만 확인했다.
 
 ### 회귀·번들 실행
 
@@ -89,4 +89,40 @@
 
 공개 실행 소스2개(loader_memory/telemetry)만 먼저 Portable에 증분 복사해 번들 Python/번들src81검사 OK13.158초(exit0)를 확인했다. 기존65개 기억/예약/카드/명령/SDK mock/UI workflow에 loader_memory16개를 추가한 범위다. 첫 실행은 새 private fixture 디렉터리 생성 누락으로63setup error가 났다. 제품/테스트 조건을 완화하지 않고 동일 검사에 필요한 디렉터리만 만든 뒤 새 로그로 재실행했다. `ECHOMATE_DATA_HOME=<이번private root>/local_data`, `cwd=<이번private root>`, 해당 data 디렉터리를 먼저 생성하고 `PYTHONDONTWRITEBYTECODE=1`로 실행해야 한다. 재현 문서에 이 준비 조건을 남겨 같은 실수를 반복하지 않도록 한다. 초기 bundle.log와수정 bundle-fixed.log를 보존한다.
 
-UI 실행 소스/설계는 바꾸지 않았으므로 새 GUI 렌더/사용자 Desktop 검사는 하지 않았다. 기존 격리 GUI 근거와 이번 이벤트 회귀를 구분한다. 실제12B 추론·학습 품질/새Portable GPU/다른 Windows/1시간·8시간 운용도 이번 작은검사로PASS 처리하지 않는다. 앱에 진단 누수 수정을 반영하려면 사용자가 재시작해야 하며 DB 마이그레이션/설정 변경은 없다. 앱을 대신 종료·재시작하지 않았다.
+UI 실행 소스/설계는 바꾸지 않았으므로 새 GUI 렌더/사용자 Desktop 검사는 하지 않았다. 기존 격리 GUI 근거와 이번 이벤트 회귀를 구분한다. 실제12B 추론·학습 품질/새Portable GPU/다른 Windows/8시간 운용도 이번 작은검사로PASS 처리하지 않는다. 1시간 CPU/mock은 아래 별도 실경과 근거다. 앱에 진단 누수 수정을 반영하려면 사용자가 재시작해야 하며 DB 마이그레이션/설정 변경은 없다. 앱을 대신 종료·재시작하지 않았다.
+
+## 최종 확장 — 학습 형식·자료의 실제 입력 검증
+
+초기675f517의24train/8validation은 경계 사례에 치우친 pilot이었다. d547c84에서 열린 대화·기분·관계·정정/여러 턴을 보강하고, d33b1af에서 철회·취소·저장소 조회 실패를 추가해 **schema2 52train/8개발 validation·15source groups**로 정리했다. 학습20개 열린 대화/32개 사실·경계 사례, validation4/4이며 균등 무작위 학습 recipe를 권장하는 비율은 아니다. 기존 pilot은 Git 이력으로 보존한다. 같은 저자의 원본 합성 자료로서 독립 최종/실제 사람 품질 검증이 아니다. 기존316개 소비0, 실제12B 학습0이다.
+
+현재 gold 성공에는 speaker 소유·성공·current receipt와 현재 동의가 필요하다. 동의 철회와 삭제를 구분하고, 기능 ready와 개별 예약 cancelled를 구분하며, 조회 unavailable을 not_found로 바꾸지 않는다. 이 주석 계약이 모든 자유 자연어의 사실성을 판별하지는 않는다. 원본 fixture의 이전 발언은 제한된 user/assistant 데이터이며 system 역할/특수 제어 토큰을 거절한다. export는 원천 그룹을 분리하고 실제 파일 bytes의 hash를 남긴다. 새 schema1 자료를2로 조용히 재해석하지 않는다.
+
+`prepare_conditioned_sft.py`는 새 관리 계층이나 생성 경로가 아니다. 합성 Settings를 실제 validate/scope에 통과시키고 현재 공개 기능 상태 public_state/model_facts·캐릭터 instruction/augment를 재사용하는 CPU 전용 학습 준비 도구다. 실제 Runtime의 응답 자격·닫힌 응답·행동 실행·송신을 대신하지 않는다. 권한/동의/저장소는 gold stub이며 실제 DB나 운영 설정을 읽거나 쓰지 않는다. GPU 모델은 로딩하지 않았다.
+
+실제 공식 tokenizer에서 inference의 빈 non-thinking thought prefix와 일반 assistant 학습 template가 다르다는 것을 확인했다. 단순 prompt 길이로 full assistant labels를 자르면 정답 첫4token까지 가리는 오류가 생길 수 있어 최초 strict prefix 검사가 중단됐다. 실제 template의 assistant 경계/종료를 sentinel로 확인하고 **추론 prefix를 그대로 보존한 뒤 target과 공식 종료 토큰**만 학습 대상으로 구성했다. 고정4token offset이나 문장 하드코딩으로 우회하지 않는다. prompt/history/역할 header는 -100, target/EOT만 label로 남기고 제어 토큰·템플릿 불일치를 거절한다. Mapping형 tokenizer 출력의 token list도 명시적으로 추출한다.
+
+모든60개를 실제 로컬 토크나이저로 CPU 처리한 결과 prompt p50/p95=1704.5/1750.2, target=32/39.1, 전체=1735.5/1787.1tokens·최대1800·빈 target0이었다. 개인 출력/label/token ID는 private sft-schema2에만 저장했다. 1800×vocab262144의 dense logits만 BF16 약0.879GiB/fp32 약1.758GiB인 shape 계산이며 backward/optimizer/allocator 포함 피크가 아니다.64token tiny smoke를 이 자료의 학습 성공으로 확대할 수 없다. Python asyncio 내부 self-pipe 초기화까지 차단한 최초 도구 실행은 실패했다. 루프 초기화 뒤 외부 connect/getaddrinfo를 차단하도록 배치만 고쳐 실제 외부 통신 금지를 유지했다.
+
+## 완료한 실경과1시간 CPU/mock 운용
+
+`verify_retention_soak.py --seconds 3600 --output local_data/training-stability-20261024/soak-one-hour`를 카운터72546e4/도구675f517에서 실행했다. 실제3600.016초·3108반복, 독립 reply6216·범위/중복 veto6216·재시작59, 오류0·잔류 Task0·반환 후 Runtime weakref0이다. memory/delete/revoke·예약 취소·DB lock 복구 등의 합성 경로이며 실제 Discord/GPU/전체 앱 운용은 아니다. 이후 부분 쓰기 예외 수정84c47d8은 별도 오류 회귀 근거를 따른다.
+
+622샘플 모두 pointer types23·퇴역 Runtime0·queue0. 자체 threads4~5/handles229~238, 마지막 trace deep size7,254,161bytes였다. loop 반환 시 executor thread가 아직 살아 있는 측정과 영구 스레드 누수는 같지 않으며 프로세스는 exit0으로 정리됐다. private25.2266→41.1016MiB, 구간별 선형기울기는0~20분0.5961/20~40분0.0200/40~60분0.0179MiB/분, 마지막10분0.0230MiB/분이다. 후반 증가가 둔화됐지만0은 아니며 전부 allocator라고 단정하거나8시간으로 외삽하지 않는다. Runtime/trace의 bounded 보존과 진단 관측 자체 비용도 구분해야 한다.8시간·주기적 실제GPU·OS crash 회복·다른 Windows는 NOT VERIFIED다.
+
+## 다음 실행 순서
+
+1. 현재 학습 형식의 최대1800tokens와 fp32 embedding/head·dense loss를 포함한 새 host/VRAM 예산을 먼저 계산한다. 기존64token 계획조차 기본 경로에서 미충족이므로 즉시12B를 재로딩하지 않는다.
+2. CPU offload 후보가 있다면 작은 Unified의 tied head/embedding gradient·checkpoint/save/resume/취소와 host RAM/commit 비용부터 증명한다. 새 모델 동시 로딩·안전 기준 완화는 하지 않는다.
+3. 자원 근거가 충족될 때만12B 단계별 준비/짧은 학습→원천 분리 품질 A/B로 확대한다. 합성 파일/손실/API 성공은 인격·사실성 개선이 아니다. 최종316개는 승인/소비 장부 없이 열지 않는다.
+4. 별도 실행 수명이 확보되면8시간 CPU 운용으로 후반 작은 증가의 할당 원인을 확인한다. 가벼운 주기적 GPU를 추가하는 시험은 자원/동시 부하를 다시 확인하고 별도 기록한다. 이번처럼 학습과 장시간 soak를 겹치지 않는다.
+5. 인격/사실성·사회적 판단·다른 Windows/실제 Portable GPU가 남아 RELEASE BLOCKED다. 실제 Discord는 최후반에 읽기 인증 조회/명령 변경/송신을 각각 별도 승인하고 클라이언트 표시를 확인한다. `/동의` 비표시 원인을 추측하지 않는다.
+
+## 최종 기능 회귀·Portable·보존 마감
+
+최종 소스/연구 계약 d33b1af에서 **825검사 OK241.772초(exit0)**, `full-frozen.log`다.818개 후 SFT/data 신규 계약이 추가돼 전체를 한 번 더 마감했다. 중간823개 OK245.676초는 d547c84 범위로 보존하며 최신 결과와 혼동하지 않는다. 최종 bundle 실행 소스3파일의83검사 OK13.133초는 이후 연구 fixture/도구만 변경돼 반복하지 않았다. 같은 소스의 성공 검사를 이유 없이 다시 돌리지 않는다. 실제 Runtime→SDK HTTP mock·동의/기억/예약·UI 이벤트 회귀는 기능 근거이며 실제12B 대화 품질/실서버 테스트가 아니다.
+
+Portable은 공개 src/docs167파일+README/기본 프로필=169쌍을 증분 동기화했다. `audit_portable.py --root dist/EchoMate-rc-utterance --output local_data/training-stability-20261024/portable-final.json`는 전체21,571파일의 membership/size/SHA256·금지 자료·reparse/traversal을 읽기 검사한다. 연구 tools/tests/학습 자료/새 어댑터/가중치/진단 원문을 번들에 넣지 않았다. 두 VBS /check는 파일 검사일 뿐 UI/GPU/Discord 실행이 아니다. 다른 Windows/실제 새 Portable GPU/새 GUI 렌더는 NOT VERIFIED다. 최종 전체 감사 결과는 private portable-final.json에 보존한다.
+
+운영 설정/bootstrap/두 DB와 기존 소비 장부의5개 SHA256을 preserved-final.json으로 재대조했다. 모두 시작과 동일하다. 기존 모델/LoRA의 삭제·이동·덮어쓰기·운영 선택 변경은 없고 새 무작위 초소형 어댑터만 별도 private 폴더에 저장했다. 기존 모델 전체 바이너리 해시를 새로 인증했다는 뜻은 아니다. 공개 변경25파일의 전체 diff와 staged 목록/내용을 검토해 운영 자료·실제 ID·개인 절대 경로·토큰·어댑터/모델/평가 원문을 제외했다. 정규식 감사는 보조 수단이며 완전한 비밀 검출 보장으로 부르지 않는다.
+
+단계 커밋72546e4(누수)→675f517(진단/정적예산/API)→84c47d8(부분 저장 실패)→603061f(중간 기록)→d547c84(SFT prefix)→d33b1af(철회/취소/조회 실패)와 최종 문서 마감을 정상 main에 푸시한다. 최종 문서 커밋 자체는 `git log -1`로 식별하며 자기 SHA를 문서에 재기입하는 순환 커밋은 만들지 않는다. 실제 Discord 인증/조회/Gateway/명령/송신0, 다른 앱/게임 조사·입력·화면/프로세스 조작0이다. 시스템 집계/자체 테스트만 관측했으며 게임 FPS/제재 가능성이나 모든 사용 환경을 인증하지 않는다.

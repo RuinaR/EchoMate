@@ -2,7 +2,7 @@
 
 ## 2026-10-24 학습 사전 검증의 범위
 
-12B 헤더677텐서의 텍스트 q48/v40을 확인했다. rank4/64tokens/batch1/checkpointing의 보수적 계획 VRAM14.53GiB가 당시 가용12.70GiB를 넘어 실제12B 준비·학습은 실행하지 않았다. 소형 Unified CPU/NF4 저장·Adam 재개 API만 통과했으며 운영 LoRA 지원으로 확대하지 않는다. CPU offload는 host RAM/commit과 gradient를 별도로 검증해야 한다. 기본 Gemma/no-LoRA·기존 선택/원본/어댑터는 보존했다. [계산·측정·미검증](TRAINING-STABILITY-QA.md).
+12B 헤더677텐서의 텍스트 q48/v40을 확인했다. rank4/64tokens/batch1/checkpointing의 보수적 계획 VRAM14.53GiB가 당시 가용12.70GiB를 넘어 실제12B 준비·학습은 실행하지 않았다. 소형 Unified CPU/NF4 저장·Adam 재개 API만 통과했으며 운영 LoRA 지원으로 확대하지 않는다. CPU offload는 host RAM/commit과 gradient를 별도로 검증해야 한다. 실제 캐릭터/기능 상태를 컴파일한 새 합성 자료는 최대1800tokens이며,64token API smoke/정적 예산을 이 길이의 학습 요구량으로 재사용하지 않는다. 기본 Gemma/no-LoRA·기존 선택/원본/어댑터는 보존했다. [계산·측정·미검증](TRAINING-STABILITY-QA.md).
 
 
 ## 2026-10-24 평가 전용 모델 경계
