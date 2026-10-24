@@ -2,7 +2,7 @@
 
 ## 2026-10-24 12B frozenBF16 학습·진단 보존 대조 — 최신 / BLOCKED
 
-시작 f243675 clean·원격 일치. 연구6fce56e는 설치 라이브러리 패치 없이 frozenBF16/선택 logits loss를 작은 Unified→실제12B64/128tokens까지 검증했다. 새 원본16train/8개발 validation·최대94tokens/32step과16step 저장/해제/재개·전후16응답을 실제GPU로 확인했지만 원시 출력에서 허위 상태·상태 라벨/인격 수렴이 남고 유효 응답의 동시 개선 근거가 없어 후보 기각이다. 앱 실행src/운영모델/프로필은 변경하지 않았다. 기존1800token 자료는 학습하지 않았고 최종316개 소비0. 전체829검사 OK276.079초와 후속 고정 재시작6검사 OK5.493초. 첫6fce56e의두run은3615회/약73분에서 정상예약quota를예상하지못해실패했다. 제한/이력을유지하는거절검증을추가해새7200초CPU대조를진행한다. 완료전PASS로쓰지않는다. GPU 작업은 종료했다. [이번 QA·자원·명령·다음 과제](TRAINING-FEASIBILITY-V2-QA.md). 실제 Discord0, RELEASE BLOCKED 유지.
+시작 f243675 clean·원격 일치. 연구6fce56e는 설치 라이브러리 패치 없이 frozenBF16/선택 logits loss를 작은 Unified→실제12B64/128tokens까지 검증했다. 새 원본16train/8개발 validation·최대94tokens/32step과16step 저장/해제/재개·전후16응답을 실제GPU로 확인했지만 원시 출력에서 허위 상태·상태 라벨/인격 수렴이 남고 유효 응답의 동시 개선 근거가 없어 후보 기각이다. 앱 실행src/운영모델/프로필은 변경하지 않았다. 기존1800token 자료는 학습하지 않았고 최종316개 소비0. 현재c3ec377 전체835검사 OK295.095초. 이전829/832/834는 각 단계 근거로 QA에 보존했다. 첫6fce56e의두run은3615회/약73분에서 정상예약quota를예상하지못해실패했다. 제한/이력을유지하는거절검증을추가해새7200초CPU대조를진행한다. 완료전PASS로쓰지않는다. GPU 작업은 종료했다. [이번 QA·자원·명령·다음 과제](TRAINING-FEASIBILITY-V2-QA.md). 실제 Discord0, RELEASE BLOCKED 유지.
 
 ## 2026-10-24 학습 자원·진단 누수 — 최신 / RELEASE BLOCKED
 

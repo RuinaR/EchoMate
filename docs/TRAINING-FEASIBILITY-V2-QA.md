@@ -115,3 +115,9 @@ trace 보존은 양군 모두 켠 추가2400회/40재시작 대조에서 deep_si
 새 fixture는 제품 제한/시계를 바꾸거나 사용자/예약 이력을 돌려 한도를 회피하지 않는다. 본인의 당일 생성 수를 확인해30개에서 정확한 Daily reminder limit만 기대하고, 거절 뒤 행 수 불변·실행 영수증0을 확인해 reminder_limit_veto로 센다. 다른 ValueError/DB 실패는 그대로 실패다. 허용된 생성은 영수증1/실제cancelled를 확인하고, DB 잠금 복구도 계속 검증한다. 임시 DB의31회 요청에서30개 취소 이력 보존·1회 거절을 회귀로 확인했고 관련8검사 OK6.087초다.
 
 원래 두 프로세스가 종료한 뒤 tinyNF4 suffix(448trainable)에서 실제 prefix_requires_grad=False·유한 gradient·base 불변·저장/Adam step2 재개를 확인했다. 이후 긴 입력12B의 가용VRAM을 새로 조회한 결과11.914GiB<새계획12.799GiB라 **새12B model load0회/BLOCKED**다. 집계값으로만 판단하고 다른 프로그램의 원인/상태를 추정하지 않는다. 모델/안전 여유/시스템 설정을 바꿔 강행하지 않았다. 다음은 GPU 없이 수정 fixture의 새2시간 실경과 검증이다.
+
+### 수정 도구의 현재 체크포인트
+
+c3ec377 전체835검사 OK295.095초다. 원래 실행src는f243675 그대로이며, 새로운835개 기능/도구 회귀도 인격·실서버 품질 PASS가 아니다. 새 retained-two-hour-quota/released-two-hour-quota는c3ec377의7200초 run이고 완료 전 판정 보류다. full-quota-final.log·checkpoint.json·각 progress/samples.jsonl을 private에 보존한다. 이후 같은 코드의 성공 회귀는 이유 없이 반복하지 않는다.
+
+큰 trace의 마지막 샘플 시점은 양군 종료 직전 약5초 범위에서 달랐으며, Private 차이는 allocator/관측 시점 영향도 포함한다. deep_size ON/OFF의 post-close 추가GC 뒤 private도37.547/36.566MiB로 달랐다. 단일 대조의 약0.59~0.98MiB 차이를 보편적인 인과 효과 크기로 확정하지 않는다. 양군 모두 GC 뒤 남은 프로젝트 객체는 enum 상수뿐이었다. 최종2시간 후반의 지속 증가 여부를 별도 확인한다.
