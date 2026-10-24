@@ -1,5 +1,10 @@
 # 아키텍처
 
+## 2026-10-24 기본 생성의 기억 선택 의존성
+
+기존 행 단위 memory_guard와 별도로 요청 RAM의 불변 MemorySelection이 같은 memories(query,conversation_id,allow_user_archive) 상위3개/빈 결과와 동의 epoch를 대조한다. 새 색인/DB/schema/모델 호출은 없다. 실제 기본 backend.text가 그 context를 소비한 경우에만 송신 guard를 활성화해 무관한 반응·닫힌 안내·별도 response_pipeline의 기존 proof/진단을 방해하지 않는다. 기존 원본·동의/행 guard는 그대로이며 query 원문은 일반 로그/장기 자료에 추가하지 않는다. CFG와 한국어 추출은 tools에만 있고 앱/설정/Controller에서 활성화하지 않는다. [구현·한계](CONSISTENCY-CLAIMS-QA.md).
+
+
 ## 2026-10-24 알림 전달 기한과 가상 자료 가용성
 
 Runtime.deliver_reminders의 within_scope는 권한 await 전후·최종 processing read 뒤 최신 시계/grace/설정/허용 범위를 검사한다. claim/finish·불확실 송신 at-most-once 계약과 schema는 유지한다. character_card.augment는 지속 말투/인사 자료를 core로 넣고 가상 background를 임의100자 절단하지 않는다. 기존 실제 토큰 budget/부가 항목 제거/상위 정책과 원문 보존을 재사용한다. 이는 새 추론 단계나 사회적 참여 권한이 아니다. [재현·GPU·한계](STABILITY-DIALOGUE-QA.md).

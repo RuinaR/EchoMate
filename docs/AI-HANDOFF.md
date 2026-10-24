@@ -1,5 +1,12 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-24 인격 대비·한국어 추출·일반 기억 선택 — 최신 / BLOCKED
+
+시작 main/local/remotee88637f clean. 기본 생성의 MemorySelection(query/범위/동의 epoch/실제 상위3행)을 송신 전 재검증해 빈 조회 뒤 삽입/순위 변경 stale 송신을 차단했다. 실제 소비한 기본 backend.text 경로에만 활성화하고 이모지/닫힌 안내/기본 비활성 실험 파이프라인의 독립 계약은 보존한다. 실제 SDK 원본 GET 뒤 삽입은 GPU에서 기존1→수정0송신. CFG1.5는 같은 모델/두 cache에서 열린 갈등·기분/관계3턴·가벼운 잡담을 비교했지만 지연/메모리 비용·거짓 미래 기억 약속 때문에 기각했다. 두 실행69호출(응답34+기존 재시도2+추출29+probe4), SDK33송신. 원자 추출은 strict 계약7/27·완전 주석 일치0이고 일부 주석 해석도 모호하다. 실패 원문 보존을 보강했고 한 겹 JSON 울타리의2사례 offline복구만 확인했다. 일반 파서 정확도로 확대하지 않는다. 최종316개 보존·실제 Discord0. [실행본·실패/수정·전체/Portable·후속](CONSISTENCY-CLAIMS-QA.md).
+
+
+최종 실행 `701b947`/도구 `8da36a3`: 전체800검사 OK245.565초·번들52검사 OK7.474초, 공개166쌍/manifest21,568 대조·두 VBS check exit0·운영4파일 hash 동일. 앱 재시작 필요·DB 마이그레이션 없음. 실제 Discord/새 GUI/번들 GPU는 미검증이다.
+
 ## 2026-10-24 기능 안정성·대화 품질 집중 — 최신 / BLOCKED
 
 시작 local/main/remote58128e7 clean. 예약 permissions await 뒤 기한/grace를 놓치는 결함과 마지막 processing-read await 뒤 기한을 보강했다. 시작 Runtime의6회귀 중3실패(실제 SDK mock의 늦은 송신1 포함)→현재 보호 확인. 일시정지는 원래 callback 보호가 있어 새 수정 성과로 세지 않는다. 긴 카드 background100자 절단·vocabulary/opening 조건 누락은 원문/900·6000토큰 예산을 보존하며 수정했다. 실제 Gemma34호출/Runtime32/SDK32: 배경 이유0/4→4/4, 새 질문에서 배경별 복귀 조건4/4, 없는 음식 취향0/4 양쪽. 일상 인격 수렴은 남고 전체 p95는10.938→13.793초, 출력 길이도 달라 속도 개선 주장은 없다. 합성 한국어68사례/25그룹은 주석·oracle 계약이며 NLP 판별 정확도가 아니다. 최종316개 보존·운영 schema/추가 생성 호출 없음. [실행 조건·채택/미검증·전체/Portable](STABILITY-DIALOGUE-QA.md). 실제 Discord는 후반 별도 승인까지 연기하며 지금 조회/복구하지 않는다.
