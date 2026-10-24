@@ -85,10 +85,14 @@ async def capacity_probe(root,backend):
     finally:await runtime.close();await mock.close()
 
 
-async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_interval=60,observe=None):
+async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_interval=60,observe=None,
+              diagnostic_retention=True,sample_history_limit=256,max_iterations=None,sample_interval=5):
     if not 0<seconds<=86400 or period<=0 or gpu_interval<1 or restart_interval<=0:raise ValueError('Invalid soak duration')
+    if type(sample_history_limit) is not int or not 1<=sample_history_limit<=4096 or sample_interval<=0:raise ValueError('Bounded sample history required')
+    if max_iterations is not None and (type(max_iterations) is not int or not 1<=max_iterations<=10000):raise ValueError('Bounded fixed workload required')
     root=private_path(root);root.mkdir(parents=True,exist_ok=False)
-    started=time.monotonic();counts=Counter();samples=[];traces=[];gpu_rows=[];errors=[]
+    started=time.monotonic();counts=Counter();samples=[];traces=[];gpu_rows=[];errors=[];sample_count=0
+    sample_stream=(root/'samples.jsonl').open('w',encoding='utf-8')
     key=secrets.token_hex(32);settings=Settings(1,key,root/'settings.json')
     settings.set(1,'enabled',True);settings.set(1,'reactions',True)
     for channel in (3,4,5):settings.set_scope(1,2,channel,'autonomous',thread=channel==5)
@@ -103,7 +107,7 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
     runtime=make_runtime();i=0;next_gpu=0.;next_sample=0.;next_restart=restart_interval
     initial_tasks=set(asyncio.all_tasks());initial_threads=threading.active_count()
     try:
-        while time.monotonic()-started<seconds:
+        while time.monotonic()-started<seconds and (max_iterations is None or i<max_iterations):
             elapsed=time.monotonic()-started;i+=1
             base=10000+i*20;channel=(3,4,5)[i%3];uid=4+i%8
             event=Event(base,2,channel,uid,f'<@999> 점검 {i}번의 짧은 인사를 해 줘',datetime.now(timezone.utc),parent=4 if channel==5 else None,member_mentions=(999,))
@@ -172,7 +176,7 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
                 finally:await live.close()
                 next_gpu=elapsed+gpu_interval
             if elapsed>=next_restart:
-                traces.extend(runtime.traces);traces=traces[-2000:]
+                if diagnostic_retention:traces.extend(runtime.traces);traces=traces[-2000:]
                 await runtime.close();runtime=make_runtime()
                 settings=Settings(1,key,root/'settings.json');runtime.settings=settings
                 before=len(transport.sent);await runtime.ingest(event);await settle(runtime,mock)
@@ -185,19 +189,24 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
                     s.update(gpu_allocated=torch.cuda.memory_allocated(),gpu_reserved=torch.cuda.memory_reserved())
                 s.update(seconds=time.monotonic()-started,tasks=len(asyncio.all_tasks()),threads=threading.active_count(),flows=len(runtime.conversations.flows),states=len(runtime.states),message_index=len(runtime.conversations.message_flow),queue=mock.pending,choice_cache=len(getattr(backend,'_choice_cache',{})))
                 if observe is not None:observe(runtime,traces,s)
-                samples.append(s);next_sample=elapsed+5
+                samples.append(s);del samples[:-sample_history_limit];sample_count+=1
+                sample_stream.write(json.dumps(s)+'\n');sample_stream.flush();next_sample=elapsed+sample_interval
                 atomic_private_json(root/'progress.json',dict(elapsed_seconds=s['seconds'],iterations=i,counts=dict(counts),sample=s))
+            if not diagnostic_retention:
+                runtime.traces.clear();runtime.diagnostics.clear()
             transport.sent.clear() # inspection fixture must not create a fake leak
             await asyncio.sleep(min(period,max(0,seconds-(time.monotonic()-started))))
     except BaseException as exc:
         errors.append(type(exc).__name__);raise
     finally:
-        traces.extend(runtime.traces);await runtime.close();await mock.close()
+        if diagnostic_retention:traces.extend(runtime.traces)
+        await runtime.close();await mock.close();sample_stream.close()
         await asyncio.sleep(0);gc.collect()
         lingering=[t.get_name() for t in asyncio.all_tasks()-initial_tasks if not t.done()]
         result=dict(elapsed_seconds=time.monotonic()-started,iterations=i,counts=dict(counts),errors=errors,
-            passed=not errors and not lingering and mock.pending==0 and time.monotonic()-started>=seconds,lingering_tasks=lingering,
+            passed=not errors and not lingering and mock.pending==0 and (time.monotonic()-started>=seconds if max_iterations is None else i==max_iterations),lingering_tasks=lingering,
             initial_threads=initial_threads,final_threads=threading.active_count(),samples=samples,gpu=gpu_rows,
+            sample_count=sample_count,sample_history_limit=sample_history_limit,diagnostic_retention=diagnostic_retention,fixed_iterations=max_iterations,
             mock_pipeline=summarize(traces[-2000:]),real_discord=False,real_gpu=backend is not None,
             caution='Elapsed local mixed soak, not 24-hour use, semantic quality or cross-Windows certification')
         atomic_private_json(root/'summary-private.json',result)

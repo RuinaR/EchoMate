@@ -13,7 +13,7 @@ import time
 from unittest.mock import patch
 
 
-def run(output,gpu=False):
+def run(output,gpu=False,frozen_bf16=False):
     root=Path(output).resolve();repo=Path(__file__).resolve().parents[1]
     if not root.is_relative_to(repo/'local_data'):raise ValueError('Private output required')
     root.mkdir(parents=True,exist_ok=False)
@@ -31,7 +31,7 @@ def run(output,gpu=False):
     started=time.monotonic();lease=InstanceLease() if gpu else None;model=None;optimizer=None;refs=None;expected=None
     from importlib.metadata import version
     report=dict(device='cuda' if gpu else 'cpu',before=memory_snapshot(),health=health,stages=[],seed=20261024,
-        source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),frozen_bf16=frozen_bf16,
         versions={n:version(n) for n in ('torch','transformers','peft','bitsandbytes')})
     def stage(name):
         row=dict(name=name,seconds=time.monotonic()-started,**memory_snapshot())
@@ -44,7 +44,11 @@ def run(output,gpu=False):
         if gpu:opts.update(device_map={'':0},dtype=torch.bfloat16,quantization_config=BitsAndBytesConfig(
             load_in_4bit=True,bnb_4bit_quant_type='nf4',bnb_4bit_use_double_quant=True,bnb_4bit_compute_dtype=torch.bfloat16))
         base=Gemma4UnifiedForConditionalGeneration.from_pretrained(root/'base',**opts)
-        if gpu:base=prepare_model_for_kbit_training(base,gradient_checkpointing_kwargs={'use_reentrant':False})
+        if gpu:
+            if frozen_bf16:
+                from qlora_recipe import prepare_frozen_bf16
+                base=prepare_frozen_bf16(base)
+            else:base=prepare_model_for_kbit_training(base,gradient_checkpointing_kwargs={'use_reentrant':False})
         return base
     try:
         text=Gemma4UnifiedTextConfig(vocab_size=64,hidden_size=64,intermediate_size=128,num_hidden_layers=2,
@@ -59,10 +63,16 @@ def run(output,gpu=False):
             trained=[(n,p) for n,p in model.named_parameters() if p.requires_grad]
             assert trained and all('language_model.layers.' in n and 'lora_' in n for n,p in trained)
             refs=[(p,p.detach().clone()) for n,p in model.named_parameters() if not p.requires_grad]
+            report['embedding_dtype']=str(model.get_input_embeddings().weight.dtype)
+            report['tied_head']=model.get_input_embeddings().weight is model.get_output_embeddings().weight
             report['trainable']=sum(p.numel() for n,p in trained);report['adapter_targets']=sorted({n.split('.lora_')[0] for n,p in trained})
             ids=torch.tensor([[2,4,7,9,12,15,19,1]],device='cuda' if gpu else 'cpu')
             optimizer=torch.optim.AdamW([p for n,p in trained],lr=.001)
-            model.train();loss=model(input_ids=ids,labels=ids).loss;assert torch.isfinite(loss);loss.backward()
+            model.train()
+            from qlora_recipe import supervised_loss
+            labels=ids.clone();labels[:,:4]=-100
+            loss=supervised_loss(model,ids,labels) if frozen_bf16 else model(input_ids=ids,labels=ids).loss
+            assert torch.isfinite(loss);loss.backward()
             assert any(p.grad is not None and torch.isfinite(p.grad).all() and p.grad.abs().sum()>0 for n,p in trained)
             optimizer.step();optimizer.zero_grad();stage('step1')
             assert all(torch.equal(p.detach(),old) for p,old in refs)
@@ -80,7 +90,8 @@ def run(output,gpu=False):
             assert torch.allclose(expected,actual,atol=1e-5,rtol=1e-4)
             optimizer=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=.001)
             optimizer.load_state_dict(torch.load(root/'optimizer.pt',map_location='cpu',weights_only=True))
-            model.train();loss=model(input_ids=ids,labels=ids).loss;loss.backward();optimizer.step();optimizer.zero_grad()
+            model.train();loss=supervised_loss(model,ids,labels) if frozen_bf16 else model(input_ids=ids,labels=ids).loss
+            loss.backward();optimizer.step();optimizer.zero_grad()
             assert all(int(s['step'])==2 for s in optimizer.state.values())
             stage('resumed_step2');report.update(status='TINY_API_PASS_NOT_12B_QUALITY',roundtrip=True,optimizer_resume_step=2)
         report['memory']=recorder.report()
@@ -96,8 +107,8 @@ def run(output,gpu=False):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--gpu',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--gpu',action='store_true');p.add_argument('--frozen-bf16',action='store_true');a=p.parse_args()
     import faulthandler
     faulthandler.dump_traceback_later(180,exit=True)
     with patch('socket.socket.connect',side_effect=AssertionError('No network')),patch('socket.getaddrinfo',side_effect=AssertionError('No network')):
-        run(a.output,a.gpu)
+        run(a.output,a.gpu,a.frozen_bf16)
