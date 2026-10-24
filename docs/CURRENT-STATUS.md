@@ -1,5 +1,10 @@
 # 현재 상태
 
+## 2026-10-24 자료 품질·12B 학습 조건 검증 — RELEASE BLOCKED
+
+원본 v2 학습80/개발16/별도24는CPU 토크나이저/조건부 근거 계약을 통과했지만 학습·품질 PASS는 아니다. 앞선 v1 학습64개로 실제12B3LR·349token·checkpoint exact replay는 확인했고 세 어댑터 모두 인격/사실성 동시 개선 근거 부족으로 미채택이다. 전체857검사 통과, 기본no-LoRA/운영 자료와 최종316개를 유지한다. GPU가 종료된 뒤 CPU7200초 ON/OFF 진행 중이며2시간 판정은 보류다. [최신 실제 범위](DATASET-QLORA-QA.md).
+
+
 ## 2026-10-24 실제12B 학습 API 가능·품질 후보 기각 — RELEASE BLOCKED
 
 frozenBF16/정답 위치 logits는 실제12B64/128token backward·저장/재개를 통과했다. 원본16개32step 어댑터는 개발8개에서 인격·사실성 동시 개선이 없어 미채택이다. 짧은 API 가능성과 전체 Runtime1800token 학습은 구분하며 후자는 현재 계획 예산 미충족이다. 앱/운영 설정/DB/모델은 그대로다. 첫약73분run의quota fixture실패 뒤 새CPU/mock ON/OFF도4195.469/4204.969초에서 자원 안전 중단했다. 2시간/8시간 PASS가 아니며 후속 측정 guard는 중단 순간의 실제 수치와 원인을 저장한다. 긴 입력 suffix는12.799GiB>관측12.690GiB라 실제12B 로딩 없이 BLOCKED다. [최신 실제 QA](TRAINING-FEASIBILITY-V2-QA.md).

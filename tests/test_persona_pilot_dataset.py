@@ -20,11 +20,11 @@ class DatasetContract(unittest.TestCase):
     def setUp(self):self.data=json.loads((Path(__file__).parent/'fixtures/persona_evidence_pilot.json').read_text('utf-8'))
     def test_balanced_source_split_and_unseen_families(self):
         records,s=audit(self.data)
-        self.assertEqual(s['splits'],dict(train=64,development=16,independent=24));self.assertFalse(s['near_duplicates'])
+        self.assertEqual(s['splits'],dict(train=80,development=16,independent=24));self.assertFalse(s['near_duplicates'])
         self.assertFalse({r['group'] for r in records if r['split']=='train'}&{r['group'] for r in records if r['split']!='train'})
         self.assertFalse(any(r['character'] in ('shy','curious') for r in records if r['split']=='train'))
     def test_source_variants_cannot_cross_split(self):
-        self.data['cases'][-1]['source_group']=self.data['cases'][0]['source_group']
+        next(c for c in self.data['cases'] if c['split']!='train')['source_group']=self.data['cases'][0]['source_group']
         with self.assertRaises(ValueError):audit(self.data)
     def test_target_span_and_evidence_cannot_be_promoted(self):
         case=next(c for c in self.data['cases'] if c['evidence']);atom=case['responses']['gentle']['claims'][0]
@@ -56,7 +56,7 @@ class DatasetContract(unittest.TestCase):
     def test_multiturn_history_is_masked_and_terminal_whitespace_preserved(self):
         from persona_dataset import compile_records
         records,summary=compile_records(self.data,TemplateTokenizer())
-        self.assertEqual(len(records),80);self.assertFalse(summary['packing']);self.assertFalse(summary['padding'])
+        self.assertEqual(len(records),96);self.assertFalse(summary['packing']);self.assertFalse(summary['padding'])
         for r in records:
             n=len(r['prompt']);self.assertEqual(r['labels'][:n],[-100]*n);self.assertEqual(r['labels'][n:],r['input_ids'][n:])
             self.assertEqual(r['input_ids'][-2:],[ord('§'),ord('\n')])
@@ -65,3 +65,11 @@ class DatasetContract(unittest.TestCase):
         from persona_dataset import compile_records
         self.data['cases'][0]['user']='긴 원본 메시지 '*1000
         with self.assertRaisesRegex(ValueError,'never truncate'):compile_records(self.data,TemplateTokenizer())
+    def test_fictional_claim_cannot_borrow_another_character_background(self):
+        c=next(c for c in self.data['cases'] if c['id']=='pe-fiction-place')
+        c['responses']['gentle']['claims'][0]['character']='dry'
+        with self.assertRaisesRegex(ValueError,'this card'):audit(self.data)
+    def test_saved_entity_must_match_execution_evidence(self):
+        c=next(c for c in self.data['cases'] if c['id']=='pe-save-confirmed');r=c['responses']['gentle'];a=r['claims'][0]
+        r['text']=r['text'].replace('허브차','커피차');a['text']=a['text'].replace('허브차','커피차')
+        with self.assertRaisesRegex(ValueError,'entity'):audit(self.data)

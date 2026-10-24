@@ -48,7 +48,8 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
             records.append(r)
     if seen!=set(expected):raise ValueError('Incomplete source export')
     train=[r for r in records if r['split']=='train'];dev=[r for r in records if r['split']=='development']
-    if len(train)!=64 or len(dev)!=16 or set(r['group'] for r in train)&set(r['group'] for r in dev):raise ValueError('Sealed pilot size/splits')
+    if not 64<=len(train)<=128 or len(train)%4 or len(dev)!=16 or set(r['group'] for r in train)&set(r['group'] for r in dev):raise ValueError('Bounded complete pilot size/splits')
+    total_steps=len(train)//4
     entry=ModelValidator().validate(model_path)
     if not entry.compatible:raise ValueError('Existing model must validate')
     model_root=Path(entry.path)
@@ -131,16 +132,16 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
             report['baseline']=evaluate(base,'baseline')
             for lr in (5e-5,1e-4,2e-4):
                 torch.manual_seed(881);torch.cuda.manual_seed_all(881);random.seed(881)
-                trial=dict(lr=lr,rank=4,alpha=8,dropout=.05,accumulation=4,max_grad_norm=1.,epochs=1,warmup_ratio=.05,scheduler='cosine',deterministic=True,steps=[])
+                trial=dict(lr=lr,rank=4,alpha=8,dropout=.05,accumulation=4,max_grad_norm=1.,epochs=1,warmup_ratio=.05,scheduler='cosine',deterministic=True,optimizer_steps=total_steps,steps=[])
                 report['trials'].append(trial)
                 model=get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
                 trained=[p for p in model.parameters() if p.requires_grad];assert sum(p.numel() for p in trained)==plan['adapter_parameters']
                 frozen=[(p,p._version,p.detach().flatten()[:16].cpu().clone()) for p in model.parameters() if not p.requires_grad]
-                optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,16,.05)
+                optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,total_steps,.05)
                 order=list(range(len(train)));random.shuffle(order)
                 batches=[(train[i]['input_ids'],train[i]['labels']) for i in order]
-                name='lr-'+str(lr);checkpoint=out/name/'step8';config={k:trial[k] for k in ('lr','rank','alpha','dropout','accumulation','max_grad_norm','epochs','warmup_ratio','scheduler','deterministic')}
-                for step in range(16):
+                name='lr-'+str(lr);checkpoint=out/name/'step8';config={k:trial[k] for k in ('lr','rank','alpha','dropout','accumulation','max_grad_norm','epochs','warmup_ratio','scheduler','deterministic','optimizer_steps')}
+                for step in range(total_steps):
                     value=train_window(model,batches[step*4:(step+1)*4],optimizer,scheduler,supervised_loss);trial['steps'].append(value);stage(name+'_step_'+str(step+1))
                     if step==7:save(checkpoint,model,optimizer,scheduler,step=8,data_hash=data_hash,config=config)
                     if step==8:
@@ -148,7 +149,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
                         inspect(checkpoint,data_hash=data_hash,config=config)
                         base=model.unload();model=None;optimizer=None;scheduler=None;trained=None;gc.collect();release_idle_cuda(torch)
                         model=PeftModel.from_pretrained(base,checkpoint/'adapter',is_trainable=True,local_files_only=True)
-                        trained=[p for p in model.parameters() if p.requires_grad];optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,16,.05)
+                        trained=[p for p in model.parameters() if p.requires_grad];optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,total_steps,.05)
                         assert restore(checkpoint,optimizer,scheduler,data_hash=data_hash,config=config)==8
                         replay=train_window(model,batches[32:36],optimizer,scheduler,supervised_loss)
                         trial['resume_expected_metrics']=value;trial['resume_actual_metrics']=replay
@@ -162,7 +163,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
                 model.eval()
                 with torch.no_grad():trial['development_loss']=sum(float(supervised_loss(model,torch.tensor([r['input_ids']],device='cuda'),torch.tensor([r['labels']],device='cuda'))) for r in dev)/len(dev)
                 trial['generation']=evaluate(model,name)
-                save(out/name/'step16',model,optimizer,scheduler,step=16,data_hash=data_hash,config=config)
+                save(out/name/('step'+str(total_steps)),model,optimizer,scheduler,step=total_steps,data_hash=data_hash,config=config)
                 base=model.unload();model=None;trained=None;optimizer=None;scheduler=None;gc.collect();release_idle_cuda(torch);stage(name+'_adapter_unloaded')
             report['status']='PILOT_COMPLETE_REQUIRES_QUALITY_REVIEW'
     except BaseException as e:

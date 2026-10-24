@@ -1,5 +1,12 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-24 조건부 자료·결정적12B 재개 — 최신 / RELEASE BLOCKED
+
+시작e0e8e82 clean·원격 일치. 연구b56d231/39dab96과 후속 v2는 원본28원천/120응답(학습80/개발16/별도24)·출처/근거span/카드anchor/저장대상 결합·실제 토크나이저 마스크를 검사한다. 앞선 v1의64개를 실제349token/NF4/BF16/qv rank4·accum4·epoch1로5e-5/1e-4/2e-4 비교했다. CUDA backward 비결정성을 재현한 뒤 자체 child의 결정성 설정 조합에서 실제3후보 모두 optimizer/scheduler/RNG 재개 metric/가중치 완전 일치를 확인했다. 세 후보는 인격 수렴·조회 상태 오류 등으로 모두 미채택이며 v2는 아직 학습하지 않았다. 별도24개 GPU/최종316개 소비0. 최신 전체857검사 OK276.477초.
+
+GPU 모두 종료 후 source39dab96의 독립CPU/mock ON/OFF7200초가 진행 중이다. 완료 전2시간/8시간 PASS로 쓰지 않는다. private `local_data/dataset-qlora-20261024/checkpoint.json`·owner/progress/safety-stop/summary로 실제 상태를 확인한다. 소켓 차단은 Windows loop 생성 뒤 workload 전에 적용한다. 이전 unsafe sample 누락의 branch는 소급 확정할 수 없다. 장시간 종료 결과·공개 Portable/보존/최종 HEAD 마감은 [최신 QA](DATASET-QLORA-QA.md)를 우선한다. 앱src/운영 no-LoRA/개인 DB/설정/기존 모델은 변경하지 않았고 실제 Discord0이다.
+
+
 ## 2026-10-24 12B frozenBF16 학습·진단 보존 대조 — 최신 / BLOCKED
 
 시작 f243675 clean·원격 일치. 연구6fce56e는 설치 라이브러리 패치 없이 frozenBF16/선택 logits loss를 작은 Unified→실제12B64/128tokens까지 검증했다. 새 원본16train/8개발 validation·최대94tokens/32step과16step 저장/해제/재개·전후16응답을 실제GPU로 확인했지만 원시 출력에서 허위 상태·상태 라벨/인격 수렴이 남고 유효 응답의 동시 개선 근거가 없어 후보 기각이다. 앱 실행src/운영모델/프로필은 변경하지 않았다. 기존1800token 자료는 학습하지 않았고 최종316개 소비0. 단계c3ec377 전체835검사 OK295.095초. 이전829/832/834는 각 단계 근거로 QA에 보존했다. 첫6fce56e의두run은3615회/약73분에서 정상예약quota를예상하지못해실패했다. 제한/이력을유지하는거절검증 뒤 새CPU대조도4195.469/4204.969초에서 자원 안전 기준으로 실패 종료했다. 2시간/8시간 PASS가 아니다. 중단 branch/unsafe sample 누락을 새 guard에서 보강했다. 실제1800token suffix는 계획12.799GiB>관측11.914/12.690GiB로 model load0회/BLOCKED다. GPU 작업은 종료했다. [이번 QA·자원·명령·다음 과제](TRAINING-FEASIBILITY-V2-QA.md). 실제 Discord0, RELEASE BLOCKED 유지.

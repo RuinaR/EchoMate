@@ -59,8 +59,12 @@ def audit(data):
                 if claim['state']!=fact['state'] or claim['scope']!=fact['scope']:raise ValueError('Claim promoted beyond evidence')
                 if claim['state'] in ('not_found','not_checked','unavailable','inferred','user_claim') and claim['act']!='bounded_report':raise ValueError('Unknown evidence cannot certify an event')
                 if claim['act']=='completion' and not (fact['scope']=='execution_receipt' and fact['state']=='confirmed' and fact.get('receipt')):raise ValueError('Completion without execution')
+                if claim['act']=='completion' and any(term not in claim['text'] or term not in fact['description'] for term in fact.get('required_terms',[])):raise ValueError('Completion entity differs from evidence')
                 if claim['act'] not in ('bounded_report','completion','fictional_self'):raise ValueError('Unknown claim act')
                 if claim['act']=='fictional_self' and fact['state']!='fictional':raise ValueError('Fiction boundary')
+                if data.get('editorial_revision',1)>=2 and claim['act']=='fictional_self':
+                    anchors=claim.get('anchors',[])
+                    if claim.get('character')!=key or not anchors or any(a not in claim['text'] or a not in characters[key]['fictional_background'] for a in anchors):raise ValueError('Fictional claim not bound to this card')
             if re.search(r'(.)\1{4,}',text):raise ValueError('Mechanical repeated character')
             records.append(dict(id=case['id']+'/'+key,group=group,split=split,character=key,case=case,response=response))
     # Deterministic exact/near textual audit. It is NOT semantic duplicate proof.
