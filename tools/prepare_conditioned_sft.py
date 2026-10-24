@@ -36,7 +36,7 @@ async def compile_case(case,key,characters,tokenizer):
     cfg['_familiarity']=80 if close else None
     consents=dict(memory=memory_consent,relationships=close,summaries=False)
     fixture=SimpleNamespace(settings=SimpleNamespace(get=lambda:deepcopy(cfg)),
-        companion=SimpleNamespace(error=False,consent=lambda g,u:dict(consents)),
+        companion=SimpleNamespace(error=state.get('storage_available',True) is False,consent=lambda g,u:dict(consents)),
         backend=SimpleNamespace(failed=False,model=True,pending=0),note=lambda code:None)
     event=SimpleNamespace(guild=2,channel=3,author=4,parent=None)
     view=await public_state(fixture,event,dict(view=True,send=True,react=True))

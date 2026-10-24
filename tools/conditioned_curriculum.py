@@ -11,7 +11,7 @@ import re
 
 
 def validate(data):
-    if data['schema']!=1 or data['source']!=dict(kind='original_synthetic',license='MIT',private_conversations=False,public_evaluation_corpus_reused=False):raise ValueError('Original data provenance required')
+    if data['schema']!=2 or data['source']!=dict(kind='original_synthetic',license='MIT',private_conversations=False,public_evaluation_corpus_reused=False):raise ValueError('Versioned original data provenance required')
     characters=data['characters'];groups={};ids=set();outputs=set();counts=dict(train=0,validation=0);objectives={}
     for row in data['scenarios']:
         if row['id'] in ids or row['split'] not in counts:raise ValueError('Unique scenario/split required')
@@ -29,12 +29,12 @@ def validate(data):
             '<|' in m['content'] or '<turn|>' in m['content'] for m in history)):raise ValueError('Bounded user/assistant history required')
         if any(r['owner']!='speaker' for r in receipts):raise ValueError('Foreign receipt cannot authorize a target')
         if state.get('kind')=='completion' and not (state.get('memory')=='on' and state.get('consent') is True and
-            any(r['kind']=='memory_saved' and r['status']=='success' for r in receipts)):raise ValueError('Success target requires actual gold receipt/consent')
+            any(r['kind']=='memory_saved' and r['status']=='success' and r.get('current') is True for r in receipts)):raise ValueError('Success target requires actual gold receipt/consent')
         for response in row['responses'].values():
             normalized=re.sub(r'\s+','',response)
             if not 5<=len(response)<=500 or normalized in outputs or re.search(r'\b\d{17,20}\b|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}',response):raise ValueError('Duplicate/invalid/private target')
             outputs.add(normalized);counts[split]+=1
-    return dict(counts=counts,groups=len(groups),characters=len(characters),objectives=objectives,source_group_disjoint=True,
+    return dict(source_schema=data['schema'],counts=counts,groups=len(groups),characters=len(characters),objectives=objectives,source_group_disjoint=True,
         caveat='Pilot gold annotations; not automatic target factuality, source-family independence or model quality certification')
 
 

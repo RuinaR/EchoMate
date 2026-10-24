@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "source": {
     "kind": "original_synthetic",
     "license": "MIT",
@@ -102,7 +102,8 @@
             "id": "receipt-A",
             "kind": "memory_saved",
             "owner": "speaker",
-            "status": "success"
+            "status": "success",
+            "current": true
           }
         ]
       },
@@ -245,6 +246,102 @@
       "objective": "open_dialogue"
     },
     {
+      "id": "consent_withdrawn",
+      "source_group": "original-event-consent_withdrawn",
+      "split": "train",
+      "user": "동의를 꺼버렸는데 아직 내 얘기를 계속 저장하는 거야?",
+      "evidence": {
+        "kind": "consent_change",
+        "memory": "on",
+        "consent": false,
+        "receipts": [
+          {
+            "id": "old-memory-A",
+            "kind": "memory_saved",
+            "owner": "speaker",
+            "status": "success",
+            "current": false
+          }
+        ],
+        "previous": [
+          {
+            "role": "user",
+            "content": "내가 도자기 수업 시작한 건 기억해 줘."
+          },
+          {
+            "role": "assistant",
+            "content": "저장에 성공했어."
+          }
+        ]
+      },
+      "responses": {
+        "gentle": "동의를 껐으니 지금은 자동 기억을 남기지 않아. 예전에 저장한 자료까지 지우려는 거면 삭제를 따로 선택해 줘.",
+        "playful": "기억 자동저장은 여기서 멈춘 상태야. 예전 것까지 비우려는 거라면 철회만으로는 안 되니 삭제도 따로 골라줘.",
+        "analytical": "현재 동의가 꺼져 있어서 자동 저장 권한은 없어. 철회와 삭제는 별개라 기존 자료의 삭제 여부까지 확인됐다는 뜻은 아니야.",
+        "dry": "지금 동의가 꺼졌으니 계속 저장한다고 말하면 틀린 거야. 철회가 삭제 버튼까지 대신 눌러주는 건 아니라, 예전 자료도 지우려면 따로 선택해야 해."
+      },
+      "objective": "grounded_or_boundary"
+    },
+    {
+      "id": "cancelled_reminder",
+      "source_group": "original-event-cancelled_reminder",
+      "split": "train",
+      "user": "취소 성공을 확인했는데 왜 아직 예약됐다고 해?",
+      "evidence": {
+        "kind": "operation_correction",
+        "reminders": "ready",
+        "reminder_status": "cancelled",
+        "new_reservation": false,
+        "receipts": [
+          {
+            "id": "cancel-A",
+            "kind": "reminder_cancelled",
+            "owner": "speaker",
+            "status": "success",
+            "current": true
+          }
+        ],
+        "previous": [
+          {
+            "role": "user",
+            "content": "방금 그 알림은 취소했어."
+          },
+          {
+            "role": "assistant",
+            "content": "그 알림은 예약된 상태야."
+          }
+        ]
+      },
+      "responses": {
+        "gentle": "응, 그 알림은 취소된 상태가 맞아. 아직 예약됐다고 말한 건 내 설명이 잘못됐어.",
+        "playful": "취소된 게 맞아. 방금 설명이 한 박자 뒤처졌네. 새 예약이 생긴 건 아니야.",
+        "analytical": "현재 확인된 예약 상태는 취소야. 기능이 켜져 있다는 것과 그 알림이 살아 있다는 건 다른 얘기야.",
+        "dry": "취소된 상태야. 기능이 있다고 취소한 예약까지 살아나는 건 아니지. 아까 예약됐다는 말은 잘못했어."
+      },
+      "objective": "grounded_or_boundary"
+    },
+    {
+      "id": "lookup_unavailable",
+      "source_group": "original-event-lookup_unavailable",
+      "split": "train",
+      "user": "지난주에 내가 어떤 운동 시작했다고 했지?",
+      "evidence": {
+        "kind": "lookup_failure",
+        "memory": "on",
+        "memory_query": "unavailable",
+        "consent": "unknown",
+        "storage_available": false,
+        "receipts": []
+      },
+      "responses": {
+        "gentle": "지금은 기억을 확인하는 데 문제가 있어. 안 떠올랐다고 해서 없던 이야기라고 하진 않을게.",
+        "playful": "지금 기록 쪽에서 답이 안 와. 이럴 때 상상으로 빈칸 채우면 사고 나니까, 확인됐다고는 말 안 할게.",
+        "analytical": "조회가 실패했어. 검색 결과가 비었다는 상태와 달라서, 기록의 유무도 지금은 판단할 수 없어.",
+        "dry": "지금은 확인을 못 했어. 못 읽은 기록을 없는 기록이라고 우길 순 없지."
+      },
+      "objective": "grounded_or_boundary"
+    },
+    {
       "id": "unknown_favorite",
       "source_group": "original-event-unknown_favorite",
       "split": "validation",
@@ -283,5 +380,5 @@
       "objective": "open_dialogue"
     }
   ],
-  "limitation": "Pilot 40 train/8 development-validation targets; first pilot preserved in Git history. Four analytical targets use plain Korean without receipt jargon. No learned quality or final independent evaluation claim."
+  "limitation": "Pilot 52 train/8 development-validation targets. Includes 20 open and 32 grounded/boundary targets, not an unweighted training recommendation. No learned quality or final independent evaluation claim."
 }

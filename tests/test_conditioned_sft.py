@@ -38,3 +38,12 @@ class ActualStateFormatting(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(view['features']['reminders'],'ready');self.assertTrue(view['text_enabled'])
         self.assertEqual(set(view['unsupported']),{'stickers','media_send','voice','screen_control','code_output'})
         self.assertEqual(messages[-1]['content'],data['scenarios'][0]['user'])
+    async def test_withdrawal_and_unavailable_store_do_not_look_ready(self):
+        data=json.loads((Path(__file__).parent/'fixtures/conditioned_curriculum.json').read_text('utf-8'))
+        class Tokenizer:
+            def apply_chat_template(self,*args,**kwargs):return dict(input_ids=[1,2,3])
+        for case_id,state in (('consent_withdrawn','consent_required'),('lookup_unavailable','failed')):
+            case=next(r for r in data['scenarios'] if r['id']==case_id)
+            messages=await compile_case(case,'gentle',data['characters'],Tokenizer())
+            fact=next(m['content'] for m in messages if '읽기 전용 공개 기능 상태' in m['content'])
+            self.assertEqual(json.loads(fact[fact.index('{'):])['features']['memory'],state)

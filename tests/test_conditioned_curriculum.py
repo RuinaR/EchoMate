@@ -12,9 +12,12 @@ class Curriculum(unittest.TestCase):
     def setUp(self):self.data=json.loads((Path(__file__).parent/'fixtures/conditioned_curriculum.json').read_text('utf-8'))
     def test_source_groups_and_character_targets(self):
         result=validate(self.data)
-        self.assertEqual(result['counts'],dict(train=40,validation=8));self.assertEqual(result['groups'],12)
+        self.assertEqual(result['counts'],dict(train=52,validation=8));self.assertEqual(result['groups'],15)
         self.assertEqual(result['objectives']['train:open_dialogue'],20)
-        self.assertEqual(result['objectives']['train:grounded_or_boundary'],20)
+        self.assertEqual(result['objectives']['train:grounded_or_boundary'],32)
+    def test_old_pilot_is_not_silently_reinterpreted_as_new_contract(self):
+        self.data['schema']=1
+        with self.assertRaisesRegex(ValueError,'Versioned'):validate(self.data)
     def test_export_hashes_match_file_bytes_on_windows_too(self):
         source=Path(__file__).parent/'fixtures/conditioned_curriculum.json'
         with tempfile.TemporaryDirectory(dir=source.parents[2]/'local_data') as folder,patch('builtins.print'):
@@ -33,6 +36,8 @@ class Curriculum(unittest.TestCase):
         row['evidence']['receipts'][0]['owner']='other_user'
         with self.assertRaisesRegex(ValueError,'Foreign receipt'):validate(self.data)
         row['evidence']['receipts'][0]['owner']='speaker';row['evidence']['consent']=False
+        with self.assertRaisesRegex(ValueError,'receipt/consent'):validate(self.data)
+        row['evidence']['consent']=True;row['evidence']['receipts'][0]['current']=False
         with self.assertRaisesRegex(ValueError,'receipt/consent'):validate(self.data)
     def test_history_is_data_not_a_new_privileged_instruction(self):
         row=self.data['scenarios'][0]
