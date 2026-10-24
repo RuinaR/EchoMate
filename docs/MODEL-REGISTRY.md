@@ -1,5 +1,10 @@
 # 로컬 모델 레지스트리
 
+## 2026-10-25 전체399token QLoRA·계산전 캐시 정리
+
+실제12B/NF4 frozenBF16/선택logits/qv rank4·LR1e-4·264응답/66유효step/저장·복원완전일치를확인했다. 기존단계후2GiB기준을유지하며공개empty_cache를계산전에만사용한별도기본OFF연구옵션이다. peak allocated11.986/reserved12.182GiB·최고67°C·최소stagefree2,266MiB였다. 이는다른PC/긴Runtime전체문맥/운영LoRA전환의인증이아니다. 원래cache정리없는준비는2,020MiB로안전중단했고,품질비교후두학습후보모두기각하여 no-LoRA를유지한다. [정확한범위](QLORA-RESUME-QA.md).
+
+
 ## 2026-10-25 새376응답 자료의 학습 admission — BLOCKED
 
 새 학습264/개발56의 전체토큰/마스크를 확인했다. 실제train최대399/정답44의 기존NF4 frozenBF16 q/v rank4계획14.195160GiB가 가용12.936523GiB를 초과하여 모델로딩0회로중단했다. 새학습/adapter/생성A/B는없고 no-LoRA선택은변경하지않는다. 한LR1e-4/66유효step은향후계획이며성공측정이아니다. [출처/계약/자원/한계](PUBLIC-TRAINING-DATA-QA.md).

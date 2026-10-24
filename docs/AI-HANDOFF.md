@@ -1,5 +1,14 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-25 실제 전체264 학습·캐시 후보 — 최신 / RELEASE BLOCKED
+
+연구e6fef4c·최종890검사 OK251.922초·운영/장부5hash 보존. GPU child는모두종료했고최종Portable/Git근거는재개QA를따른다.
+
+시작1f0deae clean/main·원격일치. 원본376 자료/분할/마스크를유지했다. 원천가족단위188응답/최대316token·47step 후보는완료했으나시점/화자오류로기각했다. 전체264/399token은기존방식에서free2,020MiB<2,048로준비중안전중단했다. 실측floor는같은allocator정책에만상향결합했다. 새 공개API의계산전유휴캐시정리를tinyNF4에서검증하고 전체264/66step을739.031초에완료했다. 기존RAM/commit/VRAM/온도기준은완화하지않았으며,새flag는연구용기본OFF다.
+
+전체개발loss5.216509→2.449784·체크포인트metric/가중치완전일치를확인했지만,고정16입력의조회실패→비어있지않음단정·시점/화자혼동이남아운영미채택이다. 독립56/최종316 모델소비0,새32응답(train24/dev8)은이번학습에넣지않았다. 학습에reminder/list실패·성공상황이0개인커버리지공백을확인했으나단독원인으로확정하지않았다. 다음은조회상태대조원천과기분/관계후속정답의균형·인칭/논리검토다. 같은LR/epoch탐색확대는하지않는다. 실제앱src/기본no-LoRA/운영자료/기존모델·LoRA/실제Discord는변경하지않았다. [최종회귀·Portable·보존·재개](QLORA-RESUME-QA.md),private local_data/qlora-resume-20261025/checkpoint.json을우선한다.
+
+
 ## 2026-10-25 공개 데이터·새 정답 자료 — 최신 / RELEASE BLOCKED
 
 연구c507567·최종 전체875검사 OK281.831초. 운영/소비장부5hash 보존, source/문서/Portable 마감은 신규 QA를 따른다.
