@@ -30,11 +30,17 @@ def operation_coverage(source):
     return result
 
 
+def comparison_arms(report):
+    arms=[('baseline',report['baseline'])]
+    if 'previous' in report:arms.append(('previous',report['previous']))
+    return arms+[(str(t['lr']),t['generation']) for t in report['trials']]
+
+
 def summarize(report):
     if report['status']!='PILOT_COMPLETE_REQUIRES_QUALITY_REVIEW':raise ValueError('Completed pilot required; never promote partial runs')
     expected=report['development_generation_ids']
     if len(expected)!=len(set(expected)) or not expected:raise ValueError('Unique frozen comparison IDs required')
-    arms=[('baseline',report['baseline'])]+[(str(t['lr']),t['generation']) for t in report['trials']]
+    arms=comparison_arms(report)
     if len({a for a,_ in arms})!=len(arms):raise ValueError('Duplicate candidate arm')
     result={}
     for name,rows in arms:
@@ -53,7 +59,7 @@ def summarize(report):
 def render(report,extra=None):
     summary=summarize(report);esc=lambda value:html.escape(str(value),quote=True)
     summary.update(extra or {})
-    arms=[('baseline',report['baseline'])]+[(str(t['lr']),t['generation']) for t in report['trials']]
+    arms=comparison_arms(report)
     parts=['<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>Private paired pilot</title>',
         '<style>body{font:16px sans-serif;background:#17191e;color:#ddd;margin:2em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #555;padding:12px;vertical-align:top;white-space:pre-wrap}</style>',
         '<h1>Private paired development evidence</h1><p>NOT VERIFIED: persona, factuality and human quality. Raw/incomplete channels are not displayed.</p>',

@@ -7,9 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-def run(base_path,output,*,cache_hygiene=False,phase_profile=False):
+def run(base_path,output,*,cache_hygiene=False,phase_profile=False,cpu_tied_io=False,checkpoint_profile=False):
     from pilot_state import private_path,train_window,cosine,save,restore,inspect
     out=private_path(output);out.mkdir(parents=True,exist_ok=False)
+    if checkpoint_profile and cpu_tied_io:raise ValueError('Isolate checkpoint-budget proof from CPU placement')
     os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1')
     from echomate_bot.processes import check_resources,model_memory_budget
     from echomate_bot.loader_memory import memory_snapshot,release_idle_cuda
@@ -37,7 +38,21 @@ def run(base_path,output,*,cache_hygiene=False,phase_profile=False):
     try:
         base=prepare_frozen_bf16(AutoModelForMultimodalLM.from_pretrained(base_path,local_files_only=True,trust_remote_code=False,
             dtype=torch.bfloat16,device_map={'':0},attn_implementation='sdpa',quantization_config=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type='nf4',bnb_4bit_use_double_quant=True,bnb_4bit_compute_dtype=torch.bfloat16)))
+        if cpu_tied_io:
+            from frozen_cpu_io import install,verify
+            report['cpu_io']=install(base)
         model=get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
+        if checkpoint_profile:
+            from qlora_recipe import checkpoint_mode_proof,training_checkpoint_mode
+            with torch.no_grad():
+                for name,p in model.named_parameters():
+                    if p.requires_grad and 'lora_B' in name:p.fill_(.01)
+            report['checkpoint_mode_comparison']=checkpoint_mode_proof(model,supervised_loss)
+            if not report['checkpoint_mode_comparison']['train_mode_loss_gradients_exact']:raise ValueError('Tiny checkpoint loss/gradient comparison differs')
+            report['training_checkpoint_state']=training_checkpoint_mode(model)
+            report['training_checkpoint_budget_verified']=True
+            from importlib.metadata import version
+            report['versions']={n:version(n) for n in ('torch','transformers','peft','bitsandbytes')}
         opt=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=.0001);sched=cosine(opt,4)
         batches=[([2,4,6,8,10],[-100,-100,6,8,10]),([3,5,7,9],[-100,-100,7,9])]*2
         before_phase();train_window(model,batches,opt,sched,supervised_loss,observe=observe if phase_profile else None)
@@ -51,9 +66,26 @@ def run(base_path,output,*,cache_hygiene=False,phase_profile=False):
         before_phase();actual=train_window(model,batches,opt,sched,supervised_loss,observe=observe if phase_profile else None)
         assert actual==expected
         assert all(torch.equal(p.detach().cpu(),v) for p,v in zip((p for p in model.parameters() if p.requires_grad),weights))
+        if cpu_tied_io:
+            base=model.unload();model=None;opt=None;sched=None;base.eval()
+            generation=dict(input_ids=torch.tensor([[2,4,6,8,10]],device='cuda'),min_new_tokens=3,max_new_tokens=3,do_sample=False,use_cache=True,pad_token_id=0,eos_token_id=1)
+            with torch.no_grad():
+                full=base.generate(**generation,logits_to_keep=0)
+                generated=base.generate(**generation,logits_to_keep=1)
+            assert generated.shape==(1,8)
+            assert torch.equal(full,generated)
+            verify(base);report['cpu_io_generation_verified']=True
+            report['selected_logits_generation_verified']=True
+            model=PeftModel.from_pretrained(base,out/'step1/adapter',is_trainable=True,local_files_only=True)
+            opt=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=.0001);sched=cosine(opt,4)
+            before_phase();report['warm_start_metrics']=train_window(model,batches,opt,sched,supervised_loss)
+            inspect(out/'step1',data_hash='tiny-api-only',config=dict(dropout=.05,accumulation=4))
+            report['warm_start_verified']=True
         pa,pr=phases.peaks();assert pr<512*1024**2
         report.update(status='TINY_NEW_RECIPE_PASS_NOT_12B_QUALITY',replay=actual,peak_allocated=pa,peak_reserved=pr,health_after=check_resources(),phase_profile_verified=phase_profile)
-        report['cache_hygiene_verified']=cache_hygiene and len(report['cache_events'])==3
+        report['cache_hygiene_verified']=cache_hygiene and len(report['cache_events'])==(4 if cpu_tied_io else 3)
+        if cpu_tied_io:verify(base)
+        report['cpu_tied_io_verified']=cpu_tied_io
     finally:
         model=None;base=None;opt=None;sched=None;weights=None;gc.collect();release_idle_cuda(torch);lease.close()
         report['after']=memory_snapshot();(out/'report.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
@@ -61,7 +93,7 @@ def run(base_path,output,*,cache_hygiene=False,phase_profile=False):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--base',required=True);p.add_argument('--output',required=True);p.add_argument('--cache-hygiene',action='store_true');p.add_argument('--phase-profile',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--base',required=True);p.add_argument('--output',required=True);p.add_argument('--cache-hygiene',action='store_true');p.add_argument('--phase-profile',action='store_true');p.add_argument('--cpu-tied-io',action='store_true');p.add_argument('--checkpoint-profile',action='store_true');a=p.parse_args()
     import faulthandler
     faulthandler.dump_traceback_later(180,exit=True)
-    with patch('socket.socket.connect',side_effect=AssertionError('Offline')),patch('socket.getaddrinfo',side_effect=AssertionError('Offline')):run(a.base,a.output,cache_hygiene=a.cache_hygiene,phase_profile=a.phase_profile)
+    with patch('socket.socket.connect',side_effect=AssertionError('Offline')),patch('socket.getaddrinfo',side_effect=AssertionError('Offline')):run(a.base,a.output,cache_hygiene=a.cache_hygiene,phase_profile=a.phase_profile,cpu_tied_io=a.cpu_tied_io,checkpoint_profile=a.checkpoint_profile)

@@ -52,21 +52,55 @@ def clear_unused_before_phase(torch,enabled):
     return dict(allocated_unchanged=allocated,reserved_before=before,reserved_after=torch.cuda.memory_reserved())
 
 
-def observed_admission_floor(proof,*,data_hash,headers,plan,cache_hygiene=False,versions=None):
+def observed_admission_floor(proof,*,data_hash,headers,plan,cache_hygiene=False,versions=None,smoke_training=None):
     """A same-workload guard failure can only raise the planning floor."""
     if proof.get('status')!='STOPPED' or proof.get('reason')!='vram' or proof.get('data_hash')!=data_hash or proof.get('headers')!=headers:
         raise ValueError('Matching failed workload evidence required')
     if any(proof['budget'].get(k)!=plan.get(k) for k in ('rank','sequence','supervised_tokens','frozen_bf16','last_layers')):
         raise ValueError('Observed resource workload differs')
+    if proof['budget'].get('cpu_tied_io',False)!=plan.get('cpu_tied_io',False):raise ValueError('Different tensor placement requires separate evidence')
+    if proof['budget'].get('activation_policy','legacy_saved8_fp32')!=plan.get('activation_policy','legacy_saved8_fp32'):raise ValueError('Different checkpoint activation policy requires separate evidence')
     if proof.get('cache_hygiene',False)!=cache_hygiene:raise ValueError('Different allocator policy requires separate evidence')
     if versions is not None and proof.get('versions')!=versions:raise ValueError('Different libraries require separate evidence')
+    if smoke_training is not None and proof.get('smoke_mode',{}).get('training') is not smoke_training:raise ValueError('Different smoke execution mode requires separate evidence')
     before=proof['health']['free_vram_mib'];after=proof['resource_details']['health']['free_vram_mib']
     if type(before) is not int or type(after) is not int or not 0<=after<2048 or before<=after:
         raise ValueError('Actual stage reserve violation required')
     return max(plan['planning_required_vram'],(before+2048-after)*1024**2)
 
 
-def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_rates=(1e-4,),source_queue=None,original_source=None,maximum_group_tokens=None,admission_proof=None,cache_hygiene=False,phase_profile=False):
+def private_adapter(path):
+    if not path:return None,None
+    root=Path(__file__).resolve().parents[1]/'local_data';path=Path(path).resolve()
+    if not path.is_relative_to(root) or path.is_symlink():raise ValueError('Private existing adapter only')
+    hashes={n:hashlib.sha256((path/n).read_bytes()).hexdigest() for n in ('adapter_config.json','adapter_model.safetensors')}
+    return path,hashes
+
+
+def development_regression(source,export,identities,primary_summary,maximum):
+    """Read-only consumed development cases. Never train or relabel holdout."""
+    from persona_dataset import audit,compiler_hashes
+    if not identities or len(identities)>16 or len(set(identities))!=len(identities):raise ValueError('Unique bounded regression IDs')
+    raw=Path(source).read_bytes();records,_=audit(json.loads(raw))
+    summary=json.loads((Path(export)/'summary.json').read_text('utf-8'))
+    if summary['source_sha256']!=hashlib.sha256(raw).hexdigest() or summary['compiler_hashes']!=compiler_hashes() or summary['tokenizer_hashes']!=primary_summary['tokenizer_hashes']:raise ValueError('Regression compiler/tokenizer/source binding')
+    raw_export=(Path(export)/'development.jsonl').read_bytes()
+    if hashlib.sha256(raw_export).hexdigest()!=summary['development_sha256']:raise ValueError('Regression export changed')
+    expected={r['id']:(r['group'],r['character']) for r in records if r['split']=='development'}
+    selected={}
+    for line in raw_export.splitlines():
+        row=json.loads(line)
+        if row['id'] not in identities:continue
+        n=len(row['prompt'])
+        if (row['id'] in selected or expected.get(row['id'])!=(row['group'],row['character']) or row['split']!='development'
+                or not 0<n<len(row['input_ids'])<=maximum or row['prompt']!=row['input_ids'][:n]
+                or row['labels'][:n]!=[-100]*n or row['labels'][n:]!=row['input_ids'][n:]):raise ValueError('Regression must be masked bounded development')
+        selected[row['id']]=row
+    if set(selected)!=set(identities):raise ValueError('Regression IDs missing or not development')
+    return [selected[k] for k in identities],dict(source_sha256=summary['source_sha256'],development_sha256=summary['development_sha256'],ids=identities,scope='Previously consumed development regression, NOT independent and NOT training')
+
+
+def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_rates=(1e-4,),source_queue=None,original_source=None,maximum_group_tokens=None,admission_proof=None,cache_hygiene=False,phase_profile=False,cpu_tied_io=False,previous_adapter=None,initial_adapter=None,regression_source=None,regression_export=None,regression_ids=None,checkpoint_budget=False,resource_only=False):
     repo=Path(__file__).resolve().parents[1];out=Path(output).resolve()
     if not out.is_relative_to(repo/'local_data') or out.exists():raise ValueError('Fresh private output required')
     out.mkdir(parents=True)
@@ -74,6 +108,13 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
     if tiny.get('status')!='TINY_NEW_RECIPE_PASS_NOT_12B_QUALITY' or not tiny.get('replay'):raise ValueError('New NF4 dropout/accumulation/RNG proof required')
     if cache_hygiene and not tiny.get('cache_hygiene_verified'):raise ValueError('Tiny NF4 cache hygiene replay proof required')
     if phase_profile and not tiny.get('phase_profile_verified'):raise ValueError('Tiny phase observer replay proof required')
+    if checkpoint_budget and (cpu_tied_io or not cache_hygiene or not phase_profile or not tiny.get('training_checkpoint_budget_verified')):raise ValueError('Isolated tiny train-checkpoint proof, cache hygiene and phase observation required')
+    if resource_only and (not checkpoint_budget or cpu_tied_io or previous_adapter or initial_adapter or regression_source or len(learning_rates)!=1):raise ValueError('Isolated one-recipe all-GPU resource validation only')
+    if cpu_tied_io and (not cache_hygiene or not tiny.get('cpu_tied_io_verified') or tiny.get('cpu_io',{}).get('policy')!='frozen_tied_cpu_io_v2' or not tiny.get('cpu_io_generation_verified')):raise ValueError('Tiny CPU tied I/O generation/replay and cache policy required')
+    if initial_adapter and not tiny.get('warm_start_verified'):raise ValueError('Tiny warm-start training proof required')
+    if cpu_tied_io and not tiny.get('selected_logits_generation_verified'):raise ValueError('Tiny selected logits generation proof required')
+    previous_adapter,previous_hashes=private_adapter(previous_adapter)
+    initial_adapter,initial_hashes=private_adapter(initial_adapter)
     replay_raw=Path(replay_proof).read_bytes();proof=json.loads(replay_raw)
     if not proof.get('deterministic') or not proof.get('repeat_metrics_equal') or proof.get('repeat_max_adapter_difference')!=0:raise ValueError('Actual deterministic backward replay proof required')
     os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1')
@@ -122,22 +163,41 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
         headers[name]=hashlib.sha256(head).hexdigest();rows.update({k:v for k,v in json.loads(head).items() if k!='__metadata__'})
     cfg=json.loads((model_root/'config.json').read_text('utf-8'))['text_config']
     length=max(len(r['input_ids']) for r in train);target=max(sum(v!=-100 for v in r['labels']) for r in train)
-    plan=estimate(rows,cfg,rank=4,sequence=length,supervised_tokens=target,frozen_bf16=True)
+    plan=estimate(rows,cfg,rank=4,sequence=length,supervised_tokens=target,frozen_bf16=True,cpu_tied_io=cpu_tied_io,checkpoint_inputs=checkpoint_budget)
     required=plan['planning_required_vram'];admission_hash=None
     from importlib.metadata import version
     versions={n:version(n) for n in ('torch','transformers','peft','bitsandbytes')}
+    if checkpoint_budget and tiny.get('versions')!=versions:raise ValueError('Train-checkpoint proof library versions changed')
+    verified_versions=dict(torch='2.9.1+cu128',transformers='5.20.1',peft='0.21.2',bitsandbytes='0.50.2')
+    if checkpoint_budget and versions!=verified_versions:raise ValueError('Unknown checkpoint geometry/backend implementation; retain legacy planning')
+    parity_plan=None
+    if checkpoint_budget:
+        parity_plan=estimate(rows,cfg,rank=4,sequence=128,supervised_tokens=16,frozen_bf16=True)
+        required=max(required,parity_plan['planning_required_vram'])
     if admission_proof:
         proof_raw=Path(admission_proof).read_bytes();admission_hash=hashlib.sha256(proof_raw).hexdigest()
-        required=observed_admission_floor(json.loads(proof_raw),data_hash=data_hash,headers=headers,plan=plan,cache_hygiene=cache_hygiene,versions=versions)
+        required=max(required,observed_admission_floor(json.loads(proof_raw),data_hash=data_hash,headers=headers,plan=plan,cache_hygiene=cache_hygiene,versions=versions,smoke_training=True))
     report=dict(status='NOT_STARTED',quality='NOT_VERIFIED',data_hash=data_hash,data=summary,budget=plan,headers=headers,stages=[],trials=[],real_discord=False,tiny_proof_sha256=hashlib.sha256(tiny_raw).hexdigest())
     report.update(deterministic=True,replay_proof_sha256=hashlib.sha256(replay_raw).hexdigest(),curriculum=curriculum)
     report.update(admission_required_vram=required,admission_proof_sha256=admission_hash)
     report.update(cache_hygiene=cache_hygiene,cache_events=[])
     report['versions']=versions
     report.update(phase_profile=phase_profile,phase_profiles=[],latest_checkpoint=None)
+    report['previous_adapter_hashes']=previous_hashes
+    report['initial_adapter_hashes']=initial_hashes
+    report['generation_settings']=dict(logits_to_keep=1,max_new_tokens=192,max_time=30,do_sample=False,use_cache=True)
+    report.update(checkpoint_budget=checkpoint_budget,resource_only=resource_only)
+    report['checkpoint_parity_budget']=parity_plan
     # Fixed before generation: legacy two-source core plus two new source groups.
-    cohort=dev[:8]+[r for r in dev if r['id'].startswith('bst-authored-')][:8]
-    report.update(protocol=protocol,development_generation_ids=[r['id'] for r in cohort],model_load_attempts=0)
+    cohort=dev[:8]+[r for r in dev if r['id'].startswith('bst-authored-')][:8] if data['provenance']['kind']=='source_conditioned_authored' else dev[:16]
+    if any((regression_source,regression_export,regression_ids)):
+        if not all((regression_source,regression_export,regression_ids)):raise ValueError('Complete explicit development regression binding required')
+        other=json.loads(Path(regression_source).read_text('utf-8'))
+        if other['characters']!=data['characters']:raise ValueError('Regression must use identical cards')
+        additional,manifest=development_regression(regression_source,regression_export,regression_ids,summary,max(len(r['input_ids']) for r in records))
+        cohort+=additional;report['development_regression']=manifest
+    if len(cohort)>32 or len({r['id'] for r in cohort})!=len(cohort):raise ValueError('Unique bounded evaluation cohort')
+    report.update(protocol=protocol,development_generation_ids=[] if resource_only else [r['id'] for r in cohort],model_load_attempts=0)
     model=None;base=None;optimizer=None;scheduler=None;recorder=None;lease=None;trained=None;frozen=None;ids=None;labels=None;loss=None;expected=None;started=time.monotonic()
     try:
         import subprocess
@@ -146,7 +206,10 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
         health=check_resources();report.update(before=memory_snapshot(),health=health,gpu_utilization_percent=usage())
         if required>health['free_vram_mib']*1024**2:
             report['status']='BLOCKED_STATIC_VRAM';return
-        reserve,preparation=loading_reserve(entry);model_memory_budget(reserve,preparation);lease=InstanceLease()
+        if report['before']['ram_available']<plan['cpu_offload_reserve_bytes']+3*GIB:
+            report['status']='BLOCKED_STATIC_RAM';return
+        reserve,preparation=loading_reserve(entry);preparation+=plan['cpu_offload_reserve_bytes']
+        model_memory_budget(reserve,preparation);lease=InstanceLease()
         report['status']='LOADING'
         import torch
         from training_profile import PhasePeaks
@@ -154,10 +217,10 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
         torch.use_deterministic_algorithms(True)
         from transformers import AutoModelForMultimodalLM,AutoTokenizer,BitsAndBytesConfig
         from peft import get_peft_model,LoraConfig,PeftModel
-        from qlora_recipe import prepare_frozen_bf16,supervised_loss
+        from qlora_recipe import prepare_frozen_bf16,supervised_loss,training_checkpoint_mode,checkpoint_mode_proof
         from compact_training import visible_result
         from pilot_state import train_window,cosine,save,inspect,restore
-        report.update(code_hashes={n:hashlib.sha256((repo/'tools'/n).read_bytes()).hexdigest() for n in ('run_persona_pilot.py','pilot_state.py','persona_dataset.py','qlora_recipe.py','training_budget.py','training_profile.py')})
+        report.update(code_hashes={n:hashlib.sha256((repo/'tools'/n).read_bytes()).hexdigest() for n in ('run_persona_pilot.py','pilot_state.py','persona_dataset.py','qlora_recipe.py','training_budget.py','training_profile.py','frozen_cpu_io.py')})
         torch.set_num_threads(2);torch.manual_seed(881);random.seed(881)
         tokenizer=AutoTokenizer.from_pretrained(model_path,local_files_only=True,trust_remote_code=False)
         def sample():
@@ -188,7 +251,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
                         if self.count==2:self.first=time.monotonic()
                     def end(self):pass
                 clock=Clock()
-                with torch.no_grad():generated=current.generate(input_ids=ids,max_new_tokens=192,max_time=30,do_sample=False,use_cache=True,
+                with torch.no_grad():generated=current.generate(input_ids=ids,logits_to_keep=1,max_new_tokens=192,max_time=30,do_sample=False,use_cache=True,
                     eos_token_id=[tokenizer.eos_token_id,tokenizer.convert_tokens_to_ids('<turn|>')],pad_token_id=tokenizer.eos_token_id,streamer=clock)
                 tokens=generated[0,len(r['prompt']):].cpu().tolist()
                 result.append(dict(id=r['id'],seconds=time.monotonic()-tick,ttft=None if clock.first is None else clock.first-tick,
@@ -206,33 +269,58 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
             if any(info.get(k) for k in ('missing_keys','mismatched_keys','error_msgs')):raise ValueError('Incomplete weights')
             stage('loaded_quantized_before_prepare')
             base=prepare_frozen_bf16(base);stage('loaded_single_base')
+            if cpu_tied_io:
+                from frozen_cpu_io import install,verify
+                cpu_memory=memory_snapshot()
+                if cpu_memory['ram_available']<plan['cpu_offload_reserve_bytes']+3*GIB or cpu_memory['commit_available']<plan['cpu_offload_reserve_bytes']+2*GIB:
+                    raise ResourceLimitError('CPU I/O copy/workspace headroom changed','cpu_offload',cpu_memory)
+                report['cpu_io']=install(base)
+                if report['cpu_io']['weight_bytes']!=plan['bf16_parameters']*2:raise ValueError('Offloaded storage differs from header budget')
+                stage('cpu_tied_io_installed')
             # Newly configured dropout/accumulation: bounded 128 -> 256 -> actual
             # max length. No synthetic 512/1024 padding experiment is needed.
             model=get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
+            report['smoke_mode']=training_checkpoint_mode(model)
             stage('smoke_adapter_initialized')
+            if checkpoint_budget:
+                before_phase('before_checkpoint_gradient_comparison128')
+                report['actual_checkpoint_gradient_comparison']=checkpoint_mode_proof(model,supervised_loss,length=128,supervised=16)
+                if not report['actual_checkpoint_gradient_comparison']['train_mode_loss_gradients_exact']:raise ValueError('Actual checkpoint loss/gradient comparison differs')
+                report['smoke_mode']=training_checkpoint_mode(model)
+                stage('checkpoint_gradient_comparison128')
             for n in (128,256,length):
                 before_phase('before_backward_'+str(n))
                 ids=(torch.arange(n,device='cuda')%64+2).unsqueeze(0);labels=ids.clone();labels[:,:-target]=-100
                 loss=supervised_loss(model,ids,labels);loss.backward();model.zero_grad(set_to_none=True);loss=None;stage('backward_length_'+str(n))
             base=model.unload();model=None;gc.collect();release_idle_cuda(torch)
             report['status']='BASELINE'
-            report['baseline']=evaluate(base,'baseline')
-            with torch.no_grad():report['baseline_development_loss']=sum(float(supervised_loss(base,torch.tensor([r['input_ids']],device='cuda'),torch.tensor([r['labels']],device='cuda'))) for r in dev)/len(dev)
+            if not resource_only:
+                report['baseline']=evaluate(base,'baseline')
+                with torch.no_grad():report['baseline_development_loss']=sum(float(supervised_loss(base,torch.tensor([r['input_ids']],device='cuda'),torch.tensor([r['labels']],device='cuda'))) for r in dev)/len(dev)
+            if previous_adapter:
+                model=PeftModel.from_pretrained(base,previous_adapter,is_trainable=False,local_files_only=True)
+                report['previous']=evaluate(model,'previous')
+                base=model.unload();model=None;gc.collect();release_idle_cuda(torch);stage('previous_adapter_unloaded')
             for lr in protocol['learning_rates']:
                 report['status']='TRAINING'
                 torch.manual_seed(881);torch.cuda.manual_seed_all(881);random.seed(881)
                 trial=dict(lr=lr,rank=4,alpha=8,dropout=.05,accumulation=4,max_grad_norm=1.,epochs=1,warmup_ratio=.05,scheduler='cosine',deterministic=True,optimizer_steps=total_steps,steps=[])
                 trial['curriculum_sha256']=curriculum['sha256']
                 trial['cache_hygiene']=cache_hygiene
+                trial['cpu_tied_io']=cpu_tied_io
+                trial['tensor_placement_policy']='frozen_tied_cpu_io_v2' if cpu_tied_io else 'all_gpu_v1'
                 report['trials'].append(trial)
-                model=get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
+                model=PeftModel.from_pretrained(base,initial_adapter,is_trainable=True,local_files_only=True) if initial_adapter else get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
+                trial['initial_adapter_hashes']=initial_hashes
+                trial['initialization']='warm_adapter_fresh_optimizer_phase' if initial_adapter else 'fresh_lora'
+                trial['activation_policy']=plan['activation_policy']
                 trained=[p for p in model.parameters() if p.requires_grad];assert sum(p.numel() for p in trained)==plan['adapter_parameters']
                 frozen=[(p,p._version,p.detach().flatten()[:16].cpu().clone()) for p in model.parameters() if not p.requires_grad]
                 optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,total_steps,.05)
                 stage('optimizer_initialized_lazy_state')
                 order=list(range(len(train)));random.shuffle(order)
                 batches=[(train[i]['input_ids'],train[i]['labels']) for i in order]
-                name='lr-'+str(lr);checkpoint=out/name/'step8';config={k:trial[k] for k in ('lr','rank','alpha','dropout','accumulation','max_grad_norm','epochs','warmup_ratio','scheduler','deterministic','optimizer_steps','curriculum_sha256','cache_hygiene')}
+                name='lr-'+str(lr);checkpoint=out/name/'step8';config={k:trial[k] for k in ('lr','rank','alpha','dropout','accumulation','max_grad_norm','epochs','warmup_ratio','scheduler','deterministic','optimizer_steps','curriculum_sha256','cache_hygiene','cpu_tied_io','tensor_placement_policy','initial_adapter_hashes','activation_policy')}
                 for step in range(total_steps):
                     before_phase('before_step_'+str(step+1))
                     observe=(lambda label:stage(name+'_first_'+label)) if phase_profile and step==0 else None
@@ -257,15 +345,17 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
                         if not trial['resume_metrics_match'] or not trial['resume_weights_match']:raise ValueError('Actual dropout RNG replay diverged')
                         stage(name+'_replayed_step9')
                 assert all(p._version==version and torch.equal(p.detach().flatten()[:16].cpu(),sentinel) for p,version,sentinel in frozen)
+                if cpu_tied_io:verify(base)
                 frozen=None;trial['base_sentinels_versions_unchanged']=True
                 report['status']='DEVELOPMENT_EVALUATION'
                 model.eval()
-                with torch.no_grad():trial['development_loss']=sum(float(supervised_loss(model,torch.tensor([r['input_ids']],device='cuda'),torch.tensor([r['labels']],device='cuda'))) for r in dev)/len(dev)
-                trial['generation']=evaluate(model,name)
+                if not resource_only:
+                    with torch.no_grad():trial['development_loss']=sum(float(supervised_loss(model,torch.tensor([r['input_ids']],device='cuda'),torch.tensor([r['labels']],device='cuda'))) for r in dev)/len(dev)
+                    trial['generation']=evaluate(model,name)
                 save(out/name/('step'+str(total_steps)),model,optimizer,scheduler,step=total_steps,data_hash=data_hash,config=config)
                 report['latest_checkpoint']=str((out/name/('step'+str(total_steps))).relative_to(out));stage('checkpoint_saved_final')
                 base=model.unload();model=None;trained=None;optimizer=None;scheduler=None;gc.collect();release_idle_cuda(torch);stage(name+'_adapter_unloaded')
-            report['status']='PILOT_COMPLETE_REQUIRES_QUALITY_REVIEW'
+            report['status']='RESOURCE_TRAINING_COMPLETE_NOT_QUALITY' if resource_only else 'PILOT_COMPLETE_REQUIRES_QUALITY_REVIEW'
     except BaseException as e:
         report.update(status='STOPPED',error=type(e).__name__,reason=getattr(e,'reason',None),resource_details=getattr(e,'details',None));raise
     finally:
@@ -281,8 +371,8 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--model',required=True);p.add_argument('--source',required=True);p.add_argument('--export',required=True);p.add_argument('--output',required=True);p.add_argument('--tiny-proof',required=True);p.add_argument('--replay-proof',required=True)
-    p.add_argument('--learning-rates',nargs='+',type=float,default=[1e-4]);p.add_argument('--source-queue');p.add_argument('--original-source');p.add_argument('--maximum-group-tokens',type=int);p.add_argument('--admission-proof');p.add_argument('--cache-hygiene',action='store_true');p.add_argument('--phase-profile',action='store_true');a=p.parse_args()
+    p.add_argument('--learning-rates',nargs='+',type=float,default=[1e-4]);p.add_argument('--source-queue');p.add_argument('--original-source');p.add_argument('--maximum-group-tokens',type=int);p.add_argument('--admission-proof');p.add_argument('--cache-hygiene',action='store_true');p.add_argument('--phase-profile',action='store_true');p.add_argument('--cpu-tied-io',action='store_true');p.add_argument('--previous-adapter');p.add_argument('--initial-adapter');p.add_argument('--regression-source');p.add_argument('--regression-export');p.add_argument('--regression-ids',nargs='+');p.add_argument('--checkpoint-budget',action='store_true');p.add_argument('--resource-only',action='store_true');a=p.parse_args()
     import faulthandler
     faulthandler.dump_traceback_later(1500,exit=True)
     with patch('socket.socket.connect',side_effect=AssertionError('Offline')),patch('socket.getaddrinfo',side_effect=AssertionError('Offline')):
-        run(a.model,a.source,a.export,a.output,a.tiny_proof,a.replay_proof,learning_rates=a.learning_rates,source_queue=a.source_queue,original_source=a.original_source,maximum_group_tokens=a.maximum_group_tokens,admission_proof=a.admission_proof,cache_hygiene=a.cache_hygiene,phase_profile=a.phase_profile)
+        run(a.model,a.source,a.export,a.output,a.tiny_proof,a.replay_proof,learning_rates=a.learning_rates,source_queue=a.source_queue,original_source=a.original_source,maximum_group_tokens=a.maximum_group_tokens,admission_proof=a.admission_proof,cache_hygiene=a.cache_hygiene,phase_profile=a.phase_profile,cpu_tied_io=a.cpu_tied_io,previous_adapter=a.previous_adapter,initial_adapter=a.initial_adapter,regression_source=a.regression_source,regression_export=a.regression_export,regression_ids=a.regression_ids,checkpoint_budget=a.checkpoint_budget,resource_only=a.resource_only)

@@ -25,6 +25,11 @@ class ObservedAdmission(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'libraries'):
             observed_admission_floor(self.proof,data_hash='data',headers={'shard':'hash'},plan=self.plan,versions={'torch':'new'})
         self.assertEqual(observed_admission_floor(self.proof,data_hash='data',headers={'shard':'hash'},plan=self.plan,versions={'torch':'old'}),15032*1024**2)
+    def test_eval_smoke_evidence_cannot_block_new_train_mode_workload(self):
+        with self.assertRaisesRegex(ValueError,'smoke execution'):
+            observed_admission_floor(self.proof,data_hash='data',headers={'shard':'hash'},plan=self.plan,smoke_training=True)
+        self.proof['smoke_mode']={'training':True}
+        self.assertEqual(observed_admission_floor(self.proof,data_hash='data',headers={'shard':'hash'},plan=self.plan,smoke_training=True),15032*1024**2)
     def test_public_cleanup_preserves_live_allocations(self):
         torch=Mock();torch.cuda.memory_allocated.return_value=100;torch.cuda.memory_reserved.side_effect=[200,150]
         self.assertEqual(clear_unused_before_phase(torch,True),dict(allocated_unchanged=100,reserved_before=200,reserved_after=150))

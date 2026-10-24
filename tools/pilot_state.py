@@ -42,7 +42,7 @@ def train_window(model,examples,optimizer,scheduler,loss_fn,*,max_norm=1.,observ
     if not all(counts):raise ValueError('Every microbatch needs supervised next tokens')
     total=sum(counts);optimizer.zero_grad(set_to_none=True);model.train();losses=[]
     for micro,((ids,labels),n) in enumerate(zip(examples,counts)):
-        device=next(model.parameters()).device
+        device=next(p for p in model.parameters() if p.requires_grad).device
         loss=loss_fn(model,torch.tensor([ids],device=device),torch.tensor([labels],device=device))
         if observe:observe('forward_'+str(micro+1))
         if not torch.isfinite(loss):raise ValueError('Non-finite loss')
@@ -64,7 +64,7 @@ def save(path,model,optimizer,scheduler,*,step,data_hash,config):
     path.parent.mkdir(parents=True,exist_ok=True)
     temp=Path(tempfile.mkdtemp(prefix='.writing-',dir=path.parent))
     try:
-        model.save_pretrained(temp/'adapter',safe_serialization=True)
+        model.save_pretrained(temp/'adapter',safe_serialization=True,save_embedding_layers=False)
         torch.save(dict(optimizer=optimizer.state_dict(),scheduler=scheduler.state_dict(),torch_rng=torch.get_rng_state(),
             cuda_rng=torch.cuda.get_rng_state_all() if torch.cuda.is_initialized() else []),temp/'state.pt')
         manifest=dict(schema=1,step=step,data_hash=data_hash,config=config,python_rng=random.getstate(),files={})

@@ -16,6 +16,62 @@ def prepare_frozen_bf16(model):
     return model
 
 
+def training_checkpoint_mode(model):
+    """A true property alone does not activate checkpointing in eval mode."""
+    model.train()
+    base=model.get_base_model() if hasattr(model,'get_base_model') else model
+    layers=getattr(base.model,'language_model',base.model).layers
+    if not layers or not all(l.training and getattr(l,'gradient_checkpointing',False) for l in layers):
+        raise ValueError('Every decoder layer must actually checkpoint in train mode')
+    if not all(getattr(getattr(l,'_gradient_checkpointing_func',None),'keywords',{}).get('use_reentrant') is False for l in layers):
+        raise ValueError('Verified non-reentrant checkpoint implementation required')
+    return dict(training=True,checkpointed_layers=len(layers),non_reentrant=True)
+
+
+def checkpoint_mode_proof(model,loss_fn,*,length=32,supervised=8):
+    """Bounded NF4 probe: matching train-mode grads with/without checkpointing.
+
+    Saved-storage counts are forward-only upper bounds, excluding parameters.
+    Opaque custom-autograd ctx and CUDA workspace are outside this hook's scope.
+    No activations or values are retained in diagnostics.
+    """
+    import torch
+    base=model.get_base_model();device=next(p for p in model.parameters() if p.requires_grad).device
+    cpu_rng=torch.get_rng_state();cuda_rng=torch.cuda.get_rng_state_all()
+    if not 8<=length<=128 or not 1<=supervised<length:raise ValueError('Bounded checkpoint comparison')
+    ids=(torch.arange(length,device=device)%16+2).unsqueeze(0);labels=ids.clone();labels[:,:-supervised]=-100
+    def key(t):return (str(t.device),t.untyped_storage().data_ptr(),t.untyped_storage().nbytes())
+    static={key(p) for p in list(model.parameters())+list(model.buffers())};result={};gradients={}
+    try:
+        for name,training,checkpoint in (('eval_checkpoint_flag_only',False,True),('train_without_checkpoint',True,False),('train_checkpoint',True,True)):
+            if checkpoint:base.gradient_checkpointing_enable(gradient_checkpointing_kwargs={'use_reentrant':False})
+            else:base.gradient_checkpointing_disable()
+            model.train(training);model.zero_grad(set_to_none=True);torch.manual_seed(808);torch.cuda.manual_seed_all(808)
+            seen={}
+            def pack(t):
+                k=key(t)
+                if k not in static:seen[k]=dict(shape=list(t.shape),dtype=str(t.dtype),storage_bytes=k[2])
+                return t.detach()
+            with torch.autograd.graph.saved_tensors_hooks(pack,lambda t:t):
+                loss=loss_fn(model,ids,labels)
+                observed=dict(training=training,checkpoint_flag=base.is_gradient_checkpointing,loss=float(loss.detach()),
+                    forward_saved_storage_upper_bytes=sum(k[2] for k in seen),saved_shapes=list(seen.values())[:128])
+                loss.backward()
+            gradients[name]=[p.grad.detach().cpu().clone() for p in model.parameters() if p.requires_grad]
+            if not all(torch.isfinite(g).all() for g in gradients[name]):raise ValueError('Nonfinite checkpoint proof gradient')
+            result[name]=observed
+        left=gradients['train_without_checkpoint'];right=gradients['train_checkpoint']
+        maximum=max(float((a-b).abs().max()) for a,b in zip(left,right))
+        exact=maximum==0 and result['train_without_checkpoint']['loss']==result['train_checkpoint']['loss']
+        result.update(train_mode_loss_gradients_exact=exact,gradient_max_abs_delta=maximum,
+            train_mode_loss_abs_delta=abs(result['train_without_checkpoint']['loss']-result['train_checkpoint']['loss']),
+            diagnostic_scope='Forward saved-storage upper bounds only; not complete activation/workspace lifetimes')
+        return result
+    finally:
+        model.zero_grad(set_to_none=True);base.gradient_checkpointing_enable(gradient_checkpointing_kwargs={'use_reentrant':False});model.train()
+        torch.set_rng_state(cpu_rng);torch.cuda.set_rng_state_all(cuda_rng)
+
+
 def prepare_suffix_inputs(model,first_layer):
     """Only non-reentrant, frozen-embedding suffix experiments may use this.
 
