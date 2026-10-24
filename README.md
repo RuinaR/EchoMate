@@ -1,5 +1,10 @@
 # EchoMate
 
+## 2026-10-24 진단 메모리 누수 수정·학습 사전 검증 — BLOCKED
+
+반복 메모리 조회가 ctypes 타입을 계속 보존하던 누수를 수정했습니다. 실제12B 학습은 현재 VRAM 계획 예산을 충족하지 못해 실행하지 않았고, 작은 Unified의 CPU/NF4 역전파·저장·재개만 검증했습니다. 학습 전후 대화 품질 개선을 주장하지 않습니다. 전체818회귀/번들83검사와 원본 합성 자료·할당 출처 분석을 확인했습니다. [실제 측정·한계·재개](docs/TRAINING-STABILITY-QA.md), [릴리즈 게이트](docs/RELEASE-CHECKLIST.md).
+
+
 ## 2026-10-24 릴리즈 게이트·생성 방식 비교 — RELEASE BLOCKED
 
 12개 필수 영역의 [요구사항 추적표](docs/RELEASE-CHECKLIST.md)를 만들고 실제 Gemma의greedy/공식sampling을 비교했습니다. sampling은 인격 수렴과 거짓 기억·기능 안내가 남아 채택하지 않았습니다. 운영 생성 코드/모델/자료는 유지했습니다. 전체808회귀·번들65검사·격리30행/55이미지 렌더와 Portable 전체SHA256 감사를 수행했습니다. 실제 Discord·다른 Windows·8시간 운용은 미검증이며 정식 릴리즈는 BLOCKED입니다. [조건·실패·측정·재개](docs/RELEASE-READINESS-QA.md).

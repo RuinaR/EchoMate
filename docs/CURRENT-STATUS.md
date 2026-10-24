@@ -1,5 +1,10 @@
 # 현재 상태
 
+## 2026-10-24 진단 누수·학습 사전 검증 — RELEASE BLOCKED
+
+메모리 카운터 두 경로의 ctypes 타입 보존 누수를 `72546e4`에서 수정했다. 현재12B 학습은 VRAM 계획 미충족으로 BLOCKED이며, 작은 Unified CPU/NF4 API만 PASS다. 실제 학습 어댑터나 인격·사실성 A/B 개선은 없고 기본 생성을 유지한다. 전체818/번들83은 기능 근거이며 대화 품질·실제 Discord·다른 Windows·장시간 차단을 해제하지 않는다. [실제 근거와 다음 단계](TRAINING-STABILITY-QA.md).
+
+
 ## 2026-10-24 정식 릴리즈 추적 — DEVELOPMENT / RELEASE BLOCKED
 
 [필수 영역별 추적표](RELEASE-CHECKLIST.md)와 [이번 실제 QA](RELEASE-READINESS-QA.md)를 최신 기준으로 사용한다. 기본 생성/운영 자료는4587355 그대로다. 공식sampling도 인격 수렴·미래 기억 약속·알림 지원 상태 오판을 해결하지 못해 채택하지 않았다. 전체808회귀/번들65검사는 기능 근거이며 인격·일반 사실성·사회적 의미 판단의 합격이 아니다. 격리 UI 렌더/Portable 전체 hash 근거를 추가했지만 실제 Discord·다른 Windows·8시간 운용은 미검증이다. dist 폴더의rc 이름은 제품 RELEASE CANDIDATE 승인을 뜻하지 않는다.

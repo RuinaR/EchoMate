@@ -1,5 +1,10 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## 2026-10-24 진단 누수 수정 증분
+
+공개 실행 소스 loader_memory/telemetry/settings를 증분 복사해 번들 Python81검사 OK13.133초를 확인했다. 학습 도구·합성 curriculum·임시 어댑터·모델·진단 원문은 번들에 넣지 않는다. 최신 문서/manifest·전체 hash·VBS /check·자료 보존의 마감은 [이번 QA](TRAINING-STABILITY-QA.md)를 따른다. 앱 재시작 필요, DB 마이그레이션 없음. 새 GUI/번들12B GPU/다른 Windows를 검증한 것은 아니다.
+
+
 ## 2026-10-24 전체 Portable 파일 감사·최신 문서 증분
 
 실행 소스는4587355 그대로이며 연구 도구/개인 출력/초소형 어댑터를 번들에 넣지 않는다. 초기21,568개 전체 파일의크기·SHA256/membership를 읽기 검사했다. 최신 문서 증분 반영/최종 manifest와 번들65회귀·두 VBS /check의 정확한 결과는 [이번 QA](RELEASE-READINESS-QA.md)에 기록한다. /check는 파일 존재 검사이며 실제 UI 실행이 아니다. 격리 소스 UI와 번들 mock/다른 Windows/번들 GPU는 구분한다. 정식 RC/PASS는 [추적표](RELEASE-CHECKLIST.md)의 미해결 조건 때문에 승인하지 않는다.

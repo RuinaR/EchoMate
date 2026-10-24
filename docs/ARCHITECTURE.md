@@ -1,5 +1,10 @@
 # 아키텍처
 
+## 2026-10-24 Windows 진단 타입 수명
+
+loader_memory는 Windows Structure/WinDLL prototype을 잠금 안에서 한 번 만들고 값 객체만 샘플링한다. 매번 새 Structure의 POINTER가 ctypes 전역 캐시에 보존되던 누수를 제거했다. telemetry의 working-set MiB도 같은 카운터를 쓰며 오류는 None이다. 시스템 집계/자체 프로세스만 읽고 admission·생성·동의·송신 계약은 바꾸지 않는다. 학습 도구와 curriculum은 앱/프로필/모델 선택 UI에 연결하지 않는다. [재현과 검증](TRAINING-STABILITY-QA.md).
+
+
 ## 2026-10-24 기본 생성의 기억 선택 의존성
 
 기존 행 단위 memory_guard와 별도로 요청 RAM의 불변 MemorySelection이 같은 memories(query,conversation_id,allow_user_archive) 상위3개/빈 결과와 동의 epoch를 대조한다. 새 색인/DB/schema/모델 호출은 없다. 실제 기본 backend.text가 그 context를 소비한 경우에만 송신 guard를 활성화해 무관한 반응·닫힌 안내·별도 response_pipeline의 기존 proof/진단을 방해하지 않는다. 기존 원본·동의/행 guard는 그대로이며 query 원문은 일반 로그/장기 자료에 추가하지 않는다. CFG와 한국어 추출은 tools에만 있고 앱/설정/Controller에서 활성화하지 않는다. [구현·한계](CONSISTENCY-CLAIMS-QA.md).

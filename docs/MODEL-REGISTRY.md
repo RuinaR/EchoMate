@@ -1,5 +1,10 @@
 # 로컬 모델 레지스트리
 
+## 2026-10-24 학습 사전 검증의 범위
+
+12B 헤더677텐서의 텍스트 q48/v40을 확인했다. rank4/64tokens/batch1/checkpointing의 보수적 계획 VRAM14.53GiB가 당시 가용12.70GiB를 넘어 실제12B 준비·학습은 실행하지 않았다. 소형 Unified CPU/NF4 저장·Adam 재개 API만 통과했으며 운영 LoRA 지원으로 확대하지 않는다. CPU offload는 host RAM/commit과 gradient를 별도로 검증해야 한다. 기본 Gemma/no-LoRA·기존 선택/원본/어댑터는 보존했다. [계산·측정·미검증](TRAINING-STABILITY-QA.md).
+
+
 ## 2026-10-24 평가 전용 모델 경계
 
 공식 Qwen3-8B를 고정 revision·파일 hash/Apache2.0 확인 후 별도 비공개 평가 사본으로 비교했다. 공식 non-thinking 템플릿/NF4의 독립 도구이며 앱의 Gemma4 검증기·선택 목록·운영 기본을 변경한 것이 아니다. 모델 크기/생성 조건과 실패를 [진단 QA](MODEL-SYSTEM-DIAGNOSIS-QA.md)에 구분했다. 기존 원본·shard·LoRA를 수정/삭제하거나 운영 선택을 바꾸지 않았다.

@@ -1,5 +1,10 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-24 학습 자원·진단 누수 — 최신 / RELEASE BLOCKED
+
+시작 `9561e78`, clean. 실행 `72546e4`는 시스템/추론 메모리 조회가 매번 만든 ctypes 타입을 보존하던 누수를 수정했다. 반복 조회의 타입/private 증가가 사라졌고, 기존 admission·생성·동의·송신 계약을 유지했다. 도구 `675f517`은 12B 학습 계획14.53GiB가 가용12.70GiB를 넘어 실제 준비·학습을 보류하고, 소형 Unified CPU/NF4 저장·Adam 재개만 확인했다. 원본 MIT 합성 train24/개발 validation8은 기존1650개/최종316개와 별개다. 전체818검사 OK247.043초·번들83검사 OK13.133초. 할당 추적·실경과 비교·최종 Portable/보존/재개 명령은 [이번 QA](TRAINING-STABILITY-QA.md)를 우선한다. 앱 재시작 필요, DB 마이그레이션 없음. 다음은 CPU offload의 host 예산/gradient 사전 검증과 수정 Runtime의1시간/8시간 확대다. 실제 어댑터 품질 A/B·Discord는 미실행이며 정식 BLOCKED를 유지한다. 부분 JSON 쓰기 실패 뒤 temp 잔류도84c47d8에서 수정했고, 1시간 run의 메모리 버전과 별도 오류 회귀 범위를 QA에 구분했다. 현재 별도1시간 CPU/mock 검사가 진행 중이며 결과는 미확정이다. private checkpoint/progress를 확인하고 완료 전 PASS로 쓰지 않는다.
+
+
 ## 2026-10-24 정식 릴리즈 추적·sampling 기각 — 최신 / RELEASE BLOCKED
 
 시작4587355 clean. 12개 필수 영역의 [릴리즈 추적표](RELEASE-CHECKLIST.md)를 기준으로 DEVELOPMENT / RELEASE BLOCKED를 유지한다. 도구67f8823은 공식sampling 두 seed를 동일 Runtime/SDK mock에서 비교하고 전체 Portable hash를 읽기 감사한다. e9b0d2e는 초소형CPU 어댑터 저장/복원 API만 확인하며12B/NF4 학습·품질 검증이 아니다. 실제 GPU53추론/48 Runtime·SDK 응답에서 sampling의 인격/사실성 동시 개선이 없어 운영 소스/기본greedy를 보존했다. 전체808검사 OK243.511초·번들65검사 OK12.792초·현재 격리 UI30행/55이미지·운영4파일hash 동일. 초기soak의 완료 순서 가정과 첫 번들의 private 경로 오류는 도구/실행 오류이며 제품 수정 성과로 세지 않는다. 최종20분 soak/Portable/Git와 실행 명령·다음 우선순위는 [이번 QA](RELEASE-READINESS-QA.md)를 우선한다. 실제 Discord0·최종316개 소비0, 새 모델/의존성/운영 DB 변경0. 이번에는 앱 실행 코드가 바뀌지 않아 재시작/마이그레이션 불필요하다.
