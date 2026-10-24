@@ -367,19 +367,26 @@ class Runtime:
         if hasattr(self.transport,'ready') and not self.transport.ready():return
         for row in await asyncio.to_thread(self.companion.due,cfg['reminder_grace']):
             event=Event(int(row['source']),int(row['guild']),int(row['channel']),int(row['requester']),'',datetime.now(timezone.utc),parent=int(row['parent']) if row['parent'] else None)
+            def within_scope(latest):
+                now=self.companion.clock()
+                return (row['due_at']<=now<=row['due_at']+latest['reminder_grace'] and
+                        not self.stopped and latest['enabled'] and latest['reminders_enabled'] and latest['text'] and
+                        scope(latest,event.guild,event.channel,event.parent,action='text')!='silent')
             async def allowed():
                 latest=self.settings.get()
-                if self.companion.clock()<row['due_at'] or self.companion.clock()>row['due_at']+latest['reminder_grace']:return False
-                if self.stopped or not latest['reminders_enabled'] or not latest['text'] or scope(latest,event.guild,event.channel,event.parent,action='text')=='silent':return False
+                if not within_scope(latest):return False
                 p=await self.transport.permissions(event);latest=self.settings.get()
-                return not self.stopped and latest['reminders_enabled'] and latest['text'] and scope(latest,event.guild,event.channel,event.parent,action='text')!='silent' and p.get('view',False) and p.get('send',False)
+                return within_scope(latest) and p.get('view',False) and p.get('send',False)
             try:
                 if not await allowed():
                     await asyncio.to_thread(self.companion.defer_preflight,row['reminder_id'],'scope_or_permission');continue
                 claimed=await asyncio.to_thread(self.companion.claim,row['reminder_id'])
                 if not claimed:continue
                 row=claimed  # Use edits committed after the due-list snapshot.
-                async def fresh_delivery():return await allowed() and await asyncio.to_thread(self.companion.processing,row['reminder_id'])
+                async def fresh_delivery():
+                    if not await allowed():return False
+                    processing=await asyncio.to_thread(self.companion.processing,row['reminder_id'])
+                    return processing and within_scope(self.settings.get())
                 try:
                     await self.transport.deliver_reminder(row,fresh_delivery)
                     await asyncio.to_thread(self.companion.finish,row['reminder_id'],'delivered')
