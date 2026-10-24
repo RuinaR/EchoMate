@@ -8,6 +8,22 @@ import json
 from echomate_bot.loader_memory import MemoryRecorder,memory_snapshot
 
 
+class OfflineSoakBoundary(unittest.TestCase):
+    def test_offline_entrypoint_denies_network_below_transport(self):
+        from unittest.mock import patch,Mock
+        import socket
+        import verify_retention_soak
+        async def fake_verify(*args):
+            self.assertIsInstance(socket.socket.connect,Mock)
+            self.assertIsInstance(socket.socket.connect_ex,Mock)
+            self.assertIsInstance(socket.getaddrinfo,Mock)
+            with self.assertRaisesRegex(AssertionError,'network denied'):socket.getaddrinfo('example.invalid',443)
+            with socket.socket() as sock:
+                with self.assertRaisesRegex(AssertionError,'network denied'):sock.connect(('127.0.0.1',9))
+                with self.assertRaisesRegex(AssertionError,'network denied'):sock.connect_ex(('127.0.0.1',9))
+        with patch.object(verify_retention_soak,'verify',fake_verify):verify_retention_soak.run_offline('unused',60)
+
+
 class StabilitySoak(unittest.IsolatedAsyncioTestCase):
     async def test_soak_continues_at_real_quota_without_loosening_it(self):
         from verify_stability_soak import run

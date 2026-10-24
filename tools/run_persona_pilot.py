@@ -16,13 +16,16 @@ import time
 from unittest.mock import patch
 
 
-def run(model_path,source,export_path,output,tiny_proof):
+def run(model_path,source,export_path,output,tiny_proof,replay_proof):
     repo=Path(__file__).resolve().parents[1];out=Path(output).resolve()
     if not out.is_relative_to(repo/'local_data') or out.exists():raise ValueError('Fresh private output required')
     out.mkdir(parents=True)
     tiny_raw=Path(tiny_proof).read_bytes();tiny=json.loads(tiny_raw)
     if tiny.get('status')!='TINY_NEW_RECIPE_PASS_NOT_12B_QUALITY' or not tiny.get('replay'):raise ValueError('New NF4 dropout/accumulation/RNG proof required')
+    replay_raw=Path(replay_proof).read_bytes();proof=json.loads(replay_raw)
+    if not proof.get('deterministic') or not proof.get('repeat_metrics_equal') or proof.get('repeat_max_adapter_difference')!=0:raise ValueError('Actual deterministic backward replay proof required')
     os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1')
+    os.environ['CUBLAS_WORKSPACE_CONFIG']=':4096:8' # this research child only
     from echomate_bot.loader_memory import memory_snapshot,MemoryRecorder,loading_reserve,release_idle_cuda,GIB
     from echomate_bot.processes import check_resources,model_memory_budget,ResourceLimitError
     from echomate_bot.model_registry import ModelValidator
@@ -59,6 +62,7 @@ def run(model_path,source,export_path,output,tiny_proof):
     length=max(len(r['input_ids']) for r in train);target=max(sum(v!=-100 for v in r['labels']) for r in train)
     plan=estimate(rows,cfg,rank=4,sequence=length,supervised_tokens=target,frozen_bf16=True)
     report=dict(status='NOT_STARTED',quality='NOT_VERIFIED',data_hash=data_hash,data=summary,budget=plan,headers=headers,stages=[],trials=[],real_discord=False,tiny_proof_sha256=hashlib.sha256(tiny_raw).hexdigest())
+    report.update(deterministic=True,replay_proof_sha256=hashlib.sha256(replay_raw).hexdigest())
     model=None;base=None;optimizer=None;scheduler=None;recorder=None;lease=None;trained=None;frozen=None;ids=None;labels=None;loss=None;expected=None;started=time.monotonic()
     try:
         import subprocess
@@ -69,6 +73,7 @@ def run(model_path,source,export_path,output,tiny_proof):
             report['status']='BLOCKED_STATIC_VRAM';return
         reserve,preparation=loading_reserve(entry);model_memory_budget(reserve,preparation);lease=InstanceLease()
         import torch
+        torch.use_deterministic_algorithms(True)
         from transformers import AutoModelForMultimodalLM,AutoTokenizer,BitsAndBytesConfig
         from peft import get_peft_model,LoraConfig,PeftModel
         from qlora_recipe import prepare_frozen_bf16,supervised_loss
@@ -126,7 +131,7 @@ def run(model_path,source,export_path,output,tiny_proof):
             report['baseline']=evaluate(base,'baseline')
             for lr in (5e-5,1e-4,2e-4):
                 torch.manual_seed(881);torch.cuda.manual_seed_all(881);random.seed(881)
-                trial=dict(lr=lr,rank=4,alpha=8,dropout=.05,accumulation=4,max_grad_norm=1.,epochs=1,warmup_ratio=.05,scheduler='cosine',steps=[])
+                trial=dict(lr=lr,rank=4,alpha=8,dropout=.05,accumulation=4,max_grad_norm=1.,epochs=1,warmup_ratio=.05,scheduler='cosine',deterministic=True,steps=[])
                 report['trials'].append(trial)
                 model=get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
                 trained=[p for p in model.parameters() if p.requires_grad];assert sum(p.numel() for p in trained)==plan['adapter_parameters']
@@ -134,7 +139,7 @@ def run(model_path,source,export_path,output,tiny_proof):
                 optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,16,.05)
                 order=list(range(len(train)));random.shuffle(order)
                 batches=[(train[i]['input_ids'],train[i]['labels']) for i in order]
-                name='lr-'+str(lr);checkpoint=out/name/'step8';config={k:trial[k] for k in ('lr','rank','alpha','dropout','accumulation','max_grad_norm','epochs','warmup_ratio','scheduler')}
+                name='lr-'+str(lr);checkpoint=out/name/'step8';config={k:trial[k] for k in ('lr','rank','alpha','dropout','accumulation','max_grad_norm','epochs','warmup_ratio','scheduler','deterministic')}
                 for step in range(16):
                     value=train_window(model,batches[step*4:(step+1)*4],optimizer,scheduler,supervised_loss);trial['steps'].append(value);stage(name+'_step_'+str(step+1))
                     if step==7:save(checkpoint,model,optimizer,scheduler,step=8,data_hash=data_hash,config=config)
@@ -146,8 +151,10 @@ def run(model_path,source,export_path,output,tiny_proof):
                         trained=[p for p in model.parameters() if p.requires_grad];optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,16,.05)
                         assert restore(checkpoint,optimizer,scheduler,data_hash=data_hash,config=config)==8
                         replay=train_window(model,batches[32:36],optimizer,scheduler,supervised_loss)
-                        trial['resume_metrics_match']=all(math.isclose(replay[k],value[k],rel_tol=1e-5,abs_tol=1e-6) for k in value)
-                        trial['resume_weights_match']=all(torch.allclose(p.detach().cpu(),v,atol=2e-5,rtol=1e-4) for p,v in zip(trained,expected));expected=None
+                        trial['resume_expected_metrics']=value;trial['resume_actual_metrics']=replay
+                        trial['resume_absolute_deltas']={k:abs(replay[k]-value[k]) for k in value}
+                        trial['resume_metrics_match']=replay==value
+                        trial['resume_weights_match']=all(torch.equal(p.detach().cpu(),v) for p,v in zip(trained,expected));expected=None
                         if not trial['resume_metrics_match'] or not trial['resume_weights_match']:raise ValueError('Actual dropout RNG replay diverged')
                         stage(name+'_replayed_step9')
                 assert all(p._version==version and torch.equal(p.detach().flatten()[:16].cpu(),sentinel) for p,version,sentinel in frozen)
@@ -172,8 +179,8 @@ def run(model_path,source,export_path,output,tiny_proof):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--model',required=True);p.add_argument('--source',required=True);p.add_argument('--export',required=True);p.add_argument('--output',required=True);p.add_argument('--tiny-proof',required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--model',required=True);p.add_argument('--source',required=True);p.add_argument('--export',required=True);p.add_argument('--output',required=True);p.add_argument('--tiny-proof',required=True);p.add_argument('--replay-proof',required=True);a=p.parse_args()
     import faulthandler
     faulthandler.dump_traceback_later(1500,exit=True)
     with patch('socket.socket.connect',side_effect=AssertionError('Offline')),patch('socket.getaddrinfo',side_effect=AssertionError('Offline')):
-        run(a.model,a.source,a.export,a.output,a.tiny_proof)
+        run(a.model,a.source,a.export,a.output,a.tiny_proof,a.replay_proof)

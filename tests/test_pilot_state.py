@@ -76,3 +76,18 @@ class PilotState(unittest.TestCase):
         row=train_window(model,self.batches,opt,sched,supervised_loss)
         self.assertGreater(row['gradient_norm'],0);self.assertEqual(row['supervised_tokens'],4)
         self.assertTrue(all(torch.equal(p,v) for p,v in frozen))
+
+    def test_12b_runner_rejects_unproven_recipe_before_model_or_network(self):
+        from run_persona_pilot import run
+        with tempfile.TemporaryDirectory(dir='local_data') as folder:
+            root=Path(folder);tiny=root/'tiny.json';proof=root/'proof.json'
+            tiny.write_text(json.dumps(dict(status='TINY_NEW_RECIPE_PASS_NOT_12B_QUALITY',replay={'loss':1})))
+            proof.write_text(json.dumps(dict(deterministic=False,repeat_metrics_equal=True,repeat_max_adapter_difference=0)))
+            with patch('echomate_bot.model_registry.ModelValidator.validate',side_effect=AssertionError('must not open model')):
+                with self.assertRaisesRegex(ValueError,'backward replay proof'):run('unused','unused','unused',root/'denied',tiny,proof)
+    def test_checkpoint_extra_file_and_wrong_config_are_rejected(self):
+        with tempfile.TemporaryDirectory(dir='local_data') as folder:
+            p=Path(folder)/'saved';save(p,self.model,self.opt,self.sched,step=0,data_hash='a',config={'rank':4})
+            with self.assertRaises(ValueError):inspect(p,data_hash='a',config={'rank':8})
+            (p/'extra.txt').write_text('unbound extra')
+            with self.assertRaises(ValueError):inspect(p,data_hash='a',config={'rank':4})

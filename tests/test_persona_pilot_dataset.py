@@ -5,6 +5,17 @@ import unittest
 from persona_dataset import audit,messages_for
 
 
+class TemplateTokenizer:
+    all_special_tokens=['§'];unk_token_id=-1
+    def convert_tokens_to_ids(self,name):return ord('§') if name=='<turn|>' else -1
+    def encode(self,text,**kwargs):return list(map(ord,text))
+    def decode(self,tokens,**kwargs):return ''.join(map(chr,tokens))
+    def apply_chat_template(self,messages,*,add_generation_prompt=False,tokenize=True,**kwargs):
+        text=''.join(m['role']+':'+m['content']+('§\n' if m['role']=='assistant' else '\n') for m in messages)
+        if add_generation_prompt:text+='assistant:'
+        return dict(input_ids=self.encode(text)) if tokenize else text
+
+
 class DatasetContract(unittest.TestCase):
     def setUp(self):self.data=json.loads((Path(__file__).parent/'fixtures/persona_evidence_pilot.json').read_text('utf-8'))
     def test_balanced_source_split_and_unseen_families(self):
@@ -42,3 +53,15 @@ class DatasetContract(unittest.TestCase):
     def test_noncommercial_source_cannot_be_relabeled(self):
         self.data['provenance']['license']='CC-BY-NC-4.0'
         with self.assertRaises(ValueError):audit(self.data)
+    def test_multiturn_history_is_masked_and_terminal_whitespace_preserved(self):
+        from persona_dataset import compile_records
+        records,summary=compile_records(self.data,TemplateTokenizer())
+        self.assertEqual(len(records),80);self.assertFalse(summary['packing']);self.assertFalse(summary['padding'])
+        for r in records:
+            n=len(r['prompt']);self.assertEqual(r['labels'][:n],[-100]*n);self.assertEqual(r['labels'][n:],r['input_ids'][n:])
+            self.assertEqual(r['input_ids'][-2:],[ord('§'),ord('\n')])
+        self.assertTrue(any(r['id'].startswith('pe-dev-correction/') for r in records))
+    def test_overlong_inputs_are_rejected_without_cutting_evidence(self):
+        from persona_dataset import compile_records
+        self.data['cases'][0]['user']='긴 원본 메시지 '*1000
+        with self.assertRaisesRegex(ValueError,'never truncate'):compile_records(self.data,TemplateTokenizer())

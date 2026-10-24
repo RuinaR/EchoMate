@@ -10,6 +10,7 @@ import gc
 import json
 from pathlib import Path
 import weakref
+from unittest.mock import patch
 from profile_runtime_memory import deep_size
 from verify_stability_soak import run
 
@@ -46,6 +47,18 @@ async def verify(root,seconds,released=False):
     print(json.dumps(result))
 
 
+def run_offline(root,seconds,released=False):
+    """Deny sockets below the mock transport as an independent safety layer."""
+    async def workload():
+        # Windows asyncio creates its own socketpair while constructing a loop.
+        # Block application I/O once that loop exists, before the workload starts.
+        with patch('socket.socket.connect',side_effect=AssertionError('Offline soak: network denied')),\
+             patch('socket.socket.connect_ex',side_effect=AssertionError('Offline soak: network denied')),\
+             patch('socket.getaddrinfo',side_effect=AssertionError('Offline soak: network denied')):
+            await verify(root,seconds,released)
+    asyncio.run(workload())
+
+
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--seconds',type=float,default=1200);p.add_argument('--output',required=True);p.add_argument('--released',action='store_true');a=p.parse_args()
-    asyncio.run(verify(a.output,a.seconds,a.released))
+    run_offline(a.output,a.seconds,a.released)
