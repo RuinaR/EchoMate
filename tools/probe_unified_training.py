@@ -13,7 +13,8 @@ import time
 from unittest.mock import patch
 
 
-def run(output,gpu=False,frozen_bf16=False):
+def run(output,gpu=False,frozen_bf16=False,last_layers=None):
+    if last_layers is not None and (last_layers!=1 or not gpu or not frozen_bf16):raise ValueError("Suffix probe requires tiny NF4 BF16")
     root=Path(output).resolve();repo=Path(__file__).resolve().parents[1]
     if not root.is_relative_to(repo/'local_data'):raise ValueError('Private output required')
     root.mkdir(parents=True,exist_ok=False)
@@ -31,7 +32,7 @@ def run(output,gpu=False,frozen_bf16=False):
     started=time.monotonic();lease=InstanceLease() if gpu else None;model=None;optimizer=None;refs=None;expected=None
     from importlib.metadata import version
     report=dict(device='cuda' if gpu else 'cpu',before=memory_snapshot(),health=health,stages=[],seed=20261024,
-        source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),frozen_bf16=frozen_bf16,
+        source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),frozen_bf16=frozen_bf16,last_layers=last_layers,
         versions={n:version(n) for n in ('torch','transformers','peft','bitsandbytes')})
     def stage(name):
         row=dict(name=name,seconds=time.monotonic()-started,**memory_snapshot())
@@ -58,8 +59,15 @@ def run(output,gpu=False,frozen_bf16=False):
         base=Gemma4UnifiedForConditionalGeneration(config).cpu();base.save_pretrained(root/'base',safe_serialization=True);del base;gc.collect()
         with MemoryRecorder(interval=.2) as recorder:
             model=fresh();stage('prepared')
-            targets=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)'
+            targets=r'.*language_model\.layers\.'+('1' if last_layers else r'\d+')+r'\.self_attn\.(q_proj|v_proj)'
             model=get_peft_model(model,LoraConfig(r=2,lora_alpha=4,lora_dropout=0,target_modules=targets,task_type='CAUSAL_LM'))
+            if last_layers:
+                from qlora_recipe import prepare_suffix_inputs
+                prepare_suffix_inputs(model,1)
+                def prefix_observed(module,args,result):
+                    report['prefix_requires_grad']=bool(result.requires_grad)
+                    assert not result.requires_grad
+                hook=model.get_base_model().model.language_model.layers[0].register_forward_hook(prefix_observed)
             trained=[(n,p) for n,p in model.named_parameters() if p.requires_grad]
             assert trained and all('language_model.layers.' in n and 'lora_' in n for n,p in trained)
             refs=[(p,p.detach().clone()) for n,p in model.named_parameters() if not p.requires_grad]
@@ -73,6 +81,7 @@ def run(output,gpu=False,frozen_bf16=False):
             labels=ids.clone();labels[:,:4]=-100
             loss=supervised_loss(model,ids,labels) if frozen_bf16 else model(input_ids=ids,labels=ids).loss
             assert torch.isfinite(loss);loss.backward()
+            if last_layers:hook.remove()
             assert any(p.grad is not None and torch.isfinite(p.grad).all() and p.grad.abs().sum()>0 for n,p in trained)
             optimizer.step();optimizer.zero_grad();stage('step1')
             assert all(torch.equal(p.detach(),old) for p,old in refs)
@@ -86,6 +95,7 @@ def run(output,gpu=False,frozen_bf16=False):
             if gpu:release_idle_cuda(torch)
             stage('unloaded_for_resume')
             model=PeftModel.from_pretrained(fresh(),root/'checkpoint',is_trainable=True,local_files_only=True).eval()
+            if last_layers:prepare_suffix_inputs(model,1)
             with torch.no_grad():actual=model(input_ids=ids).logits.detach().cpu()
             assert torch.allclose(expected,actual,atol=1e-5,rtol=1e-4)
             optimizer=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=.001)
@@ -107,8 +117,8 @@ def run(output,gpu=False,frozen_bf16=False):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--gpu',action='store_true');p.add_argument('--frozen-bf16',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--output',required=True);p.add_argument('--gpu',action='store_true');p.add_argument('--frozen-bf16',action='store_true');p.add_argument('--last-layers',type=int,choices=[1]);a=p.parse_args()
     import faulthandler
     faulthandler.dump_traceback_later(180,exit=True)
     with patch('socket.socket.connect',side_effect=AssertionError('No network')),patch('socket.getaddrinfo',side_effect=AssertionError('No network')):
-        run(a.output,a.gpu,a.frozen_bf16)
+        run(a.output,a.gpu,a.frozen_bf16,a.last_layers)

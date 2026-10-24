@@ -14,9 +14,10 @@ GIB=1024**3
 LINEARS=('q_proj','k_proj','v_proj','o_proj','gate_proj','up_proj','down_proj','gate_up_proj')
 
 
-def estimate(rows,cfg,*,rank=4,sequence=64,frozen_bf16=False,supervised_tokens=None):
+def estimate(rows,cfg,*,rank=4,sequence=64,frozen_bf16=False,supervised_tokens=None,last_layers=None):
     if rank not in (2,4,8) or type(sequence) is not int or not 8<=sequence<=2048:raise ValueError('Bounded probe sizes required')
     if supervised_tokens is not None and (type(supervised_tokens) is not int or not 1<=supervised_tokens<sequence):raise ValueError('Invalid supervised positions')
+    if last_layers is not None and (type(last_layers) is not int or not 1<=last_layers<=cfg['num_hidden_layers']):raise ValueError('Invalid trainable suffix')
     quantized=0;floating=0;largest_cast=0;targets=[]
     for name,value in rows.items():
         shape=value['shape'];n=math.prod(shape)
@@ -26,6 +27,9 @@ def estimate(rows,cfg,*,rank=4,sequence=64,frozen_bf16=False,supervised_tokens=N
             if value['dtype'] in ('BF16','F16'):largest_cast=max(largest_cast,n*2)
         if '.language_model.' in name and name.endswith(('.q_proj.weight','.v_proj.weight')):
             if len(shape)!=2:raise ValueError('Invalid linear target')
+            if last_layers is not None:
+                layer=int(name.split('.language_model.layers.')[1].split('.')[0])
+                if layer<cfg['num_hidden_layers']-last_layers:continue
             targets.append(dict(name=name,shape=shape,adapter_parameters=rank*sum(shape)))
     if not targets:raise ValueError('No text q/v adapter targets')
     # 4.5 bits/linear parameter includes a conservative NF4 scale allowance.
@@ -33,11 +37,12 @@ def estimate(rows,cfg,*,rank=4,sequence=64,frozen_bf16=False,supervised_tokens=N
     if frozen_bf16:largest_cast=0
     adapter=sum(x['adapter_parameters'] for x in targets)
     adapter_state=adapter*20 # fp32 parameters, grads, Adam moments, save copy
-    checkpoint=cfg['num_hidden_layers']*sequence*cfg['hidden_size']*4*8
+    checkpoint=(last_layers or cfg['num_hidden_layers'])*sequence*cfg['hidden_size']*4*8
     logits=(supervised_tokens or sequence)*cfg['vocab_size']*4*4
     backward_workspace=GIB+checkpoint+logits
     allocator_driver=GIB;safety=2*GIB
-    return dict(rank=rank,sequence=sequence,batch=1,checkpointing=True,frozen_bf16=frozen_bf16,supervised_tokens=supervised_tokens,quantized_parameters=quantized,
+    return dict(rank=rank,sequence=sequence,batch=1,checkpointing=True,frozen_bf16=frozen_bf16,supervised_tokens=supervised_tokens,last_layers=last_layers,
+        frozen_prefix_gradient_proof_required=last_layers is not None,quantized_parameters=quantized,
         non_quantized_parameters=floating,fp32_parameters=0 if frozen_bf16 else floating,
         bf16_parameters=floating if frozen_bf16 else 0,adapter_parameters=adapter,target_count=len(targets),targets=targets,
         prepared_bytes=prepared,upcast_overlap_bytes=largest_cast,adapter_state_bytes=adapter_state,

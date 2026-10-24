@@ -1,5 +1,9 @@
 # 현재 상태
 
+## 2026-10-24 실제12B 학습 API 가능·품질 후보 기각 — RELEASE BLOCKED
+
+frozenBF16/정답 위치 logits는 실제12B64/128token backward·저장/재개를 통과했다. 원본16개32step 어댑터는 개발8개에서 인격·사실성 동시 개선이 없어 미채택이다. 짧은 API 가능성과 전체 Runtime1800token 학습은 구분하며 후자는 현재 계획 예산 미충족이다. 앱/운영 설정/DB/모델은 그대로다. 실경과2시간 CPU/mock 진단 보존 ON/OFF 진행 중·판정 미확정. [최신 실제 QA](TRAINING-FEASIBILITY-V2-QA.md).
+
 ## 2026-10-24 진단 누수·학습 사전 검증 — RELEASE BLOCKED
 
 메모리 카운터의 ctypes 타입 보존 누수72546e4·부분 JSON 쓰기 실패의 임시 파일 잔류84c47d8을 수정했다. 실경과1시간 CPU/mock3108반복/59재시작에서 오류·잔류 Task·반환 후 Runtime 참조0이지만 private25.23→41.10MiB로 소폭 증가가 남는다.8시간/GPU 장기 인증은 아니다. 실제12B 학습은 VRAM 계획 미충족 BLOCKED, 작은 Unified CPU/NF4 API만 PASS다. 실제 학습 어댑터/인격·사실성 A/B 개선은 없고 기본 생성을 유지한다. 원본 조건부 자료52train/8개발 validation의 입력·정답 마스크를 실제 토크나이저로 확인했으며 최대1800tokens다. 전체 회귀·번들83·Portable/보존의 정확한 마감은 [최신 QA](TRAINING-STABILITY-QA.md). 실제 Discord·다른 Windows·8시간·대화 품질 차단을 해제하지 않는다.

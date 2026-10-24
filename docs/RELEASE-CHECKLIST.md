@@ -1,6 +1,6 @@
 # 릴리즈 요구사항 추적표
 
-기준 시작 main/local/remote `4587355590330f86c83f561121ac2f0a5db521c9` (2026-10-24). 현재 단계 **DEVELOPMENT / RELEASE BLOCKED**. 필수 FAIL/BLOCKED/NOT VERIFIED가 남으면 RC/PASS로 승격하지 않는다. 아래 PASS는 명시된 범위의 근거이며 제품 전체/다른 PC/실서버 보장이 아니다. 최근 진단 누수 수정72546e4·학습 사전 검증/최종 소스·운용 근거는 [학습·안정화 QA](TRAINING-STABILITY-QA.md)를 우선한다. 이전 [릴리즈 준비 QA](RELEASE-READINESS-QA.md)는 당시 범위로 보존한다.
+기준 시작 main/local/remote `4587355590330f86c83f561121ac2f0a5db521c9` (2026-10-24). 현재 단계 **DEVELOPMENT / RELEASE BLOCKED**. 필수 FAIL/BLOCKED/NOT VERIFIED가 남으면 RC/PASS로 승격하지 않는다. 아래 PASS는 명시된 범위의 근거이며 제품 전체/다른 PC/실서버 보장이 아니다. 최신12B 짧은 학습/후보 기각·2시간 진행은 [학습 가능성v2](TRAINING-FEASIBILITY-V2-QA.md), 이전 진단 누수 수정72546e4·학습 사전 검증/소스·운용 근거는 [학습·안정화 QA](TRAINING-STABILITY-QA.md)를 우선한다. 이전 [릴리즈 준비 QA](RELEASE-READINESS-QA.md)는 당시 범위로 보존한다.
 
 상태: PASS=필요 근거 확보, FAIL=재현 결함/기준 미달, BLOCKED=명시된 승인·환경·데이터 제약, NOT VERIFIED=미수행/근거 부족, NOT APPLICABLE=적용 제외 사유 확인. 테스트 개수나 문서 수는 독립적인 완료 기준이 아니다.
 
@@ -23,10 +23,10 @@
 | M2 원본 단일 파일 안전 로딩 | NOT VERIFIED | 운영 base의 선택은 자동 변경하지 않음, [모델 레지스트리](MODEL-REGISTRY.md) | 원본에 shard 측정 재사용 금지; 자원 여유가 허용할 때 별도 검증 |
 | M3 취소·전환·종료·실패 복구 | PASS | 현재825 기능 회귀/기존 실제 모델 해제 기록 | 경쟁/장시간은L2, 실제 다른 환경은W2 |
 | L1 지연·TTFT·큐·메모리 SLO | NOT VERIFIED | 이번같은8입력/조건 측정·전체TTFT/queue0, [GPU 표](RELEASE-READINESS-QA.md); 출력 길이/seed 효과 구분 | 이번2문장 workload8개/조건의 관측 p50/p95는10/20초 이내; 포화 부하/긴 운용·통계적 신뢰 범위 추가 확인 |
-| L2 장시간 운용·누수·재시작 | NOT VERIFIED | 72546e4 진단 누수 수정·실경과1시간3108반복/59재시작·포인터23·퇴역0/오류0; private25.23→41.10MiB로소폭증가잔존 [범위](TRAINING-STABILITY-QA.md) | 실경과8시간 이상/주기적 GPU·회수·재시작/잔류 확인; 이번 짧은 soak로 대체 금지 |
+| L2 장시간 운용·누수·재시작 | NOT VERIFIED | 72546e4 진단 누수 수정·실경과1시간3108반복/59재시작·포인터23·퇴역0/오류0; private25.23→41.10MiB로소폭증가잔존 [범위](TRAINING-STABILITY-QA.md) | 새2시간ON/OFF진행중·완료판정보류; 실경과8시간/주기적GPU·회수·재시작은별도확인 |
 | U1 Windows UI 입력→저장→표시 | PASS | 이전420조합·격리 렌더66화면, 최근800 회귀는 기능 근거 [UI](RESUMED-MEMORY-UX-QA.md) | 현재 주요 화면 격리 렌더/이벤트 확인; 실제 사용자 만족도 별도 |
 | U2 격리된 최신 화면/오류/DPI | PASS | setup/models/character/status와팝업, 100/125/150%·두 창 크기30행/55PNG, callback0·own Desktop 검증, [범위](RELEASE-READINESS-QA.md) | 대표4이미지 직접 확인; 나머지 심미성/모든 화면·실제 사용자 만족도 미검증 |
-| W1 Portable 소스·파일·동작 | PASS | 실행3파일 증분/번들83검사·공개169쌍/manifest21,571파일 전체SHA256·두 VBS check, [현재 QA](TRAINING-STABILITY-QA.md) | 같은호스트/번들mock 범위; 다른 Windows/번들GPU·실제 UI 실행 별도 |
+| W1 Portable 소스·파일·동작 | NOT VERIFIED | 앱src는f243675 그대로·기존번들83/169쌍 근거 보존; 신규문서 증분은 [v2 QA](TRAINING-FEASIBILITY-V2-QA.md) 마감 필요 | 새문서/manifest감사 후 해당범위승격; 다른Windows/번들GPU별도 |
 | W2 깨끗한 다른 Windows·설치/업데이트 | BLOCKED | 이 호스트/격리 데이터는 다른 OS·드라이버·새 사용자 환경이 아님 | 별도 Windows 환경 확보; 시스템 전역 설정/VM 임의 설치 금지 |
 | D1 실제 Discord 통합·명령 접근 | BLOCKED | `/동의` 비표시 원인 미확정, [복구 경계](COMMAND-RECOVERY-QA.md) | 나머지 품질 준비 후 읽기 인증 조회→명령 변경→송신 별도 승인·클라이언트 확인 |
 | D2 `/동의`·`/성격` 오프라인 계약 | PASS | 현재825 회귀의 실제 SDK payload/owner/ephemeral·승인 fingerprint | 실제 등록/표시/실행 PASS로 확대 금지 |
@@ -47,8 +47,9 @@
 |---|---|---|
 |헤더/라이브러리 기반 계획|PASS|675f517,677텐서·명시텍스트88대상·자원예산; 수치는계획reserve이며activation상한아님|
 |작은Unified CPU/NF4 저장·재개|PASS|64차원896trainable·정렬커널·기본텐서불변/Adam step2; 실제12B/품질검증아님|
-|실제12B 준비·학습|BLOCKED|현재기본준비경로계획14.53GiB>가용12.70GiB; CPUoffload도host예산·gradient미검증|
+|실제12B 짧은 준비·학습|PASS|별도frozenBF1664/128token backward/저장·재개·16자료32step; [새근거](TRAINING-FEASIBILITY-V2-QA.md). 앱기본경로나전체길이학습인증아님|
+|전체Runtime1800token 학습|BLOCKED|frozenBF16/선택logits 계획도21.808GiB; 실제실행없음·별도host/activation근거필요|
 |조건부합성pilot자료|PASS|직접작성MIT schema2 train52/개발validation8·15scenario그룹분리/byte hash/최신동의receipt계약; 실제CPU토크나이저60개/최대1800tokens·정답경계PASS, 학습아님; 최종316개소비0|
-|실제어댑터 인격·사실성A/B|NOT VERIFIED|실제12B학습어댑터없음·운영적용없음; 학습성공만으로승격금지|
+|실제어댑터 인격·사실성A/B|FAIL|compact16train/8개발질문·32step, 명시적사실경계3/4→3/4·인격미달로기각. 기존316개보존·운영적용없음|
 
 상세근거/실행조건/완료1시간·잔여8시간/GPU운용은 [이번QA](TRAINING-STABILITY-QA.md)를따른다. 진단타입누수를고친것과모든Runtime누수·대화품질해결은구분한다.

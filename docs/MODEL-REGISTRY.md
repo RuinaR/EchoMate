@@ -1,5 +1,9 @@
 # 로컬 모델 레지스트리
 
+## 2026-10-24 실험 전용12B frozenBF16/LoRA
+
+기본 앱은 여전히 Gemma4/no-LoRA다. 별도 연구 도구의 BF16 frozen base·NF4·q/v rank4는 실제12B64/128token backward/저장·재개,16개 합성 자료32step을 통과했다. 전체Runtime1800token 학습이나 앱 LoRA 선택 지원으로 확대하지 않는다. 인격/사실성 A/B는 기준 미달로 어댑터를 운영에 적용하지 않았다. 소형 모델/API 성공과 안전 예산/생성 품질은 [이번 QA](TRAINING-FEASIBILITY-V2-QA.md)로 구분한다.
+
 ## 2026-10-24 학습 사전 검증의 범위
 
 12B 헤더677텐서의 텍스트 q48/v40을 확인했다. rank4/64tokens/batch1/checkpointing의 보수적 계획 VRAM14.53GiB가 당시 가용12.70GiB를 넘어 실제12B 준비·학습은 실행하지 않았다. 소형 Unified CPU/NF4 저장·Adam 재개 API만 통과했으며 운영 LoRA 지원으로 확대하지 않는다. CPU offload는 host RAM/commit과 gradient를 별도로 검증해야 한다. 실제 캐릭터/기능 상태를 컴파일한 새 합성 자료는 최대1800tokens이며,64token API smoke/정적 예산을 이 길이의 학습 요구량으로 재사용하지 않는다. 기본 Gemma/no-LoRA·기존 선택/원본/어댑터는 보존했다. [계산·측정·미검증](TRAINING-STABILITY-QA.md).

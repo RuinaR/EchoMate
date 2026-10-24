@@ -1,5 +1,9 @@
 # 학습 자원·Unified 호환성·Runtime 진단 누수 — 2026-10-24
 
+## 후속 최신 근거
+
+f243675 이후의 실제12B frozenBF16/32step·후보 기각·2시간 진단 보존 대조는 [학습 가능성 v2 QA](TRAINING-FEASIBILITY-V2-QA.md)를 우선한다. 아래 기본FP32 준비 경로 기각·1시간 결과는 당시 조건으로 보존하며 새 경로의 짧은 학습과 혼동하지 않는다.
+
 시작 main/local/remote `9561e78507ff22992a3d4e6b43fcb56cf6b9ff5d`, clean. 카운터 수정 `72546e4`/부분 저장 실패 정리 `84c47d8`, 연구 도구/원본 합성 자료 `675f517`. DEVELOPMENT / RELEASE BLOCKED. 운영4파일과 최종 평가 소비 장부의 SHA256을 private `local_data/training-stability-20261024/preserved.json`에 봉인했다. 실제 Discord/운영 설정·DB/기존 모델·LoRA 변경·다른 프로그램 조사/입력/화면/프로세스 조작은 하지 않는다.
 
 ## 우선순위와 실제 수정

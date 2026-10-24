@@ -1,5 +1,9 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-24 12B frozenBF16 학습·진단 보존 대조 — 최신 / BLOCKED
+
+시작 f243675 clean·원격 일치. 연구6fce56e는 설치 라이브러리 패치 없이 frozenBF16/선택 logits loss를 작은 Unified→실제12B64/128tokens까지 검증했다. 새 원본16train/8개발 validation·최대94tokens/32step과16step 저장/해제/재개·전후16응답을 실제GPU로 확인했지만 명시적 사실 경계 위반3/4→3/4·상태 라벨/인격 수렴이 남아 후보 기각이다. 앱 실행src/운영모델/프로필은 변경하지 않았다. 기존1800token 자료는 학습하지 않았고 최종316개 소비0. 전체829검사 OK276.079초와 후속 고정 재시작6검사 OK5.493초. 현재6fce56e의7200초 CPU/mock ON/OFF 두 run이 진행 중이며 private checkpoint/progress를 확인하고 완료 전 PASS로 쓰지 않는다. GPU 작업은 종료했다. [이번 QA·자원·명령·다음 과제](TRAINING-FEASIBILITY-V2-QA.md). 실제 Discord0, RELEASE BLOCKED 유지.
+
 ## 2026-10-24 학습 자원·진단 누수 — 최신 / RELEASE BLOCKED
 
 시작 `9561e78`, clean. 실행 `72546e4`는 반복 메모리 조회의 ctypes 타입 보존 누수를, `84c47d8`은 부분 JSON 쓰기 예외 뒤 임시 파일 잔류를 수정했다. 기존 admission·권한·생성·송신 계약은 유지한다. 실제12B 준비/학습은 계획14.53GiB>당시 가용12.70GiB로 보류했고 소형 Unified CPU/NF4 저장·Adam 재개만 확인했다. 학습 어댑터/대화 품질 A/B는 없다.

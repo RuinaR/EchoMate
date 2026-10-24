@@ -86,10 +86,11 @@ async def capacity_probe(root,backend):
 
 
 async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_interval=60,observe=None,
-              diagnostic_retention=True,sample_history_limit=256,max_iterations=None,sample_interval=5):
+              diagnostic_retention=True,sample_history_limit=256,max_iterations=None,sample_interval=5,restart_every_iterations=None):
     if not 0<seconds<=86400 or period<=0 or gpu_interval<1 or restart_interval<=0:raise ValueError('Invalid soak duration')
     if type(sample_history_limit) is not int or not 1<=sample_history_limit<=4096 or sample_interval<=0:raise ValueError('Bounded sample history required')
     if max_iterations is not None and (type(max_iterations) is not int or not 1<=max_iterations<=10000):raise ValueError('Bounded fixed workload required')
+    if restart_every_iterations is not None and (type(restart_every_iterations) is not int or not 1<=restart_every_iterations<=10000):raise ValueError('Bounded restart count required')
     root=private_path(root);root.mkdir(parents=True,exist_ok=False)
     started=time.monotonic();counts=Counter();samples=[];traces=[];gpu_rows=[];errors=[];sample_count=0
     sample_stream=(root/'samples.jsonl').open('w',encoding='utf-8')
@@ -175,7 +176,7 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
                     counts['gpu_probe']+=1
                 finally:await live.close()
                 next_gpu=elapsed+gpu_interval
-            if elapsed>=next_restart:
+            if (i%restart_every_iterations==0) if restart_every_iterations else (elapsed>=next_restart):
                 if diagnostic_retention:traces.extend(runtime.traces);traces=traces[-2000:]
                 await runtime.close();runtime=make_runtime()
                 settings=Settings(1,key,root/'settings.json');runtime.settings=settings
@@ -207,6 +208,7 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
             passed=not errors and not lingering and mock.pending==0 and (time.monotonic()-started>=seconds if max_iterations is None else i==max_iterations),lingering_tasks=lingering,
             initial_threads=initial_threads,final_threads=threading.active_count(),samples=samples,gpu=gpu_rows,
             sample_count=sample_count,sample_history_limit=sample_history_limit,diagnostic_retention=diagnostic_retention,fixed_iterations=max_iterations,
+            restart_every_iterations=restart_every_iterations,
             mock_pipeline=summarize(traces[-2000:]),real_discord=False,real_gpu=backend is not None,
             caution='Elapsed local mixed soak, not 24-hour use, semantic quality or cross-Windows certification')
         atomic_private_json(root/'summary-private.json',result)

@@ -1,5 +1,9 @@
 # 작업 로그
 
+## 2026-10-24 BF16 저장·희소 loss·실제12B 학습 가능성
+
+f243675 clean→PEFT FP32 embedding 중첩 분석→라이브러리 무수정 frozenBF16/전체loss와 gradient 동일한 선택 logits→tinyNF4 저장/재개→실제12B64/128 backward/재개→별도원본16train/8개발자료32step/전후GPU 생성→사실 경계3/4→3/4·인격 미달로 기각. 연구6fce56e만 채택하고 운영 생성/모델은 유지한다. 측정 샘플 RAM 보존을256개로 제한하고 JSONL 전체 기록·진단 보존 대조를 추가했다. 첫 시간 기반 대조의 재시작 수 차이는 고정240반복/4재시작으로 보완했다. 7200초 CPU ON/OFF 진행 중이며 최종 회귀/Portable/보존/실경과는 [이번 QA](TRAINING-FEASIBILITY-V2-QA.md)에 누적한다.
+
 ## 2026-10-24 학습 예산·진단 할당 누수 분석
 
 `9561e78` clean에서 시작해 ctypes 포인터 캐시 증가 두 경로를 재현하고72546e4로 수정했다. 부분 저장 실패의 temp 잔류84c47d8도 오류 주입 후 수정했다. 실제12B VRAM 계획 미충족으로 학습을 보류하고 소형 Unified CPU/NF4 저장·재개만 확인했다.32차원 fallback과64차원 정렬 조건을 구분했다. 도구675f517/d547c84/d33b1af는 MIT 원본 합성 자료를 schema2 train52/개발 validation8로 보강하고 실제 추론 prefix와 학습 label 경계를 일치시킨다.60개 CPU tokenization 최대1800tokens·학습0회다.

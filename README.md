@@ -1,5 +1,9 @@
 # EchoMate
 
+## 2026-10-24 실제12B 짧은 학습 검증 — RELEASE BLOCKED
+
+실제 Gemma 4 12B에서 BF16 frozen base·NF4·LoRA 역전파/저장/재개와 원본16개 자료의32단계 학습을 확인했습니다. 8개 개발 질문에서는 인격·사실성의 동시 개선이 없어 어댑터는 기각하고 기본 생성을 유지했습니다. 2시간 CPU/mock 진단 보존 대조는 진행 중이며 완료 판정은 보류합니다. [조건·실제 자원·품질 한계](docs/TRAINING-FEASIBILITY-V2-QA.md).
+
 ## 2026-10-24 진단 메모리 누수 수정·학습 사전 검증 — BLOCKED
 
 반복 메모리 조회의 ctypes 타입 보존 누수와 부분 JSON 쓰기 실패 뒤 임시 파일 잔류를 수정했습니다. 실경과1시간 CPU/mock3108회·59재시작에서 오류·잔류 Task0을 확인했지만, private 메모리 증가가 남아8시간/GPU 장기 인증은 아닙니다. 실제12B 학습은 VRAM 계획 미충족으로 보류했고 소형 Unified CPU/NF4 역전파·저장·재개만 검증했습니다. 원본 합성52train/8개발 validation은 실제 토크나이저의 입력·정답 경계를 확인했으며 학습 전후 대화 품질 개선을 주장하지 않습니다. [실제 측정·회귀·Portable·재개](docs/TRAINING-STABILITY-QA.md), [릴리즈 게이트](docs/RELEASE-CHECKLIST.md).

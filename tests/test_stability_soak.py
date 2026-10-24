@@ -14,12 +14,13 @@ class StabilitySoak(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory(dir='local_data') as folder:
             root=Path(folder)/'bounded'
             result=await run(root,seconds=10,period=.001,max_iterations=3,sample_interval=.001,
-                sample_history_limit=1,diagnostic_retention=False)
+                sample_history_limit=1,diagnostic_retention=False,restart_every_iterations=2)
             saved=json.loads((root/'summary-private.json').read_text('utf-8'))
             stream=[json.loads(s) for s in (root/'samples.jsonl').read_text('utf-8').splitlines()]
             self.assertTrue(result['passed']);self.assertEqual(result['iterations'],3)
             self.assertEqual(len(saved['samples']),1);self.assertEqual(len(stream),3)
             self.assertEqual(saved['sample_count'],3);self.assertEqual(saved['mock_pipeline']['samples'],0)
+            self.assertEqual(result['counts']['restart'],1)
 
     async def test_mock_message_ids_are_unique_after_clear_and_reaction_has_no_message_id(self):
         import sys

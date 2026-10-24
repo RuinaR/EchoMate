@@ -2,6 +2,33 @@ import unittest
 
 
 class SelectedLoss(unittest.TestCase):
+    def test_frozen_prefix_has_no_graph_when_only_suffix_adapters_train(self):
+        import torch
+        from transformers import Gemma4UnifiedTextConfig,Gemma4UnifiedForCausalLM
+        from peft import get_peft_model,LoraConfig
+        from qlora_recipe import supervised_loss,prepare_suffix_inputs
+        cfg=Gemma4UnifiedTextConfig(vocab_size=32,hidden_size=32,intermediate_size=64,num_hidden_layers=3,
+            num_attention_heads=2,num_key_value_heads=1,head_dim=16,global_head_dim=16,
+            layer_types=['sliding_attention','sliding_attention','full_attention'],max_position_embeddings=64,use_cache=False)
+        base=Gemma4UnifiedForCausalLM(cfg).to(torch.bfloat16)
+        base.requires_grad_(False)
+        model=get_peft_model(base,LoraConfig(r=2,lora_alpha=4,lora_dropout=0,target_modules=r'model\.layers\.2\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={'use_reentrant':False})
+        prepare_suffix_inputs(model,2)
+        flags={}
+        def observer(index):
+            def observed(module,args,result):flags[index]=result.requires_grad
+            return observed
+        handles=[layer.register_forward_hook(observer(i)) for i,layer in enumerate(base.model.layers)]
+        try:
+            ids=torch.tensor([[2,4,6,8,1]]);loss=supervised_loss(model,ids,ids)
+            self.assertEqual(flags,{0:False,1:False,2:True})
+            loss.backward()
+            self.assertTrue(any(p.grad is not None and p.grad.abs().sum()>0 for p in model.parameters() if p.requires_grad))
+            self.assertFalse(base.get_input_embeddings().weight.requires_grad)
+        finally:
+            for handle in handles:handle.remove()
+
     def test_selected_causal_positions_equal_full_loss_and_gradients(self):
         import torch
         from transformers import Gemma4UnifiedTextConfig,Gemma4UnifiedForCausalLM

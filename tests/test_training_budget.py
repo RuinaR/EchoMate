@@ -3,6 +3,17 @@ from training_budget import estimate,GIB
 
 
 class TrainingBudget(unittest.TestCase):
+    def test_suffix_budget_is_explicitly_conditional_on_prefix_gradient_proof(self):
+        rows={f'model.language_model.layers.{i}.self_attn.q_proj.weight':dict(shape=[32,32],dtype='BF16') for i in range(3)}
+        cfg=dict(num_hidden_layers=3,hidden_size=32,vocab_size=100)
+        result=estimate(rows,cfg,last_layers=1,frozen_bf16=True)
+        self.assertEqual(result['target_count'],1)
+        self.assertIn('.layers.2.',result['targets'][0]['name'])
+        self.assertTrue(result['frozen_prefix_gradient_proof_required'])
+        self.assertFalse(estimate(rows,cfg)['frozen_prefix_gradient_proof_required'])
+        for value in (0,4,True):
+            with self.assertRaises(ValueError):estimate(rows,cfg,last_layers=value)
+
     def test_embedding_upcast_and_only_text_adapter_targets_are_counted(self):
         rows={
             'model.language_model.embed_tokens.weight':dict(shape=[100,32],dtype='BF16'),

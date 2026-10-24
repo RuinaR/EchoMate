@@ -8,15 +8,18 @@ import asyncio
 import ctypes
 import gc
 import json
+import sys
+from collections import Counter
 from pathlib import Path
 import tracemalloc
 import weakref
 from profile_runtime_memory import deep_size
 from verify_stability_soak import run
+from echomate_bot.loader_memory import memory_snapshot
 
 
 async def compare(root,retained,traced=False,iterations=240):
-    root=Path(root);refs=[];last=None;rows=[];baseline=None
+    root=Path(root);refs=[];last=None;rows=[];baseline=None;modules_before=len(sys.modules)
     def observe(runtime,traces,sample):
         nonlocal last
         if last is None or last()!=runtime:last=weakref.ref(runtime);refs.append(last)
@@ -28,16 +31,24 @@ async def compare(root,retained,traced=False,iterations=240):
     if traced:tracemalloc.start(1);baseline=tracemalloc.take_snapshot()
     try:
         result=await run(root,seconds=600,period=.001,restart_interval=10,observe=observe,
-            diagnostic_retention=retained,max_iterations=iterations,sample_history_limit=16)
-        gc.collect()
+            diagnostic_retention=retained,max_iterations=iterations,sample_history_limit=16,restart_every_iterations=60)
+        before_gc=memory_snapshot();collected=gc.collect();after_gc=memory_snapshot()
+        objects=Counter(type(x).__name__ for x in gc.get_objects()
+            if isinstance(type(x).__module__,str) and type(x).__module__.startswith('echomate'))
         report=dict(result=result,rows=rows,retained=retained,tracemalloc=traced,post_return_alive=sum(r() is not None for r in refs),
+            post_close_gc=dict(collected=collected,before=before_gc,after=after_gc,own_object_types=objects),
+            modules_before=modules_before,modules_after=len(sys.modules),
             caveat='Retention ablation, equal fixed input count; not elapsed endurance or disabled computation. Tracer changes resource cost.')
         if traced:
             after=tracemalloc.take_snapshot();report['allocations']=[dict(bytes=x.size_diff,count=x.count_diff,line=str(x.traceback)) for x in after.compare_to(baseline,'lineno')[:25]]
         (root/'retention-private.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
         print(json.dumps(dict(iterations=result['iterations'],passed=result['passed'],post_return_alive=report['post_return_alive'])))
     finally:
-        if traced:tracemalloc.stop()
+        if traced:
+            tracemalloc.stop()
+            if 'report' in locals():
+                report['after_tracer_stop']=memory_snapshot()
+                (root/'retention-private.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
 
 
 if __name__=='__main__':
