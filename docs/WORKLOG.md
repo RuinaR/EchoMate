@@ -2,9 +2,9 @@
 
 ## 2026-10-24 조건부 캐릭터 자료·QLoRA 비교
 
-e0e8e82→원본24원천104응답 v1 고정→실제 토크나이저/마스크→소형 Unified/NF4→실제12B128/256/349 backward→재개 불일치 중단→동일 forward/변동 backward 분해→child 한정 결정성 조합에서 exact replay→동일 v1의3LR/각16유효 optimizer step→전후32생성에서 공감 수렴·조회 오류로 모두 미채택. 더 낮은 loss/짧은 출력만으로 성공 처리하지 않았다. 후속 자료 v2는 가상/현실 문구 경계·카드anchor·저장명사 결합과 부정/조건/반어/삭제 후 조회를 보강한28원천120응답이며 아직 학습하지 않았다.
+e0e8e82→원본24원천104응답 v1 고정→실제 토크나이저/마스크→소형 Unified/NF4→실제12B128/256/349 backward→재개 불일치 중단→동일 forward/변동 backward 분해→child 한정 결정성 조합에서 exact replay→동일 v1의3LR/각16유효 optimizer step→전후32생성에서 공감 수렴·조회 오류로 모두 미채택. 더 낮은 loss/짧은 출력만으로 성공 처리하지 않았다. 후속 자료 v3는 가상/현실·소유자/동의·카드/저장명사 결합과 부정/조건/반어·실제 행동 선택 대비/긍정 근거를 보강한36원천152응답이며 아직 학습하지 않았다.
 
-최신857회귀 OK276.477초. GPU 종료 뒤 source39dab96 CPU/mock7200초 ON/OFF를 독립 임시 저장소에서 실행 중이다. 완료 전 PASS 금지, 실제 안전 branch를 보존한다. 운영/평가 자료·기존src/기본모델/실제 Discord는 유지하고 [신규 QA](DATASET-QLORA-QA.md)에 장시간·Portable·최종 보존/공개 감사·다음 재개를 누적한다.
+최신861회귀 OK264.269초. GPU 종료 뒤 source39dab96 CPU/mock7200초 ON/OFF를 독립 임시 저장소에서 실행 중이다. 완료 전 PASS 금지, 실제 안전 branch를 보존한다. 운영/평가 자료·기존src/기본모델/실제 Discord는 유지하고 [신규 QA](DATASET-QLORA-QA.md)에 장시간·Portable·최종 보존/공개 감사·다음 재개를 누적한다.
 
 
 ## 2026-10-24 BF16 저장·희소 loss·실제12B 학습 가능성

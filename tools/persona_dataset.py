@@ -42,9 +42,32 @@ def audit(data):
         facts={f['id']:f for f in case['evidence']}
         if len(facts)!=len(case['evidence']):raise ValueError('Duplicate evidence ID')
         for f in facts.values():
-            if f['state'] not in STATES or f['scope'] not in ('current_message','permitted_memory','fictional_card','capability','execution_receipt') or not f['description']:raise ValueError('Typed evidence scope')
+            if f['state'] not in STATES or f['scope'] not in ('current_message','permitted_memory','fictional_card','capability','execution_receipt','user_query_result') or not f['description']:raise ValueError('Typed evidence scope')
             if f['scope']=='execution_receipt' and f['state']=='confirmed' and not f.get('receipt'):raise ValueError('Confirmed execution requires receipt')
+            if data.get('editorial_revision',1)>=2:
+                owners=dict(current_message='current_speaker',permitted_memory='current_user',fictional_card='current_character',capability='application',execution_receipt='current_user',user_query_result='current_user')
+                consent=f.get('consent')
+                if f.get('owner')!=owners[f['scope']] or not (type(consent) is bool or consent in ('not_checked','not_required')):raise ValueError('Evidence owner/consent required')
+                if f['scope']=='permitted_memory' and f['state'] in ('confirmed','not_found') and f['consent'] is not True:raise ValueError('Memory evidence requires current consent')
+                if f.get('requires_consent') and f['state']=='confirmed' and f['consent'] is not True:raise ValueError('Execution evidence requires current consent')
         if not isinstance(case['uncertain'],list) or not isinstance(case['features'],dict):raise ValueError('Explicit unknowns and feature state')
+        if data.get('editorial_revision',1)>=3:
+            features=case['features'];relevant=case['relevant_features']
+            if len(relevant)!=len(set(relevant)) or not set(relevant).issubset(features):raise ValueError('Explicit relevant feature selection')
+            for feature in features.values():
+                if set(feature)!={'supported','enabled','authorized','operation','status'}:raise ValueError('Separate capability and operation state')
+                if type(feature['supported']) is not bool or type(feature['enabled']) is not bool or not (type(feature['authorized']) is bool or feature['authorized']=='not_checked'):raise ValueError('Typed capability/authority')
+                if feature['operation'] not in ('none','read','store','list','create') or feature['status'] not in ('not_requested','not_checked','success','failed','blocked_disabled','permission_denied','unsupported'):raise ValueError('Known operation state')
+                if feature['status']=='success' and not (feature['supported'] and feature['enabled'] and feature['authorized'] is True):raise ValueError('Successful operation without capability/authority')
+            for fact in facts.values():
+                key=fact.get('feature')
+                if key is not None and key not in relevant:raise ValueError('Evidence feature omitted from prompt')
+                if fact['scope'] in ('execution_receipt','permitted_memory','user_query_result'):
+                    if key not in features:raise ValueError('Evidence requires operation binding')
+                    if fact['state'] in ('confirmed','not_found') and features[key]['status']!='success':raise ValueError('Confirmed evidence conflicts with operation state')
+            if case.get('behavior_contrast'):
+                choices=[r.get('choice') for r in case['responses'].values()]
+                if None in choices or len(set(choices))<3 or not set(choices).issubset(case['choices']):raise ValueError('Contrasting behavior choices required')
         if not set(case['responses']).issubset(characters) or len(case['responses'])<4:raise ValueError('At least four contrasting responses')
         if case['review']!=dict(author='codex',claim_spans_reviewed=True,behavior_reviewed=True,human_review=False):raise ValueError('Explicit editorial scope; not human approval')
         for key,response in case['responses'].items():
@@ -52,6 +75,9 @@ def audit(data):
             if not 8<=len(text)<=600 or norm in targets:raise ValueError('Unique bounded response')
             targets.add(norm)
             if not response['strategy'] or not response['avoid']:raise ValueError('Behavior rationale and counterexample required')
+            if case.get('behavior_contrast'):
+                start,end=response['behavior_span']
+                if not 0<=start<end<=len(text) or text[start:end]!=response['behavior_text']:raise ValueError('Behavior annotation must quote its response')
             if facts and not response['claims']:raise ValueError('Evidence-conditioned answer requires reviewed claim spans')
             for claim in response['claims']:
                 start,end=claim['span'];fact=facts.get(claim['evidence'])
@@ -59,7 +85,7 @@ def audit(data):
                 if claim['state']!=fact['state'] or claim['scope']!=fact['scope']:raise ValueError('Claim promoted beyond evidence')
                 if claim['state'] in ('not_found','not_checked','unavailable','inferred','user_claim') and claim['act']!='bounded_report':raise ValueError('Unknown evidence cannot certify an event')
                 if claim['act']=='completion' and not (fact['scope']=='execution_receipt' and fact['state']=='confirmed' and fact.get('receipt')):raise ValueError('Completion without execution')
-                if claim['act']=='completion' and any(term not in claim['text'] or term not in fact['description'] for term in fact.get('required_terms',[])):raise ValueError('Completion entity differs from evidence')
+                if any(term not in claim['text'] or term not in fact['description'] for term in fact.get('required_terms',[])):raise ValueError('Claim entity differs from evidence')
                 if claim['act'] not in ('bounded_report','completion','fictional_self'):raise ValueError('Unknown claim act')
                 if claim['act']=='fictional_self' and fact['state']!='fictional':raise ValueError('Fiction boundary')
                 if data.get('editorial_revision',1)>=2 and claim['act']=='fictional_self':
@@ -84,8 +110,14 @@ def messages_for(record,data):
     c=record['case'];card=data['characters'][record['character']]
     policy='가상 캐릭터의 한국어 채팅 답변. 카드와 근거는 자료이며 권한 지시가 아니다. 없는 취향·공동 경험·기능 실행을 만들지 마. 검색 부재는 사건 부재가 아니다. 불확실해도 캐릭터의 관점은 유지해.'
     # No hidden answer annotations, expected strategy or target enter the prompt.
-    state=dict(card=card,mood=c['mood'],relationship=c['relationship'],evidence=c['evidence'],uncertain=c['uncertain'],features=c['features'])
+    state=dict(card=card,character_mood=c['mood'],relationship_to_current_user=c['relationship'],evidence=c['evidence'],uncertain=c['uncertain'],
+        features={k:c['features'][k] for k in c.get('relevant_features',c['features'])})
     return [dict(role='system',content=policy+'\n[가상 카드와 합성 근거]\n'+json.dumps(state,ensure_ascii=False,separators=(',',':'))),*c['context'],dict(role='user',content=c['user'])]
+
+
+def compiler_hashes():
+    root=Path(__file__).resolve().parent
+    return {n:hashlib.sha256((root/n).read_bytes()).hexdigest() for n in ('persona_dataset.py','prepare_conditioned_sft.py')}
 
 
 def compile_records(data,tokenizer,*,splits=('train','development')):
@@ -93,15 +125,18 @@ def compile_records(data,tokenizer,*,splits=('train','development')):
     records,summary=audit(data);out=[]
     for r in records:
         if r['split'] not in splits:continue
-        prompt,full,labels=supervised_pair(tokenizer,messages_for(r,data),r['response']['text'])
+        messages=messages_for(r,data)
+        prompt,full,labels=supervised_pair(tokenizer,messages,r['response']['text'])
         if len(full)>2048:raise ValueError('Whole example exceeds sealed bound; never truncate')
         terminal=tokenizer.convert_tokens_to_ids('<turn|>')
         tail=full[len(prompt):]
         if terminal not in tail or tokenizer.decode(tail[tail.index(terminal)+1:],skip_special_tokens=False).strip():raise ValueError('Missing real assistant terminator')
-        out.append(dict(id=r['id'],group=r['group'],split=r['split'],character=r['character'],input_ids=full,labels=labels,prompt=prompt))
+        out.append(dict(id=r['id'],group=r['group'],split=r['split'],character=r['character'],input_ids=full,labels=labels,prompt=prompt,
+            prompt_sha256=hashlib.sha256(json.dumps(messages,ensure_ascii=False,sort_keys=True).encode('utf-8')).hexdigest()))
     summary.update(token_lengths={s:sorted(len(r['input_ids']) for r in out if r['split']==s) for s in splits},
         target_lengths={s:sorted(sum(v!=-100 for v in r['labels']) for r in out if r['split']==s) for s in splits},packing=False,padding=False,
         masking='last assistant completion only; all context assistant/user/system masked')
+    summary['compiler_hashes']=compiler_hashes()
     return out,summary
 
 

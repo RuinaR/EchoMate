@@ -31,11 +31,12 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
     from echomate_bot.model_registry import ModelValidator
     from echomate_bot.instance import InstanceLease
     from training_budget import estimate
-    from persona_dataset import audit
+    from persona_dataset import audit,compiler_hashes
     raw=Path(source).read_bytes();data=json.loads(raw);source_records,_=audit(data);data_hash=hashlib.sha256(raw).hexdigest()
     expected={r['id']:(r['group'],r['split'],r['character']) for r in source_records if r['split'] in ('train','development')}
     exported=Path(export_path);summary=json.loads((exported/'summary.json').read_text('utf-8'))
     if summary['source_sha256']!=data_hash:raise ValueError('Data export changed')
+    if summary.get('compiler_hashes')!=compiler_hashes():raise ValueError('Prompt compiler changed; re-export before training')
     records=[];seen=set()
     for split in ('train','development'):
         b=(exported/(split+'.jsonl')).read_bytes()

@@ -20,7 +20,7 @@ class DatasetContract(unittest.TestCase):
     def setUp(self):self.data=json.loads((Path(__file__).parent/'fixtures/persona_evidence_pilot.json').read_text('utf-8'))
     def test_balanced_source_split_and_unseen_families(self):
         records,s=audit(self.data)
-        self.assertEqual(s['splits'],dict(train=80,development=16,independent=24));self.assertFalse(s['near_duplicates'])
+        self.assertEqual(s['splits'],dict(train=112,development=16,independent=24));self.assertFalse(s['near_duplicates'])
         self.assertFalse({r['group'] for r in records if r['split']=='train'}&{r['group'] for r in records if r['split']!='train'})
         self.assertFalse(any(r['character'] in ('shy','curious') for r in records if r['split']=='train'))
     def test_source_variants_cannot_cross_split(self):
@@ -44,6 +44,7 @@ class DatasetContract(unittest.TestCase):
             serialized=json.dumps(messages_for(r,self.data),ensure_ascii=False)
             self.assertNotIn(r['response']['text'],serialized);self.assertNotIn(r['response']['strategy'],serialized)
             self.assertEqual(messages_for(r,self.data)[-1]['content'],r['case']['user'])
+            self.assertIn('character_mood',serialized);self.assertIn('relationship_to_current_user',serialized)
     def test_private_identifier_and_exact_target_duplicate(self):
         for kind in ('id','duplicate'):
             x=copy.deepcopy(self.data)
@@ -56,8 +57,10 @@ class DatasetContract(unittest.TestCase):
     def test_multiturn_history_is_masked_and_terminal_whitespace_preserved(self):
         from persona_dataset import compile_records
         records,summary=compile_records(self.data,TemplateTokenizer())
-        self.assertEqual(len(records),96);self.assertFalse(summary['packing']);self.assertFalse(summary['padding'])
+        self.assertEqual(len(records),128);self.assertFalse(summary['packing']);self.assertFalse(summary['padding'])
+        self.assertEqual(set(summary['compiler_hashes']),{'persona_dataset.py','prepare_conditioned_sft.py'})
         for r in records:
+            self.assertEqual(len(r['prompt_sha256']),64)
             n=len(r['prompt']);self.assertEqual(r['labels'][:n],[-100]*n);self.assertEqual(r['labels'][n:],r['input_ids'][n:])
             self.assertEqual(r['input_ids'][-2:],[ord('§'),ord('\n')])
         self.assertTrue(any(r['id'].startswith('pe-dev-correction/') for r in records))
@@ -73,3 +76,16 @@ class DatasetContract(unittest.TestCase):
         c=next(c for c in self.data['cases'] if c['id']=='pe-save-confirmed');r=c['responses']['gentle'];a=r['claims'][0]
         r['text']=r['text'].replace('허브차','커피차');a['text']=a['text'].replace('허브차','커피차')
         with self.assertRaisesRegex(ValueError,'entity'):audit(self.data)
+    def test_memory_evidence_must_belong_to_current_user(self):
+        c=next(c for c in self.data['cases'] if c['id']=='pe-shared-lake');c['evidence'][0]['owner']='other_user'
+        with self.assertRaisesRegex(ValueError,'owner/consent'):audit(self.data)
+    def test_confirmed_memory_scope_requires_consent(self):
+        c=next(c for c in self.data['cases'] if c['id']=='pe-deleted-preference');c['evidence'][0]['consent']=False
+        with self.assertRaisesRegex(ValueError,'current consent'):audit(self.data)
+    def test_open_behavior_contrast_requires_three_annotated_choices(self):
+        c=next(c for c in self.data['cases'] if c.get('behavior_contrast'))
+        for r in c['responses'].values():r['choice']=c['choices'][0]
+        with self.assertRaisesRegex(ValueError,'Contrasting behavior'):audit(self.data)
+    def test_completed_receipt_cannot_coexist_with_unrequested_operation(self):
+        c=next(c for c in self.data['cases'] if c['id']=='pe-save-confirmed');c['features']['memory']['status']='not_requested'
+        with self.assertRaisesRegex(ValueError,'operation state'):audit(self.data)
