@@ -46,9 +46,7 @@ def release_idle_cuda(torch):
     torch.cuda.empty_cache()
 
 
-def memory_snapshot():
-    if os.name != 'nt':
-        raise OSError('Windows memory counters required')
+def _bind_windows_memory_api():
     from ctypes import wintypes as w
     size = ctypes.c_size_t
     class Status(ctypes.Structure):
@@ -67,6 +65,27 @@ def memory_snapshot():
     psapi.GetPerformanceInfo.argtypes = [ctypes.POINTER(Performance), w.DWORD]
     psapi.GetProcessMemoryInfo.argtypes = [w.HANDLE, ctypes.POINTER(Counters), w.DWORD]
     kernel.GetProcessHandleCount.argtypes = [w.HANDLE, ctypes.POINTER(w.DWORD)]
+    return Status,Performance,Counters,kernel,psapi,w
+
+
+_memory_api=None
+_memory_api_lock=threading.Lock()
+
+
+def _windows_memory_api():
+    # ctypes caches POINTER(Structure) globally. Defining fresh Structure types
+    # on each sample leaked those types, even after garbage collection.
+    global _memory_api
+    if _memory_api is None:
+        with _memory_api_lock:
+            if _memory_api is None:_memory_api=_bind_windows_memory_api()
+    return _memory_api
+
+
+def memory_snapshot():
+    if os.name != 'nt':
+        raise OSError('Windows memory counters required')
+    Status,Performance,Counters,kernel,psapi,w=_windows_memory_api()
     status = Status(); status.length = ctypes.sizeof(status)
     perf = Performance(); perf.cb = ctypes.sizeof(perf)
     proc = Counters(); proc.cb = ctypes.sizeof(proc)

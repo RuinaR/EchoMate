@@ -1,5 +1,6 @@
 """Admission, transient accounting and failed-load lifetime regressions."""
 import asyncio
+import ctypes
 import gc
 import os
 import sys
@@ -13,6 +14,26 @@ from echomate_bot.processes import model_memory_budget,ResourceLimitError,resour
 
 
 class LoaderMemory(unittest.TestCase):
+    @unittest.skipUnless(os.name=='nt','Windows counters')
+    def test_repeated_and_concurrent_counters_do_not_retain_new_pointer_types(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from echomate_bot.telemetry import process_ram_mib
+        memory_snapshot();process_ram_mib();gc.collect();before=set(ctypes._pointer_type_cache)
+        def sample(_):
+            self.assertGreater(process_ram_mib(),0)
+            return memory_snapshot()
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            rows=list(pool.map(sample,range(200)))
+        gc.collect()
+        self.assertEqual(set(ctypes._pointer_type_cache),before)
+        self.assertTrue(all(r['commit_limit']==r['commit_used']+r['commit_available'] for r in rows))
+
+    @unittest.skipUnless(os.name=='nt','Windows counters')
+    def test_metric_query_failure_is_unavailable_not_an_inference_failure(self):
+        from echomate_bot.telemetry import process_ram_mib
+        with patch('echomate_bot.loader_memory.memory_snapshot',side_effect=OSError('synthetic')):
+            self.assertIsNone(process_ram_mib())
+
     def test_sharded_reserve_only_uses_measured_profile_and_library_versions(self):
         from echomate_bot.loader_memory import loading_reserve,LOADER_PREPARATION_BYTES
         entry=SimpleNamespace(bytes=22*GIB,largest_shard_bytes=2*GIB,memory_profile='gemma4-12b-sharded-2g')

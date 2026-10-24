@@ -13,17 +13,10 @@ STAGES = frozenset({'scope_check','conversation_candidates','social','summary','
 def process_ram_mib():
     import os
     if os.name!='nt':return None
-    import ctypes
-    from ctypes import wintypes
-    class Counters(ctypes.Structure):
-        _fields_=[('cb',wintypes.DWORD),('faults',wintypes.DWORD)]+[(n,ctypes.c_size_t) for n in
-            ('peak_working','working','peak_paged','paged','peak_nonpaged','nonpaged','pagefile','peak_pagefile')]
-    counters=Counters();counters.cb=ctypes.sizeof(counters)
-    kernel=ctypes.windll.kernel32;kernel.GetCurrentProcess.restype=wintypes.HANDLE
-    fn=ctypes.windll.psapi.GetProcessMemoryInfo
-    fn.argtypes=[wintypes.HANDLE,ctypes.POINTER(Counters),wintypes.DWORD]
-    if not fn(kernel.GetCurrentProcess(),ctypes.byref(counters),counters.cb):return None
-    return round(counters.working/1048576,1)
+    from .loader_memory import memory_snapshot
+    try:return round(memory_snapshot()['process_ws']/1048576,1)
+    except OSError:return None
+
 
 
 class Trace:
