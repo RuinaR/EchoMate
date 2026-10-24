@@ -49,7 +49,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
             records.append(r)
     if seen!=set(expected):raise ValueError('Incomplete source export')
     train=[r for r in records if r['split']=='train'];dev=[r for r in records if r['split']=='development']
-    if not 64<=len(train)<=128 or len(train)%4 or len(dev)!=16 or set(r['group'] for r in train)&set(r['group'] for r in dev):raise ValueError('Bounded complete pilot size/splits')
+    if not 64<=len(train)<=128 or len(train)%4 or not 16<=len(dev)<=32 or len(dev)%4 or set(r['group'] for r in train)&set(r['group'] for r in dev):raise ValueError('Bounded complete pilot size/splits')
     total_steps=len(train)//4
     entry=ModelValidator().validate(model_path)
     if not entry.compatible:raise ValueError('Existing model must validate')

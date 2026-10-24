@@ -3565,9 +3565,9 @@
     },
     {
       "id": "pe-empty-query",
-      "source_group": "authored-situation-empty-query",
+      "source_group": "authored-situation-dev-reminder-query",
       "license": "MIT",
-      "split": "train",
+      "split": "development",
       "category": "positive_empty_query",
       "purpose": "행동 선택의 대비 또는 확인된 긍정 근거의 정확한 표현",
       "mood": "평온",
@@ -3688,9 +3688,9 @@
     },
     {
       "id": "pe-corrected-tea",
-      "source_group": "authored-situation-corrected-tea",
+      "source_group": "authored-situation-dev-correction",
       "license": "MIT",
-      "split": "train",
+      "split": "development",
       "category": "positive_correction",
       "purpose": "행동 선택의 대비 또는 확인된 긍정 근거의 정확한 표현",
       "mood": "평온",
@@ -3823,5 +3823,5 @@
     "Training/dev share four card families; independent includes two unseen families",
     "No externally sourced dialogue text or machine translation"
   ],
-  "editorial_revision": 3
+  "editorial_revision": 4
 }

@@ -2,7 +2,7 @@
 
 ## 2026-10-24 연구용349token·결정적 checkpoint
 
-단일 resident12B/NF4 frozenBF16의 전체 텍스트q/v rank4/alpha8/dropout0.05·accum4·정답위치loss에서128/256/349token backward와3LR의16유효 step/저장/재생을 확인했다. 결정성 설정은 연구 child에만 적용하며 앱의 추론/로딩을 변경하지 않는다. 인격·사실성 동시 개선이 없어 세 후보 모두 운영 미채택, no-LoRA 유지다. v3 자료112개/최대399token은 CPU export만 확인했고 GPU 학습은 아니다. 정확한 원천·비결정성 실패·메모리·미검증은 [신규 QA](DATASET-QLORA-QA.md)를 따른다.
+단일 resident12B/NF4 frozenBF16의 전체 텍스트q/v rank4/alpha8/dropout0.05·accum4·정답위치loss에서128/256/349token backward와3LR의16유효 step/저장/재생을 확인했다. 결정성 설정은 연구 child에만 적용하며 앱의 추론/로딩을 변경하지 않는다. 인격·사실성 동시 개선이 없어 세 후보 모두 운영 미채택, no-LoRA 유지다. v4 학습 자료104개/최대399token은 CPU export만 확인했고 GPU 학습은 아니다. 정확한 원천·비결정성 실패·메모리·미검증은 [신규 QA](DATASET-QLORA-QA.md)를 따른다.
 
 
 ## 2026-10-24 실험 전용12B frozenBF16/LoRA

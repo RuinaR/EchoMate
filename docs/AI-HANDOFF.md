@@ -2,9 +2,9 @@
 
 ## 2026-10-24 조건부 자료·결정적12B 재개 — 최신 / RELEASE BLOCKED
 
-시작e0e8e82 clean·원격 일치. 연구b56d231/39dab96과 후속 v3는 원본36원천/152응답(학습112/개발16/별도24)·출처/근거span/카드anchor/저장대상 결합·실제 토크나이저 마스크를 검사한다. 앞선 v1의64개를 실제349token/NF4/BF16/qv rank4·accum4·epoch1로5e-5/1e-4/2e-4 비교했다. CUDA backward 비결정성을 재현한 뒤 자체 child의 결정성 설정 조합에서 실제3후보 모두 optimizer/scheduler/RNG 재개 metric/가중치 완전 일치를 확인했다. 세 후보는 인격 수렴·조회 상태 오류 등으로 모두 미채택이며 v3는 아직 학습하지 않았다. 별도24개 GPU/최종316개 소비0. 최신 전체861검사 OK264.269초.
+시작e0e8e82 clean·원격 일치. 연구b56d231/39dab96과 후속 v4는 원본34원천 가족/36상황 변형/152응답(학습104/개발24/별도24)·출처/근거span/카드anchor/저장대상 결합·실제 토크나이저 마스크를 검사한다. 앞선 v1의64개를 실제349token/NF4/BF16/qv rank4·accum4·epoch1로5e-5/1e-4/2e-4 비교했다. CUDA backward 비결정성을 재현한 뒤 자체 child의 결정성 설정 조합에서 실제3후보 모두 optimizer/scheduler/RNG 재개 metric/가중치 완전 일치를 확인했다. 세 후보는 인격 수렴·조회 상태 오류 등으로 모두 미채택이며 v4는 아직 학습하지 않았다. 별도24개 GPU/최종316개 소비0. 최신 전체862검사 OK258.800초.
 
-GPU 모두 종료 후 source39dab96의 독립CPU/mock ON/OFF7200초가 진행 중이다. 완료 전2시간/8시간 PASS로 쓰지 않는다. private `local_data/dataset-qlora-20261024/checkpoint.json`·owner/progress/safety-stop/summary로 실제 상태를 확인한다. 소켓 차단은 Windows loop 생성 뒤 workload 전에 적용한다. 이전 unsafe sample 누락의 branch는 소급 확정할 수 없다. 장시간 종료 결과·공개 Portable/보존/최종 HEAD 마감은 [최신 QA](DATASET-QLORA-QA.md)를 우선한다. 앱src/운영 no-LoRA/개인 DB/설정/기존 모델은 변경하지 않았고 실제 Discord0이다.
+GPU 모두 종료 후 source39dab96의 독립CPU/mock ON/OFF가7200.031/7200.015초·6204/6275반복·각118재시작을 완료했다(exit0). 오류/잔류Task/반환후Runtime참조0이다. private25.75→42.65/25.76→30.34MiB·후반소폭증가로8시간/무누수/GPU장기PASS는 아니다. private `local_data/dataset-qlora-20261024/checkpoint.json`·owner/progress/safety-stop/summary로 실제 상태를 확인한다. 소켓 차단은 Windows loop 생성 뒤 workload 전에 적용한다. 이전 unsafe sample 누락의 branch는 소급 확정할 수 없다. 장시간 종료 결과·공개 Portable/보존/최종 HEAD 마감은 [최신 QA](DATASET-QLORA-QA.md)를 우선한다. 앱src/운영 no-LoRA/개인 DB/설정/기존 모델은 변경하지 않았고 실제 Discord0이다.
 
 
 ## 2026-10-24 12B frozenBF16 학습·진단 보존 대조 — 최신 / BLOCKED
