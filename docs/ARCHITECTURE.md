@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 2026-10-24 코드 실행·명시 조회의 송신 근거
+
+기존 Store write transaction에서만 만드는 불변 Receipt를 companion.handle_request의 선택 인자로 수집한다. 실제 행·범위·동의 epoch를 보존하고 transport의 마지막 fresh에서 새로운 SQLite read snapshot으로 대조한다. 명시 목록은 ReadReceipt로 기존 query 결과(표시 상한/빈 결과)와 관련 범주 동의를 검증한다. 기본 자유 생성은 본인 동의/허용된 관계 snapshot을 전후 대조한다. 자료는 요청 RAM에만 있으며 모델의 ID/도구/권한 제안으로 만들지 않는다. DB schema·원본 reply·기존 memory_guard·단일 Worker/모델·프로필 prompt는 유지한다. 부분 TEXT_REACTION 송신은 원자 취소로 취급하지 않는다. [재현·실제 SDK·한계](OPERATION-EVIDENCE-QA.md).
+
 ## 2026-10-24 1회 생성 평가 전용 구성
 
 `tools/service_persona_v4.py`의 compose는 기존 instruction/augment A와 반응 문단 B·가상 출처/배치 C만 비교한다. 앱/Settings/Runtime/Controller는 이를 import하지 않는다. `run_service_persona_v4.py`가 한 모델·기존 Worker에서 최종 template 입력을 비공개 계측하며 기존 metadata 직접 호출·Action·기억·원본 reply·SDK mock guard를 유지한다. C는 기존 selector와900/6000토큰 상한을 재사용하고 예산 부족을 기록한다. 인격·사실성 동시 개선이 없어 운영 기본 경로는 변경하지 않았다. [실제 입력/실패/검증 범위](SERVICE-PERSONA-V4-QA.md).
