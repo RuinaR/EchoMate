@@ -25,12 +25,53 @@ def pilot_protocol(train_count,dev_count,learning_rates):
     return dict(optimizer_steps=train_count//4,learning_rates=rates)
 
 
-def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_rates=(1e-4,),source_queue=None,original_source=None):
+def complete_group_curriculum(train,maximum=None):
+    """Opt-in whole-source curriculum; preserve source, split and every token."""
+    if maximum is not None and (type(maximum) is not int or maximum not in (256,320,384,512)):
+        raise ValueError('Explicit bounded curriculum length required')
+    groups={}
+    for r in train:
+        if r['split']!='train':raise ValueError('Curriculum cannot consume evaluation')
+        groups.setdefault(r['group'],[]).append(r)
+    included={g for g,rs in groups.items() if maximum is None or max(len(r['input_ids']) for r in rs)<=maximum}
+    selected=[r for r in train if r['group'] in included]
+    manifest=dict(maximum_group_tokens=maximum,source_training_records=len(train),training_records=len(selected),
+        included_ids=[r['id'] for r in selected],deferred_ids=[r['id'] for r in train if r['group'] not in included],
+        policy='All tokens and all variants of a source family retained together; deferred train remains train, never evaluation')
+    manifest['sha256']=hashlib.sha256(json.dumps(manifest,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    return selected,manifest
+
+
+def clear_unused_before_phase(torch,enabled):
+    """Public API only, before computation; never clean up to pass its guard."""
+    if not enabled:return None
+    torch.cuda.synchronize()
+    allocated=torch.cuda.memory_allocated();before=torch.cuda.memory_reserved()
+    torch.cuda.empty_cache()
+    if torch.cuda.memory_allocated()!=allocated:raise ValueError('Live allocation changed during idle-cache cleanup')
+    return dict(allocated_unchanged=allocated,reserved_before=before,reserved_after=torch.cuda.memory_reserved())
+
+
+def observed_admission_floor(proof,*,data_hash,headers,plan,cache_hygiene=False):
+    """A same-workload guard failure can only raise the planning floor."""
+    if proof.get('status')!='STOPPED' or proof.get('reason')!='vram' or proof.get('data_hash')!=data_hash or proof.get('headers')!=headers:
+        raise ValueError('Matching failed workload evidence required')
+    if any(proof['budget'].get(k)!=plan.get(k) for k in ('rank','sequence','supervised_tokens','frozen_bf16','last_layers')):
+        raise ValueError('Observed resource workload differs')
+    if proof.get('cache_hygiene',False)!=cache_hygiene:raise ValueError('Different allocator policy requires separate evidence')
+    before=proof['health']['free_vram_mib'];after=proof['resource_details']['health']['free_vram_mib']
+    if type(before) is not int or type(after) is not int or not 0<=after<2048 or before<=after:
+        raise ValueError('Actual stage reserve violation required')
+    return max(plan['planning_required_vram'],(before+2048-after)*1024**2)
+
+
+def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_rates=(1e-4,),source_queue=None,original_source=None,maximum_group_tokens=None,admission_proof=None,cache_hygiene=False):
     repo=Path(__file__).resolve().parents[1];out=Path(output).resolve()
     if not out.is_relative_to(repo/'local_data') or out.exists():raise ValueError('Fresh private output required')
     out.mkdir(parents=True)
     tiny_raw=Path(tiny_proof).read_bytes();tiny=json.loads(tiny_raw)
     if tiny.get('status')!='TINY_NEW_RECIPE_PASS_NOT_12B_QUALITY' or not tiny.get('replay'):raise ValueError('New NF4 dropout/accumulation/RNG proof required')
+    if cache_hygiene and not tiny.get('cache_hygiene_verified'):raise ValueError('Tiny NF4 cache hygiene replay proof required')
     replay_raw=Path(replay_proof).read_bytes();proof=json.loads(replay_raw)
     if not proof.get('deterministic') or not proof.get('repeat_metrics_equal') or proof.get('repeat_max_adapter_difference')!=0:raise ValueError('Actual deterministic backward replay proof required')
     os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1')
@@ -64,6 +105,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
             records.append(r)
     if seen!=set(expected):raise ValueError('Incomplete source export')
     train=[r for r in records if r['split']=='train'];dev=[r for r in records if r['split']=='development']
+    train,curriculum=complete_group_curriculum(train,maximum_group_tokens)
     protocol=pilot_protocol(len(train),len(dev),learning_rates)
     if set(r['group'] for r in train)&set(r['group'] for r in dev):raise ValueError('Source family leakage')
     total_steps=protocol['optimizer_steps']
@@ -79,8 +121,14 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
     cfg=json.loads((model_root/'config.json').read_text('utf-8'))['text_config']
     length=max(len(r['input_ids']) for r in train);target=max(sum(v!=-100 for v in r['labels']) for r in train)
     plan=estimate(rows,cfg,rank=4,sequence=length,supervised_tokens=target,frozen_bf16=True)
+    required=plan['planning_required_vram'];admission_hash=None
+    if admission_proof:
+        proof_raw=Path(admission_proof).read_bytes();admission_hash=hashlib.sha256(proof_raw).hexdigest()
+        required=observed_admission_floor(json.loads(proof_raw),data_hash=data_hash,headers=headers,plan=plan,cache_hygiene=cache_hygiene)
     report=dict(status='NOT_STARTED',quality='NOT_VERIFIED',data_hash=data_hash,data=summary,budget=plan,headers=headers,stages=[],trials=[],real_discord=False,tiny_proof_sha256=hashlib.sha256(tiny_raw).hexdigest())
-    report.update(deterministic=True,replay_proof_sha256=hashlib.sha256(replay_raw).hexdigest())
+    report.update(deterministic=True,replay_proof_sha256=hashlib.sha256(replay_raw).hexdigest(),curriculum=curriculum)
+    report.update(admission_required_vram=required,admission_proof_sha256=admission_hash)
+    report.update(cache_hygiene=cache_hygiene,cache_events=[])
     # Fixed before generation: legacy two-source core plus two new source groups.
     cohort=dev[:8]+[r for r in dev if r['id'].startswith('bst-authored-')][:8]
     report.update(protocol=protocol,development_generation_ids=[r['id'] for r in cohort],model_load_attempts=0)
@@ -90,9 +138,10 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
         from echomate_bot.processes import background_options
         def usage():return int(subprocess.check_output(['nvidia-smi','--query-gpu=utilization.gpu','--format=csv,noheader,nounits'],text=True,timeout=5,**background_options()).splitlines()[0])
         health=check_resources();report.update(before=memory_snapshot(),health=health,gpu_utilization_percent=usage())
-        if plan['planning_required_vram']>health['free_vram_mib']*1024**2:
+        if required>health['free_vram_mib']*1024**2:
             report['status']='BLOCKED_STATIC_VRAM';return
         reserve,preparation=loading_reserve(entry);model_memory_budget(reserve,preparation);lease=InstanceLease()
+        report['status']='LOADING'
         import torch
         torch.use_deterministic_algorithms(True)
         from transformers import AutoModelForMultimodalLM,AutoTokenizer,BitsAndBytesConfig
@@ -114,6 +163,9 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
             (out/'progress.json').write_text(json.dumps(report),encoding='utf-8')
             reason='ram' if v['ram_available']<3*GIB else 'commit' if v['commit_available']<2*GIB else 'vram' if v['health']['free_vram_mib']<2048 else None
             if reason:raise ResourceLimitError('Pilot stage reserve',reason,v)
+        def before_phase(name):
+            event=clear_unused_before_phase(torch,cache_hygiene)
+            if event is not None:report['cache_events'].append(dict(phase=name,**event))
         def evaluate(current,name):
             selected=cohort;result=[];current.eval()
             for r in selected:
@@ -135,7 +187,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
             return result
         with MemoryRecorder(sample=sample,interval=.2) as recorder:
             current=check_resources()
-            if plan['planning_required_vram']>current['free_vram_mib']*1024**2:raise ResourceLimitError('Pre-load VRAM changed','vram',current)
+            if required>current['free_vram_mib']*1024**2:raise ResourceLimitError('Pre-load VRAM changed','vram',current)
             model_memory_budget(reserve,preparation)
             report['model_load_attempts']+=1
             base,info=AutoModelForMultimodalLM.from_pretrained(model_path,local_files_only=True,trust_remote_code=False,output_loading_info=True,
@@ -146,13 +198,19 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
             # max length. No synthetic 512/1024 padding experiment is needed.
             model=get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
             for n in (128,256,length):
+                before_phase('before_backward_'+str(n))
                 ids=(torch.arange(n,device='cuda')%64+2).unsqueeze(0);labels=ids.clone();labels[:,:-target]=-100
                 loss=supervised_loss(model,ids,labels);loss.backward();model.zero_grad(set_to_none=True);loss=None;stage('backward_length_'+str(n))
             base=model.unload();model=None;gc.collect();release_idle_cuda(torch)
+            report['status']='BASELINE'
             report['baseline']=evaluate(base,'baseline')
+            with torch.no_grad():report['baseline_development_loss']=sum(float(supervised_loss(base,torch.tensor([r['input_ids']],device='cuda'),torch.tensor([r['labels']],device='cuda'))) for r in dev)/len(dev)
             for lr in protocol['learning_rates']:
+                report['status']='TRAINING'
                 torch.manual_seed(881);torch.cuda.manual_seed_all(881);random.seed(881)
                 trial=dict(lr=lr,rank=4,alpha=8,dropout=.05,accumulation=4,max_grad_norm=1.,epochs=1,warmup_ratio=.05,scheduler='cosine',deterministic=True,optimizer_steps=total_steps,steps=[])
+                trial['curriculum_sha256']=curriculum['sha256']
+                trial['cache_hygiene']=cache_hygiene
                 report['trials'].append(trial)
                 model=get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
                 trained=[p for p in model.parameters() if p.requires_grad];assert sum(p.numel() for p in trained)==plan['adapter_parameters']
@@ -160,8 +218,9 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
                 optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,total_steps,.05)
                 order=list(range(len(train)));random.shuffle(order)
                 batches=[(train[i]['input_ids'],train[i]['labels']) for i in order]
-                name='lr-'+str(lr);checkpoint=out/name/'step8';config={k:trial[k] for k in ('lr','rank','alpha','dropout','accumulation','max_grad_norm','epochs','warmup_ratio','scheduler','deterministic','optimizer_steps')}
+                name='lr-'+str(lr);checkpoint=out/name/'step8';config={k:trial[k] for k in ('lr','rank','alpha','dropout','accumulation','max_grad_norm','epochs','warmup_ratio','scheduler','deterministic','optimizer_steps','curriculum_sha256','cache_hygiene')}
                 for step in range(total_steps):
+                    before_phase('before_step_'+str(step+1))
                     value=train_window(model,batches[step*4:(step+1)*4],optimizer,scheduler,supervised_loss);trial['steps'].append(value);stage(name+'_step_'+str(step+1))
                     if step==7:save(checkpoint,model,optimizer,scheduler,step=8,data_hash=data_hash,config=config)
                     if step==8:
@@ -171,6 +230,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
                         model=PeftModel.from_pretrained(base,checkpoint/'adapter',is_trainable=True,local_files_only=True)
                         trained=[p for p in model.parameters() if p.requires_grad];optimizer=torch.optim.AdamW(trained,lr=lr);scheduler=cosine(optimizer,total_steps,.05)
                         assert restore(checkpoint,optimizer,scheduler,data_hash=data_hash,config=config)==8
+                        before_phase('before_replay_step9')
                         replay=train_window(model,batches[32:36],optimizer,scheduler,supervised_loss)
                         trial['resume_expected_metrics']=value;trial['resume_actual_metrics']=replay
                         trial['resume_absolute_deltas']={k:abs(replay[k]-value[k]) for k in value}
@@ -180,6 +240,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
                         stage(name+'_replayed_step9')
                 assert all(p._version==version and torch.equal(p.detach().flatten()[:16].cpu(),sentinel) for p,version,sentinel in frozen)
                 frozen=None;trial['base_sentinels_versions_unchanged']=True
+                report['status']='DEVELOPMENT_EVALUATION'
                 model.eval()
                 with torch.no_grad():trial['development_loss']=sum(float(supervised_loss(model,torch.tensor([r['input_ids']],device='cuda'),torch.tensor([r['labels']],device='cuda'))) for r in dev)/len(dev)
                 trial['generation']=evaluate(model,name)
@@ -201,8 +262,8 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--model',required=True);p.add_argument('--source',required=True);p.add_argument('--export',required=True);p.add_argument('--output',required=True);p.add_argument('--tiny-proof',required=True);p.add_argument('--replay-proof',required=True)
-    p.add_argument('--learning-rates',nargs='+',type=float,default=[1e-4]);p.add_argument('--source-queue');p.add_argument('--original-source');a=p.parse_args()
+    p.add_argument('--learning-rates',nargs='+',type=float,default=[1e-4]);p.add_argument('--source-queue');p.add_argument('--original-source');p.add_argument('--maximum-group-tokens',type=int);p.add_argument('--admission-proof');p.add_argument('--cache-hygiene',action='store_true');a=p.parse_args()
     import faulthandler
     faulthandler.dump_traceback_later(1500,exit=True)
     with patch('socket.socket.connect',side_effect=AssertionError('Offline')),patch('socket.getaddrinfo',side_effect=AssertionError('Offline')):
-        run(a.model,a.source,a.export,a.output,a.tiny_proof,a.replay_proof,learning_rates=a.learning_rates,source_queue=a.source_queue,original_source=a.original_source)
+        run(a.model,a.source,a.export,a.output,a.tiny_proof,a.replay_proof,learning_rates=a.learning_rates,source_queue=a.source_queue,original_source=a.original_source,maximum_group_tokens=a.maximum_group_tokens,admission_proof=a.admission_proof,cache_hygiene=a.cache_hygiene)
