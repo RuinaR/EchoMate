@@ -28,6 +28,25 @@ class ReminderFreshness(unittest.IsolatedAsyncioTestCase):
         self.transport.deliver_reminder.assert_not_awaited()
         self.assertEqual(self.store.reminders(2,4)[0]['status'],'scheduled')
 
+    async def test_model_switch_pauses_due_reminder_without_claim(self):
+        self.runtime.changing_model=True
+        self.transport.deliver_reminder=AsyncMock()
+        await self.runtime.deliver_reminders()
+        self.transport.deliver_reminder.assert_not_awaited()
+        self.assertEqual(self.store.reminders(2,4)[0]['status'],'scheduled')
+
+    async def test_completed_switch_during_permissions_invalidates_old_delivery(self):
+        permissions=self.transport.permissions
+        async def switched(event):
+            self.runtime.model_generation_epoch+=1
+            self.runtime.changing_model=False
+            return await permissions(event)
+        self.transport.permissions=switched
+        self.transport.deliver_reminder=AsyncMock()
+        await self.runtime.deliver_reminders()
+        self.transport.deliver_reminder.assert_not_awaited()
+        self.assertEqual(self.store.reminders(2,4)[0]['status'],'scheduled')
+
     async def test_pause_after_claim_blocks_last_delivery_check(self):
         delivered=[]
         async def send(row,fresh):

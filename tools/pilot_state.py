@@ -12,6 +12,7 @@ from pathlib import Path
 import random
 import shutil
 import tempfile
+import time
 
 
 def private_path(path):
@@ -71,7 +72,17 @@ def save(path,model,optimizer,scheduler,*,step,data_hash,config):
         for p in sorted(temp.rglob('*')):
             if p.is_file():manifest['files'][p.relative_to(temp).as_posix()]=hashlib.sha256(p.read_bytes()).hexdigest()
         (temp/'manifest.json').write_text(json.dumps(manifest),encoding='utf-8')
-        os.rename(temp,path)
+        # Windows can briefly deny renaming newly closed checkpoint files.
+        # Retry only sharing/access-denied errors, never replace a destination
+        # or change ACLs. Persistent failure retains the prior checkpoint.
+        for attempt in range(5):
+            if path.exists():raise FileExistsError('Immutable checkpoint')
+            try:
+                os.rename(temp,path)
+                break
+            except PermissionError as exc:
+                if getattr(exc,'winerror',None) not in (5,32,33) or attempt==4:raise
+                time.sleep(.02*(attempt+1))
     finally:
         if temp.exists():
             assert temp.resolve().is_relative_to(path.parent) and temp.name.startswith('.writing-')

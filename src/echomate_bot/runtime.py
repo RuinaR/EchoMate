@@ -80,6 +80,7 @@ class Runtime:
         self.stopped=False;self.diagnostics=[];self.progress={};self.latencies=[];self.traces=[]
         self.telemetry_lock=asyncio.Lock()
         self.model_lock=asyncio.Lock();self.changing_model=False;self.deferred_events={}
+        self.model_generation_epoch=0
         self.companion=companion;self.service_task=None;self.memory_queue=asyncio.Queue(maxsize=64)
         self.summary_tasks=set();self.summary_attempts={};self.summary_successes={};self.totals=Counter()
         from .sessions import Conversations
@@ -363,14 +364,15 @@ class Runtime:
 
     async def deliver_reminders(self):
         cfg=self.settings.get()
-        if self.stopped or not self.companion or not cfg['enabled'] or not cfg['reminders_enabled'] or not hasattr(self.transport,'deliver_reminder'):return
+        delivery_epoch=self.model_generation_epoch
+        if self.stopped or self.changing_model or not self.companion or not cfg['enabled'] or not cfg['reminders_enabled'] or not hasattr(self.transport,'deliver_reminder'):return
         if hasattr(self.transport,'ready') and not self.transport.ready():return
         for row in await asyncio.to_thread(self.companion.due,cfg['reminder_grace']):
             event=Event(int(row['source']),int(row['guild']),int(row['channel']),int(row['requester']),'',datetime.now(timezone.utc),parent=int(row['parent']) if row['parent'] else None)
             def within_scope(latest):
                 now=self.companion.clock()
                 return (row['due_at']<=now<=row['due_at']+latest['reminder_grace'] and
-                        not self.stopped and latest['enabled'] and latest['reminders_enabled'] and latest['text'] and
+                        not self.stopped and not self.changing_model and delivery_epoch==self.model_generation_epoch and latest['enabled'] and latest['reminders_enabled'] and latest['text'] and
                         scope(latest,event.guild,event.channel,event.parent,action='text')!='silent')
             async def allowed():
                 latest=self.settings.get()
@@ -439,6 +441,7 @@ class Runtime:
         import re
         if mode!='base' and not re.fullmatch(r'local:[0-9a-f]{24}',mode):raise ValueError('Unknown model')
         async with self.model_lock:
+            self.model_generation_epoch+=1
             self.changing_model=True;self.note('model_preparing')
             try:
                 for task in self.summary_tasks:task.cancel()

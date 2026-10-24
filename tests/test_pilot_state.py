@@ -77,6 +77,33 @@ class PilotState(unittest.TestCase):
             self.assertEqual((p/'state.pt').read_bytes(),old);self.assertEqual(list(Path(folder).iterdir()),[p])
             with self.assertRaises(FileExistsError):save(p,self.model,self.opt,self.sched,step=0,data_hash='a',config={})
 
+    def test_transient_windows_publish_lock_retries_without_rewriting(self):
+        import os
+        original=os.rename
+        denied=PermissionError('Synthetic sharing lock');denied.winerror=32
+        calls=[]
+        def publish(source,target):
+            calls.append((source,target))
+            if len(calls)==1:raise denied
+            return original(source,target)
+        with tempfile.TemporaryDirectory(dir='local_data') as folder:
+            p=Path(folder)/'saved'
+            with patch('pilot_state.os.rename',side_effect=publish),patch('pilot_state.time.sleep') as sleep:
+                save(p,self.model,self.opt,self.sched,step=0,data_hash='a',config={})
+            self.assertEqual(len(calls),2);sleep.assert_called_once_with(.02)
+            inspect(p,data_hash='a',config={})
+            self.assertEqual(list(Path(folder).iterdir()),[p])
+
+    def test_persistent_windows_publish_lock_is_bounded_and_cleans_partial(self):
+        denied=PermissionError('Synthetic persistent sharing lock');denied.winerror=5
+        with tempfile.TemporaryDirectory(dir='local_data') as folder:
+            p=Path(folder)/'saved'
+            with patch('pilot_state.os.rename',side_effect=denied) as rename,patch('pilot_state.time.sleep') as sleep:
+                with self.assertRaises(PermissionError):
+                    save(p,self.model,self.opt,self.sched,step=0,data_hash='a',config={})
+            self.assertEqual(rename.call_count,5);self.assertEqual(sleep.call_count,4)
+            self.assertEqual(list(Path(folder).iterdir()),[])
+
     def test_unified_checkpointing_with_dropout_accumulation(self):
         from transformers import Gemma4UnifiedTextConfig,Gemma4UnifiedForCausalLM
         from peft import get_peft_model,LoraConfig
