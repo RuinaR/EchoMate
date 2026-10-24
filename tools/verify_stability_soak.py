@@ -55,6 +55,16 @@ class SoakTransport(Transport):
         return None if action.kind.value=='REACTION' else next(self.message_ids)
 
 
+def batch_matches(sent,expected):
+    """Different users may finish preparation in either order, never swap IDs.
+
+    Fair queue order starts at queue admission, not asynchronous event arrival.
+    Exact multiplicity AND the source-to-author binding remain mandatory.
+    """
+    return (Counter(x['source'] for x in sent)==Counter(expected.keys()) and
+            all(x['author']==expected.get(x['source']) and x['kind']=='TEXT' for x in sent))
+
+
 async def capacity_probe(root,backend):
     """32 completed synthetic histories, then one actual GPU reply at capacity."""
     root=private_path(root);root.mkdir(parents=True,exist_ok=False)
@@ -106,7 +116,7 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
             denied=Event(base+2,2,99,uid,'<@999> 허용하지 않은 곳',datetime.now(timezone.utc),member_mentions=(999,))
             await runtime.ingest(denied);await settle(runtime,mock)
             sent=transport.sent[begin:];sources=[x['source'] for x in sent]
-            if sources!=[base,base+1]:
+            if not batch_matches(sent,{base:uid,base+1:4+(i+1)%8}):
                 atomic_private_json(root/'failure-private.json',dict(expected=[base,base+1],actual=sources,traces=runtime.traces,diagnostics=runtime.diagnostics))
                 raise AssertionError('Duplicate, missing or wrong reply target')
             counts['independent_replies']+=2;counts['duplicate_and_scope_veto']+=2
