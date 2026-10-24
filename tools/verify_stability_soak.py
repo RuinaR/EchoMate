@@ -108,11 +108,12 @@ async def capacity_probe(root,backend):
 
 
 async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_interval=60,observe=None,
-              diagnostic_retention=True,sample_history_limit=256,max_iterations=None,sample_interval=5,restart_every_iterations=None):
+              diagnostic_retention=True,sample_history_limit=256,max_iterations=None,sample_interval=5,restart_every_iterations=None,reminder_seed_per_user=0):
     if not 0<seconds<=86400 or period<=0 or gpu_interval<1 or restart_interval<=0:raise ValueError('Invalid soak duration')
     if type(sample_history_limit) is not int or not 1<=sample_history_limit<=4096 or sample_interval<=0:raise ValueError('Bounded sample history required')
     if max_iterations is not None and (type(max_iterations) is not int or not 1<=max_iterations<=10000):raise ValueError('Bounded fixed workload required')
     if restart_every_iterations is not None and (type(restart_every_iterations) is not int or not 1<=restart_every_iterations<=10000):raise ValueError('Bounded restart count required')
+    if type(reminder_seed_per_user) is not int or not 0<=reminder_seed_per_user<=30:raise ValueError('Bounded fixture quota seed required')
     root=private_path(root);root.mkdir(parents=True,exist_ok=False)
     started=time.monotonic();counts=Counter();samples=[];traces=[];gpu_rows=[];errors=[];sample_count=0
     sample_stream=(root/'samples.jsonl').open('w',encoding='utf-8')
@@ -122,6 +123,10 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
     store=CompanionStore(root/'companion.sqlite3')
     for uid in range(4,12):
         for category in ('relationships','memory','summaries'):store.set_consent(2,uid,category,True)
+        for seed in range(reminder_seed_per_user):
+            fixture_counts=Counter()
+            reminder_probe(store,Event(8000000+uid*100+seed,2,3,uid,'합성 quota 사전 이력',datetime.now(timezone.utc)),fixture_counts)
+            counts['seeded_reminder_cancellations']+=fixture_counts['reminder_cancel']
     mock=MockBackend();transport=SoakTransport();runtime=None
     def make_runtime():
         value=Runtime(settings,Borrowed(mock),transport,None,None,ledger_path=root/'sent.sqlite3',rng=random.Random(2026),companion=store)
@@ -229,6 +234,7 @@ async def run(root,seconds=1200,backend=None,gpu_interval=120,period=1,restart_i
             initial_threads=initial_threads,final_threads=threading.active_count(),samples=samples,gpu=gpu_rows,
             sample_count=sample_count,sample_history_limit=sample_history_limit,diagnostic_retention=diagnostic_retention,fixed_iterations=max_iterations,
             restart_every_iterations=restart_every_iterations,
+            reminder_seed_per_user=reminder_seed_per_user,
             mock_pipeline=summarize(traces[-2000:]),real_discord=False,real_gpu=backend is not None,
             caution='Elapsed local mixed soak, not 24-hour use, semantic quality or cross-Windows certification')
         atomic_private_json(root/'summary-private.json',result)

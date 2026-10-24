@@ -16,6 +16,7 @@ import weakref
 from profile_runtime_memory import deep_size
 from verify_stability_soak import run
 from echomate_bot.loader_memory import memory_snapshot
+from verify_retention_soak import enforce_safety
 
 
 async def compare(root,retained,traced=False,iterations=240,measure_size=True,size_interval=5):
@@ -23,7 +24,7 @@ async def compare(root,retained,traced=False,iterations=240,measure_size=True,si
     def observe(runtime,traces,sample):
         nonlocal last,next_size,trace_bytes
         if last is None or last()!=runtime:last=weakref.ref(runtime);refs.append(last)
-        if sample['process_private']>256*1024**2 or sample['ram_available']<3*1024**3 or sample['commit_available']<2*1024**3:raise RuntimeError('Diagnostic resource reserve')
+        enforce_safety(root,sample)
         if measure_size and sample['seconds']>=next_size:
             trace_bytes=deep_size((traces,runtime.traces));next_size=sample['seconds']+size_interval
         row=dict(seconds=sample['seconds'],private=sample['process_private'],handles=sample['process_handles'],

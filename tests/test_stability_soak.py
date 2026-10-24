@@ -9,6 +9,33 @@ from echomate_bot.loader_memory import MemoryRecorder,memory_snapshot
 
 
 class StabilitySoak(unittest.IsolatedAsyncioTestCase):
+    async def test_soak_continues_at_real_quota_without_loosening_it(self):
+        from verify_stability_soak import run
+        with tempfile.TemporaryDirectory(dir='local_data') as folder:
+            result=await run(Path(folder)/'seeded',seconds=30,period=.001,max_iterations=15,reminder_seed_per_user=30)
+            self.assertTrue(result['passed']);self.assertEqual(result['iterations'],15)
+            self.assertEqual(result['counts']['seeded_reminder_cancellations'],240)
+            self.assertEqual(result['counts']['reminder_limit_veto'],1)
+            self.assertEqual(result['counts'].get('reminder_cancel',0),0)
+
+    async def test_unsafe_sample_is_preserved_before_safety_exception(self):
+        from unittest.mock import patch
+        import verify_retention_soak
+        from echomate_bot.processes import ResourceLimitError
+        class Probe:
+            traces=[]
+        with tempfile.TemporaryDirectory(dir='local_data') as folder:
+            for reason,field,value in (('ram','ram_available',2*1024**3),('commit','commit_available',1024**3),('probe_private','process_private',257*1024**2)):
+                root=Path(folder)/reason;root.mkdir()
+                async def fake_run(*args,observe,**kwargs):
+                    sample=dict(seconds=0,process_private=20*1024**2,ram_available=4*1024**3,commit_available=4*1024**3)
+                    sample[field]=value;observe(Probe(),[],sample)
+                with patch.object(verify_retention_soak,'run',fake_run):
+                    with self.assertRaises(ResourceLimitError) as caught:await verify_retention_soak.verify(root,60)
+                self.assertEqual(caught.exception.reason,reason)
+                saved=json.loads((root/'safety-stop.json').read_text('utf-8'))
+                self.assertEqual(saved['reason'],reason);self.assertEqual(saved['sample'][field],value)
+
     def test_daily_reminder_quota_is_expected_veto_without_deleting_history(self):
         from collections import Counter
         from datetime import datetime,timezone
