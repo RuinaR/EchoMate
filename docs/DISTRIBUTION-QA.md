@@ -1,5 +1,9 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## 2026-10-24 2단계 후보 기본 비활성 마감
+
+공개 src/docs159파일·README/기본 프로필161쌍 hash와 manifest21,563파일 membership/크기를 대조했다. 번들22검사 OK3.042초·두 VBS `/check` PASS. 후보 모듈/Runtime 주입 경계는 포함하지만 기본None이며 UI/설정에서 활성화하지 않는다. 변경 공개 파일만 증분 반영했고 새 GUI·번들 GPU·다른 Windows·전체 인터프리터 재해시를 주장하지 않는다. 운영4파일 hash 동일·개인 자료 비포함. [실제 GPU 비교 및 기각](TWO-STAGE-GENERATION-V3-QA.md).
+
 ## 2026-10-24 레퍼런스 평가 v2 마감
 
 운영 실행 src는 `4c4c9b2`와 동일하며 평가 도구는 앱 번들에 활성화하지 않는다. 공개 src/docs157파일·README/기본 프로필·manifest21,561 membership/크기와 공개 hash를 대조했다. 번들16검사 OK1.057초·두 VBS `/check` PASS. 문서 증분 갱신이며 전체 인터프리터 재해시/새 모델 로딩/GUI/다른 Windows 검증으로 주장하지 않는다. 운영4파일 hash 동일, 원문/가중치/개인 자료 비포함. [품질 후보 기각과 상세 범위](REFERENCE-PERSONA-V2-QA.md).

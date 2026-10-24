@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 2026-10-24 기본 비활성 응답 파이프라인 주입
+
+Runtime(response_pipeline=None)은 기존 생성 경로다. 실험에만 TwoStage.respond를 주입해 동일 Worker의 계획1회→기존 CompanionStore/public_state/카드 선택의 읽기→기존 backend.text→Generated(text,fresh)를 연결한다. 계획은 신원·청자·Action·DB 쓰기 권한이 없고 원본 reply도 지정할 수 없다. Runtime의 마지막 transport fresh가 생성 근거 guard를 추가 호출한다. 빈 조회도 동일 질의로 재검사한다. 앱/설정/Controller/미리보기에는 활성화하지 않는다. 일반 기억 조회와 중복·형식/의미 실패·팩트 표현 준수 한계 때문에 운영 책임을 대체했다고 주장하지 않는다. [계약과 실험 기각](TWO-STAGE-GENERATION-V3-QA.md).
+
 ## 2026-10-24 생성에 사용한 기억의 송신 수명주기
 
 일반 기억 조회는 동의 버전을 먼저 읽고 서버·작성자·채널 범위의 실제 기억 최대3개를 선택한다. `memory_context`에는 실제 memory_id/원본 출처를 포함하며 가상 카드나 생성 문장은 저장 영수증이 아니다. `memory_evidence_current`는 읽기 트랜잭션에서 해당 동의 버전·실제 행 전체·활성/만료/원본 삭제 상태를 비교한다. 조회 직후와 transport의 최종 fresh callback에서 검증하며 삭제·정정·철회·재동의·조회 오류 시 오래된 근거의 송신을 막는다. 다른 사용자의 동의 변경은 무관한 요청을 취소하지 않는다.

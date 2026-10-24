@@ -79,7 +79,8 @@ async def run(args):
     profiles=presets();cohort=cases()
     if args.confirmation:
         cohort=[dict(id='paper-city',kind='strategy',text='비 오는 날 종이로 작은 도시를 만들었어. 빈 창문은 어떻게 꾸며볼까?'),
-            dict(id='plant-name',kind='facts',text='지난번에 내가 반려식물 이름을 말했지. 그 이름을 다시 불러줘.')]
+            dict(id='plant-name',kind='facts',text='지난번에 내가 반려식물 이름을 말했지. 그 이름을 다시 불러줘.'),
+            *[dict(c,regression=True) for c in cases() if c['id'] in ('future','virtual-recall')]]
     for p in profiles.values():p['name']='EchoMate'
     from echomate_bot.character_profiles import validate_profile
     for case in cohort:
@@ -99,6 +100,7 @@ async def run(args):
             failures=0;planned=0
             for i,case in enumerate(cohort):
                 for j,(key,original) in enumerate(profiles.items()):
+                    if case.get('regression') and key not in ('playful','dry'):continue
                     profile=dict(original)
                     if case['kind']=='mood':profile['mood']='피곤함'
                     arms=['baseline','always'] if (i+j)%2==0 else ['always','baseline']
@@ -108,7 +110,7 @@ async def run(args):
                         check_resources();cursor=backend.metrics[-1];t=time.monotonic();observed=[]
                         pipeline=TwoStage(arm,observer=observed.append) if arm!='baseline' else None
                         detail=await runtime_answer(backend,profile,case['text'],root/f'{case["id"]}-{key}-{arm}',pipeline=pipeline,configure=configure(case))
-                        rows.append(dict(record_id=f'{case["id"]}-{key}-{arm}',phase=arm,case=case['id'],kind=case['kind'],profile=key,arm=arm,seconds=time.monotonic()-t,
+                        rows.append(dict(record_id=f'{case["id"]}-{key}-{arm}',phase=arm,cohort='regression' if case.get('regression') else 'new_confirmation' if args.confirmation else 'development',case=case['id'],kind=case['kind'],profile=key,arm=arm,seconds=time.monotonic()-t,
                             calls=metrics_since(backend.metrics,cursor),planning=observed,**detail))
                         save(root/'results-private.json',rows);print('DONE',len(rows),case['id'],key,arm,flush=True)
                         if pipeline:
@@ -118,10 +120,23 @@ async def run(args):
                 for arm in ('baseline','always'):
                     rows.append(await sequence(backend,profiles['playful'],arm,root/('sequence-'+arm)))
                     save(root/'results-private.json',rows)
+                # One synthetic consent race after proof lookup, before actual
+                # second-stage GPU generation; the old proof must never send.
+                store_ref=[];observed=[];original_text=backend.text;cursor=backend.metrics[-1];t=time.monotonic()
+                def setup_race(runtime,store,settings):
+                    store.set_consent(2,4,'memory',True);store.add_memory(2,4,3,'나는 찹쌀떡을 간식으로 좋아해');store_ref.append(store)
+                async def revoke_then_generate(context,cfg):
+                    store_ref[0].set_consent(2,4,'memory',False)
+                    return await original_text(context,cfg)
+                with patch.object(backend,'text',side_effect=revoke_then_generate):
+                    detail=await runtime_answer(backend,profiles['analytical'],'내가 좋아하는 간식을 확인해서 말해줘.',root/'revoke-race',pipeline=TwoStage(observer=observed.append),configure=setup_race)
+                rows.append(dict(record_id='revoke-race',phase='always',arm='always',cohort='race',case='revoke-race',kind='race',profile='analytical',
+                    seconds=time.monotonic()-t,calls=metrics_since(backend.metrics,cursor),planning=observed,expected_sends=0,**detail))
+                save(root/'results-private.json',rows)
             summary.update(status='COMPLETED_NOT_QUALITY_PASS',plan_failures=failures,memory=recorder.report(),conditions={
                 arm:dict(n=len(group),seconds=distribution([r['seconds'] for r in group]),calls=sum(len(r['calls']) for r in group),
-                    sends=sum(len(r['sent']) for r in group),reply_errors=sum(not r['sdk_reply_ok'] for r in group))
-                for arm in ('baseline','always','conditional') for group in ([r for r in rows if r['arm']==arm],)})
+                    sends=sum(len(r['sent']) for r in group),reply_errors=sum(s.get('sdk_reply')!=s['source'] for r in group for s in r['sent']))
+                for arm in ('baseline','always','conditional') for group in ([r for r in rows if r['arm']==arm and r['kind'] not in ('sequence','race')],)})
     except BaseException as exc:
         summary.update(status='STOPPED',error=type(exc).__name__);raise
     finally:
