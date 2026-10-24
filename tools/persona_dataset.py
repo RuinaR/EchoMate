@@ -22,8 +22,12 @@ def normalized(text):
 
 
 def audit(data):
-    if data['schema']!=1 or data['provenance']!=dict(kind='original_authored_synthetic',license='MIT',private_data=False,evaluation_corpus_reused=False):
-        raise ValueError('Original MIT source only')
+    original=data['provenance']==dict(kind='original_authored_synthetic',license='MIT',private_data=False,evaluation_corpus_reused=False)
+    derived=data['provenance']==dict(kind='source_conditioned_authored',license='MIT+CC-BY-4.0',private_data=False,evaluation_corpus_reused=False)
+    if data['schema']!=1 or not (original or derived):raise ValueError('Explicit original or attributed source-conditioned provenance required')
+    if derived:
+        source=data.get('source_manifest',{})
+        if source.get('archive_sha256')!='5fbed0068ee89e2d43b93c3ecb341e784617033efa5e8e911a219d4eda6134a6' or source.get('license')!='CC-BY-4.0' or not source.get('attribution') or not source.get('license_url') or not re.fullmatch('[a-f0-9]{64}',source.get('queue_sha256','')):raise ValueError('Fixed licensed source lineage required')
     characters=data['characters'];seen=set();groups={};targets=set();records=[];warnings=[]
     if not 4<=len(characters)<=12:raise ValueError('Bounded character definitions')
     for key,c in characters.items():
@@ -35,7 +39,10 @@ def audit(data):
         if group in groups and groups[group]!=split:raise ValueError('Source family leaked between splits')
         groups[group]=split
         if not case['mood'] or case['relationship'] not in ('stranger','ordinary','consented_close','distanced','discomfort'):raise ValueError('Explicit mood and relationship')
-        if case['license']!='MIT' or not case['purpose'] or not case['category']:raise ValueError('Source license and purpose required')
+        if case['license'] not in (('MIT','CC-BY-4.0') if derived else ('MIT',)) or not case['purpose'] or not case['category']:raise ValueError('Source license and purpose required')
+        if case['license']=='CC-BY-4.0':
+            ref=case.get('source_ref',{})
+            if type(ref.get('source_index')) is not int or ref['source_index']<0 or case['source_group']!='bst-component:'+ref.get('component','') or not all(re.fullmatch('[a-f0-9]{64}',ref.get(k,'')) for k in ('component','dialogue_sha256')) or not ref.get('changes'):raise ValueError('Derived case requires source-family and adaptation notice')
         context=case['context']
         if not isinstance(context,list) or len(context)>12 or any(m['role'] not in ('user','assistant') or not m['content'].strip() for m in context):raise ValueError('Bounded text dialogue')
         if context and context[-1]['role']!='assistant':raise ValueError('Context must precede current user')

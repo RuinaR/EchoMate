@@ -16,7 +16,16 @@ import time
 from unittest.mock import patch
 
 
-def run(model_path,source,export_path,output,tiny_proof,replay_proof):
+def pilot_protocol(train_count,dev_count,learning_rates):
+    if not 64<=train_count<=512 or train_count%4 or not 16<=dev_count<=128 or dev_count%4:
+        raise ValueError('Bounded complete pilot size/splits')
+    rates=tuple(learning_rates)
+    if not 1<=len(rates)<=3 or len(set(rates))!=len(rates) or any(r not in (5e-5,1e-4,2e-4) for r in rates):
+        raise ValueError('Explicit limited learning rate choices')
+    return dict(optimizer_steps=train_count//4,learning_rates=rates)
+
+
+def run(model_path,source,export_path,output,tiny_proof,replay_proof,*,learning_rates=(1e-4,),source_queue=None,original_source=None):
     repo=Path(__file__).resolve().parents[1];out=Path(output).resolve()
     if not out.is_relative_to(repo/'local_data') or out.exists():raise ValueError('Fresh private output required')
     out.mkdir(parents=True)
@@ -33,6 +42,12 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
     from training_budget import estimate
     from persona_dataset import audit,compiler_hashes
     raw=Path(source).read_bytes();data=json.loads(raw);source_records,_=audit(data);data_hash=hashlib.sha256(raw).hexdigest()
+    if data['provenance']['kind']=='source_conditioned_authored':
+        if not source_queue or not original_source:raise ValueError('Derived data requires original and acquired source queue')
+        queue_raw=Path(source_queue).read_bytes()
+        if hashlib.sha256(queue_raw).hexdigest()!=data['source_manifest']['queue_sha256']:raise ValueError('Source queue changed')
+        from curate_training_situations import lineage
+        lineage(data,json.loads(queue_raw),json.loads(Path(original_source).read_text('utf-8')))
     expected={r['id']:(r['group'],r['split'],r['character']) for r in source_records if r['split'] in ('train','development')}
     exported=Path(export_path);summary=json.loads((exported/'summary.json').read_text('utf-8'))
     if summary['source_sha256']!=data_hash:raise ValueError('Data export changed')
@@ -49,8 +64,9 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
             records.append(r)
     if seen!=set(expected):raise ValueError('Incomplete source export')
     train=[r for r in records if r['split']=='train'];dev=[r for r in records if r['split']=='development']
-    if not 64<=len(train)<=128 or len(train)%4 or not 16<=len(dev)<=32 or len(dev)%4 or set(r['group'] for r in train)&set(r['group'] for r in dev):raise ValueError('Bounded complete pilot size/splits')
-    total_steps=len(train)//4
+    protocol=pilot_protocol(len(train),len(dev),learning_rates)
+    if set(r['group'] for r in train)&set(r['group'] for r in dev):raise ValueError('Source family leakage')
+    total_steps=protocol['optimizer_steps']
     entry=ModelValidator().validate(model_path)
     if not entry.compatible:raise ValueError('Existing model must validate')
     model_root=Path(entry.path)
@@ -65,6 +81,9 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
     plan=estimate(rows,cfg,rank=4,sequence=length,supervised_tokens=target,frozen_bf16=True)
     report=dict(status='NOT_STARTED',quality='NOT_VERIFIED',data_hash=data_hash,data=summary,budget=plan,headers=headers,stages=[],trials=[],real_discord=False,tiny_proof_sha256=hashlib.sha256(tiny_raw).hexdigest())
     report.update(deterministic=True,replay_proof_sha256=hashlib.sha256(replay_raw).hexdigest())
+    # Fixed before generation: legacy two-source core plus two new source groups.
+    cohort=dev[:8]+[r for r in dev if r['id'].startswith('bst-authored-')][:8]
+    report.update(protocol=protocol,development_generation_ids=[r['id'] for r in cohort],model_load_attempts=0)
     model=None;base=None;optimizer=None;scheduler=None;recorder=None;lease=None;trained=None;frozen=None;ids=None;labels=None;loss=None;expected=None;started=time.monotonic()
     try:
         import subprocess
@@ -96,8 +115,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
             reason='ram' if v['ram_available']<3*GIB else 'commit' if v['commit_available']<2*GIB else 'vram' if v['health']['free_vram_mib']<2048 else None
             if reason:raise ResourceLimitError('Pilot stage reserve',reason,v)
         def evaluate(current,name):
-            selected=dev[:8];result=[];current.eval()
-            # Fixed before all candidates: first 2 source groups x 4 characters.
+            selected=cohort;result=[];current.eval()
             for r in selected:
                 ids=torch.tensor([r['prompt']],device='cuda');tick=time.monotonic()
                 class Clock:
@@ -119,6 +137,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
             current=check_resources()
             if plan['planning_required_vram']>current['free_vram_mib']*1024**2:raise ResourceLimitError('Pre-load VRAM changed','vram',current)
             model_memory_budget(reserve,preparation)
+            report['model_load_attempts']+=1
             base,info=AutoModelForMultimodalLM.from_pretrained(model_path,local_files_only=True,trust_remote_code=False,output_loading_info=True,
                 device_map={'':0},dtype=torch.bfloat16,attn_implementation='sdpa',quantization_config=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type='nf4',bnb_4bit_use_double_quant=True,bnb_4bit_compute_dtype=torch.bfloat16))
             if any(info.get(k) for k in ('missing_keys','mismatched_keys','error_msgs')):raise ValueError('Incomplete weights')
@@ -131,7 +150,7 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
                 loss=supervised_loss(model,ids,labels);loss.backward();model.zero_grad(set_to_none=True);loss=None;stage('backward_length_'+str(n))
             base=model.unload();model=None;gc.collect();release_idle_cuda(torch)
             report['baseline']=evaluate(base,'baseline')
-            for lr in (5e-5,1e-4,2e-4):
+            for lr in protocol['learning_rates']:
                 torch.manual_seed(881);torch.cuda.manual_seed_all(881);random.seed(881)
                 trial=dict(lr=lr,rank=4,alpha=8,dropout=.05,accumulation=4,max_grad_norm=1.,epochs=1,warmup_ratio=.05,scheduler='cosine',deterministic=True,optimizer_steps=total_steps,steps=[])
                 report['trials'].append(trial)
@@ -181,8 +200,9 @@ def run(model_path,source,export_path,output,tiny_proof,replay_proof):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--model',required=True);p.add_argument('--source',required=True);p.add_argument('--export',required=True);p.add_argument('--output',required=True);p.add_argument('--tiny-proof',required=True);p.add_argument('--replay-proof',required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--model',required=True);p.add_argument('--source',required=True);p.add_argument('--export',required=True);p.add_argument('--output',required=True);p.add_argument('--tiny-proof',required=True);p.add_argument('--replay-proof',required=True)
+    p.add_argument('--learning-rates',nargs='+',type=float,default=[1e-4]);p.add_argument('--source-queue');p.add_argument('--original-source');a=p.parse_args()
     import faulthandler
     faulthandler.dump_traceback_later(1500,exit=True)
     with patch('socket.socket.connect',side_effect=AssertionError('Offline')),patch('socket.getaddrinfo',side_effect=AssertionError('Offline')):
-        run(a.model,a.source,a.export,a.output,a.tiny_proof,a.replay_proof)
+        run(a.model,a.source,a.export,a.output,a.tiny_proof,a.replay_proof,learning_rates=a.learning_rates,source_queue=a.source_queue,original_source=a.original_source)
