@@ -93,12 +93,11 @@ def augment(messages,profile,familiarity,tokenizer,limit=6000,extra_limit=900,cu
     card=profile['card'];selected,current=select_material(card,messages,familiarity,current_text)
     if not any(card[k] for k in FIELDS) and not any(selected.values()) and card['edge']=='off':return messages,dict(tokens=0,lore=0,examples=0)
     # Stable decision traits, not a dump of every field on every turn.
-    core=('priorities','conflict','change','contradictions','humor','questions','closeness')
+    core=('priorities','conflict','change','contradictions','humor','questions','closeness','vocabulary','opening')
     data={FIELDS[k]:card[k] for k in core if card[k]}
-    if card['background']:data['가상 인물의 출발점']=card['background'][:100]
+    if card['background']:data['가상 인물의 출발점']=card['background']
     for key,triggers in {'age':('나이','몇 살'),'appearance':('외형','모습','옷'),
                          'relationships':('가족','동료','친구','이웃'),'fears':('두려','무서','약점'),
-                         'vocabulary':('말투','어휘'),'opening':('인사','잘 가'),
                          'dislikes':('싫어','취향')}.items():
         if card[key] and any(t in current for t in triggers):data[FIELDS[key]]=card[key]
     data.update(world=[r['content'] for r in selected['lore']],examples=[dict(user=r['user'],character=r['assistant']) for r in selected['examples']])
