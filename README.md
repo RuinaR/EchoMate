@@ -1,5 +1,9 @@
 # EchoMate
 
+현재 제품 방향은 **사전 학습된 여성 캐릭터 모델을 선택하는 로컬 Discord 동반자**입니다. 한 번에 캐릭터와 GPU 모델은 하나, 대화 사용자는 여럿이며 기존 기억·동의·관계·알림·공정 큐를 유지합니다. Yaho/Lime/여성 IT 기획자의 제공 파일과 라이선스를 감사하고 전환 수명주기 API를 구현 중입니다. **아직 세 모델을 앱에서 사용할 수 있는 배포판이 아니며 RELEASE BLOCKED입니다.** [구현 범위·모델별 차단·다음 단계](docs/PRETRAINED-CHARACTER-TRANSITION.md).
+
+기존 운영 설정과 개인 DB는 자동 변경하지 않습니다. 아래 날짜별 학습 결과는 보존된 연구 기록이며 현재 제품의 필수 학습 절차가 아닙니다.
+
 원천 확보와 실제12B SFT·고정참조 DPO를 검증했지만, 인격·사실성의 공동 개선이 부족해 두 후보를 기각했습니다. 운영 no-LoRA를 유지합니다. [실제 자료·학습·한계](docs/ADVANCED-CHARACTER-QA.md), [장기 개발 계획](docs/ADVANCED-CHARACTER-ROADMAP.md).
 
 QLoRA 자원 Admission은 기존 안전 여유를 유지합니다. 준비 검사 checkpointing 수정·전체GPU 학습 자원 검증·기각한 품질 후보의 범위는 [최신 감사 QA](docs/QLORA-ADMISSION-QA.md)를 따릅니다. 정식 릴리즈는 BLOCKED입니다.

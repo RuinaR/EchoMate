@@ -1,5 +1,15 @@
 # 작업 로그
 
+## 2026-10-25 사전 학습 캐릭터 전환 첫 구현·Lime 실제 GPU
+
+시작92e01dd clean/main/원격 일치, 구현a80d67d. 기존 기능 재사용 감사를 작성하고 고정 revision/hash/크기/라이선스의 세 캐릭터 카탈로그, 별도 ID별 이름 저장, epoch/name-version 기반 단일 manager 소유권/전환/cancel/drain/reclaim/복구를 구현했다. 기존 Runtime 알림이 모델 전환을 검사하지 않던 경주를 세대 검증으로 수정했다. 새 backend/기억 namespace/UI는 미연결이며 운영 자료를 자동 이관하지 않았다.
+
+Yaho 연구 목적 라이선스·기획자 adapter weights 부재가 차단 사항이다. Lime HTTP 다운로드163.703초/전체SHA256 일치 후 실제 native GGUF 7응답×2조건을 실행했다. 유나 이름3턴 유지, 조회 실패와 미실행 알림 완료 오류는 두 조건에서 지속되어 Ready 미승격. 실제 서버 종료·기존2GiB GPU/3GiB RAM/2GiB commit 안전 기준 유지. 해당 원문/계측은 비공개 보존, 최종316개 미사용.
+
+최초 전체945검사 1오류는 기존 checkpoint rename WinError5였다. Windows 5/32/33만 최대5회 재시도·기존 목적지 보존·영구 실패 partial 정리를 검증했다. 최종 `PYTHONPATH=src;tools python local_data/advanced-character-20261025/offline_regression.py` 전체948개 OK257.519초, 표적35개 OK10.189초. 번들 초기 fixture local_data 누락은 제품 결함과 분리해 수정하고 실패 로그를 보존했으며 실제 번들 source24개 OK3.632초. 새로운 UI/다른 Windows/Portable GPU/실제 Discord PASS로 해석하지 않는다.
+
+운영/장부5hash와 원본12shard 유지. 공개 소스/합성 fixture만 stage 감사했다. [상세·현재 미완료/다음 우선순위](PRETRAINED-CHARACTER-TRANSITION.md). 다음은 임시 저장소 CharacterId/legacy 경계와 구체 GGUF backend·InstanceLease 연결이며 RELEASE BLOCKED를 유지한다.
+
 ## 2026-10-25 Advanced Character 원천·SFT·선호도 학습 — RELEASE BLOCKED
 
 연구 `1813a17`, 전체929검사 OK260.722초. Topical8628/600가족큐·LongMemEval500·미표기Beyond500/CharacterBench250을선별확보하고사용자추가지시대로혼합1350참조/842가족을구성했다. 새80응답(train64/dev16)·선호72쌍(train56/dev16), 혼합분류축기반32미학습초안이다. 실제12B SFT16step/813.453초·단일base고정SFT참조DPO14step/1165.360초·정확재개를완료했지만허위기억/약속·인격수렴때문에둘다기각했다. GPUreserved피크8.904/7.809GiB, 기존2GiB여유유지. 미표기원문을대량SFT정답으로복제하지않았고NC조건/개인정보/출처를유지한다. no-LoRA·앱src·운영자료·독립56/최종316유지,실제Discord0. [상세권리·자료·실측·마감](ADVANCED-CHARACTER-QA.md), [Phase별계획·재개](ADVANCED-CHARACTER-ROADMAP.md).

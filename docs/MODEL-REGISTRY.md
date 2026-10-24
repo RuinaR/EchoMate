@@ -1,5 +1,9 @@
 # 로컬 모델 레지스트리
 
+## 2026-10-25 사전 학습 캐릭터 카탈로그 — 제품 전환 중
+
+현재 제품 목표는 Yaho/Lime/여성 IT 기획자의 단일 활성 선택이다. 기존 Gemma 레지스트리/운영 선택은 자동 교체하지 않으며 레거시 호환·연구용으로 보존한다. `character_models.py`의 별도 schema1 카탈로그는 모델 ID·이름·고정 revision/hash·라이선스와 실행 상태를 구분한다. Yaho는 연구 목적 사용 제한으로 제품 검토 필요, 기획자는 adapter weights 부재로 BLOCKED다. Lime Q6_K는 전체 hash와 실제 GPU 이름3턴을 확인했으나 조회 실패/허위 알림 완료 오류로 Ready가 아니다. 실제 upstream tokenizer revision·새 backend/개인 기억 namespace/UI 통합은 미완료다. [모델별 출처·실측·정확한 지원 범위](PRETRAINED-CHARACTER-TRANSITION.md). 이하 학습 성공 기록은 새 제품 모델의 PASS가 아니다.
+
 ## 2026-10-25 전체399token QLoRA·계산전 캐시 정리
 
 실제12B/NF4 frozenBF16/선택logits/qv rank4·LR1e-4·264응답/66유효step/저장·복원완전일치를확인했다. 기존단계후2GiB기준을유지하며공개empty_cache를계산전에만사용한별도기본OFF연구옵션이다. peak allocated11.986/reserved12.182GiB·최고67°C·최소stagefree2,266MiB였다. 이는다른PC/긴Runtime전체문맥/운영LoRA전환의인증이아니다. 원래cache정리없는준비는2,020MiB로안전중단했고,품질비교후두학습후보모두기각하여 no-LoRA를유지한다. [정확한범위](QLORA-RESUME-QA.md).

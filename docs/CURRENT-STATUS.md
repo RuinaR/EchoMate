@@ -1,5 +1,11 @@
 # 현재 상태
 
+## 2026-10-25 사전 학습 캐릭터 전환 — RELEASE BLOCKED
+
+제품 목표는 Yaho/Lime/여성 IT 기획자 중 전역 한 캐릭터·한 GPU 모델 선택이다. 구현 `a80d67d`: 카탈로그/이름 버전/opt-in 전환 manager·알림 epoch guard. 전체948검사 OK257.519초, 실제 번들 소스24검사 OK3.632초. 운영 설정/DB·레거시 Gemma 선택은 보존했다.
+
+Lime GGUF hash·실제 GPU 2×7응답에서 이름3턴은 유지했지만 조회 실패 및 허위 알림 완료 오류로 Ready 미승격. Yaho 제품 라이선스/기획자 weights 부재, 구체 backend·캐릭터별 기억 namespace·Runtime stamp 전체 연결·신규 UI/명령·장기/실제 Discord 검증은 남아 있다. [현재 제품 전환 QA/재개](PRETRAINED-CHARACTER-TRANSITION.md)가 아래 학습 중심 연구 계획보다 우선한다.
+
 ## 2026-10-25 Advanced Character 원천·SFT·선호도 학습 — RELEASE BLOCKED
 
 연구 `1813a17`, 전체929검사 OK260.722초. Topical8628/600가족큐·LongMemEval500·미표기Beyond500/CharacterBench250을선별확보하고사용자추가지시대로혼합1350참조/842가족을구성했다. 새80응답(train64/dev16)·선호72쌍(train56/dev16), 혼합분류축기반32미학습초안이다. 실제12B SFT16step/813.453초·단일base고정SFT참조DPO14step/1165.360초·정확재개를완료했지만허위기억/약속·인격수렴때문에둘다기각했다. GPUreserved피크8.904/7.809GiB, 기존2GiB여유유지. 미표기원문을대량SFT정답으로복제하지않았고NC조건/개인정보/출처를유지한다. no-LoRA·앱src·운영자료·독립56/최종316유지,실제Discord0. [상세권리·자료·실측·마감](ADVANCED-CHARACTER-QA.md), [Phase별계획·재개](ADVANCED-CHARACTER-ROADMAP.md).

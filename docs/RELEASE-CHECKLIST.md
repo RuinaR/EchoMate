@@ -1,5 +1,22 @@
 # 릴리즈 요구사항 추적표
 
+## 현재 제품 전환 게이트 — 2026-10-25
+
+최신 제품은 사전 학습 여성 캐릭터 선택 구조다. 아래 과거 C/F/S/L 게이트의 안전 요구와 실패 근거를 보존하되, 학습 성공 자체는 더 이상 제품 필수 조건이 아니다. **RELEASE BLOCKED**. [재사용 감사·새 QA/재개](PRETRAINED-CHARACTER-TRANSITION.md).
+
+| 새 요구 | 상태 | 근거/남은 조건 |
+|---|---|---|
+| 세 캐릭터 제공 파일·출처 확인 | BLOCKED | revision/hash 고정. IT 기획자는 adapter weights 없음. 임의 대체 금지. |
+| 제품 사용/배포 라이선스 | BLOCKED | Yaho 연구 목적 제한, 기획자 조건 불명. Lime Apache-2.0 확인, 모델 파일 번들 미포함. |
+| 단일 활성 모델/전환/이름 버전 | NOT VERIFIED | manager 합성 경주 검사; 실제 backend/기존 InstanceLease/Runtime 송신 연결 필요. |
+| 캐릭터별 기억·관계/legacy 격리 | NOT VERIFIED | 기존 DB 보존, 새 namespace 및 임시 DB migration·철회 회귀 필요. |
+| 알림 모델 전환 경계 | NOT VERIFIED | Runtime 세대/전환 guard 수정 및 표적 mock 검사. 전체 마감 결과는 새 QA 참조. |
+| 설치·이름·캐릭터 선택 UI/명령 이관 | NOT VERIFIED | 기존 UI 및 `/동의`·`/성격` 유지, 신규 UI/`/캐릭터` 미연결. |
+| 세 모델 실제 GPU·이름·한국어·기억 품질 | NOT VERIFIED | 제공자 카드 성능을 EchoMate PASS로 인용하지 않음. |
+| 실제 Discord 통합 | BLOCKED | 별도 승인 필요. 인증/조회/Gateway/명령 변경/송신 모두 미실행. |
+
+이하 날짜별 기록은 이전 제품/실험의 검증 범위를 나타내며 새 모델의 PASS가 아니다.
+
 2026-10-25 최신 연구 `1813a17`/929회귀: 선택 원천·혼합참조와 새 SFT/DPO 학습·재개를 검증했으나 공동 품질 미달로 모두미채택. [실측·권리·제약](ADVANCED-CHARACTER-QA.md), [Phase 계획](ADVANCED-CHARACTER-ROADMAP.md). C1/F2/F3/S1은 계속 FAIL, 새 장기상태/5–100턴/adapter Runtime GPU 통합은 NOT VERIFIED, D1은 BLOCKED다.
 
 2026-10-25 최신: 준비 backward의 eval/checkpoint 불일치를 수정하고 전체GPU64/16step 자원 검증을 완료했다. CPU I/O fresh/warm 품질 후보는 모두기각했다. 원래2GiB 여유·운영no-LoRA는 유지한다. [근거](QLORA-ADMISSION-QA.md). 필수 품질·실제Discord·장기/다른Windows 게이트는 그대로 BLOCKED/FAIL/NOT VERIFIED다.

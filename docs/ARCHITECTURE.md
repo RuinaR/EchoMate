@@ -1,5 +1,11 @@
 # 아키텍처
 
+## 2026-10-25 사전 학습 캐릭터 전환 경계
+
+`character_models`는 버전 catalog/고정 provenance/라이선스 차단과 별도 이름 저장을 담당한다. `character_manager`는 opt-in 비동기 전환·단일 backend 소유권·취소/drain/reclaim·이름 버전/생성 epoch를 관리한다. timeout 후 작업을 버리지 않고 RecoveryRequired에서 명시 복구를 요구한다. 구체 GGUF/PEFT adapter, 기존 InstanceLease/fair queue, 수신부터 SDK 송신까지 identity stamp, 캐릭터별 기억 namespace와 신규 UI는 아직 연결 전이다. 따라서 기존 앱 실행 경로를 새 모델 지원 완료로 해석하지 않는다. [현재/다음 경계](PRETRAINED-CHARACTER-TRANSITION.md).
+
+기존 Runtime 알림 전달에는 모델 전환 epoch를 추가했다. 전환 중 송신을 보류하고 권한 await 사이 전환이 완료돼도 시작 세대와 달라진 시도는 차단한다. 기존 DB 스키마/예약 소유권/동의·영수증/중복 방지 정책은 유지한다.
+
 ## 2026-10-25 격리된 preference 연구 경로
 
 `tools/preference_pairs.py`는 기존 SFT source/split·정답 마스크를 상속하고 독립/최종의 relabel을 거절한다. `preference_learning.py`는 고정 초기SFT reference scalar와 completion logps 합 기반 DPO를 순차 RNG 재생으로 계산한다. `run_preference_pilot.py`는 단일12B·단일graph·기존자원guard·optimizer/RNG checkpoint를 검증하는 연구CLI다. 앱/Controller/Runtime/설정/미리보기에서 import하거나 운영 adapter로 자동선택하지 않는다. 혼합 source pointer는 라이선스/가족/분할을 유지하고 raw target·메모리·송신 권한을 만들지 않는다. 실제 품질 미달로 두 새 adapter는 미채택이며, 지속 상태·다중턴 통합은 [계획](ADVANCED-CHARACTER-ROADMAP.md)의 미검증 설계다. [실측/한계](ADVANCED-CHARACTER-QA.md).

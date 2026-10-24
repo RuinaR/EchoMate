@@ -1,5 +1,15 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-25 사전 학습 여성 캐릭터 제품 전환 — 현재 최우선
+
+최신 사용자 요구는 학습 중심 개발을 대체한다. 시작 `92e01dd`, 구현 `a80d67d`. 새 카탈로그/이름 문서/opt-in CharacterModelManager와 전환 epoch 기반 기존 알림 경주 수정을 완료했다. **아직 기존 앱에 신규 backend·캐릭터 기억 namespace·선택 UI/명령을 연결하지 않았다.** 운영 Gemma/개인 자료는 자동 변경하지 않는다.
+
+Yaho 제공 LICENSE는 연구 목적 제한으로 제품 검토 필요, IT 기획자 repo에는 adapter weights가 없어 BLOCKED다. Lime Q6_K 전체 hash와 llama.cpp 실제 GPU 7응답×2조건을 확인했다. 이름3턴은 유나를 유지했지만 두 조건 모두 조회 실패→데이터 없음 오해/미실행 알림 완료를 주장했다. Ready 미승격, 세 모델/기존 Gemma 대비 품질 개선 미입증. GPU 최소free8725MiB, RAM5.428GiB/commit25.887GiB 이상, 최고46°C, 자체 서버 종료 확인. 단기 생성이며 장시간/SDK 생성 통합 인증이 아니다.
+
+최종 전체 **948개 OK257.519초**, 표적35개 OK10.189초, 번들 실제 소스24개 OK3.632초. 최초945검사의 Windows checkpoint rename WinError5와 초기 번들 fixture 폴더 누락은 실패 기록을 보존하고 원인을 수정했다. 운영/장부5hash·원본12shard 불변. 실제 Discord/다른 앱 입력·화면·프로세스 내부 접근0. [구현 범위·라이선스·실측·재사용 감사·다음 단계](PRETRAINED-CHARACTER-TRANSITION.md). RELEASE BLOCKED.
+
+다음은 개인 DB 연결 전에 임시 저장소의 CharacterId/legacy 영역/공통 consent·예약과 캐릭터별 기억·관계 경계를 검증하고, 구체 GGUF backend의 취소/drain/reclaim 및 기존 InstanceLease/fair queue를 연결한다. 이후 수신/조립/생성/SDK 송신 전체 stamp, 선택/설치/이름 UI와 offline `/캐릭터` migration 순서다. 이미 완료한 Lime 이름 smoke/학습 후보를 근거 없이 반복하지 않는다. 비공개 재개 자료는 `local_data/pretrained-transition-20261025/`를 사용한다. 아래 일자별 학습 기록은 보존된 과거 연구다.
+
 ## 2026-10-25 Advanced Character 원천·SFT·선호도 학습 — RELEASE BLOCKED
 
 연구 `1813a17`, 전체929검사 OK260.722초. Topical8628/600가족큐·LongMemEval500·미표기Beyond500/CharacterBench250을선별확보하고사용자추가지시대로혼합1350참조/842가족을구성했다. 새80응답(train64/dev16)·선호72쌍(train56/dev16), 혼합분류축기반32미학습초안이다. 실제12B SFT16step/813.453초·단일base고정SFT참조DPO14step/1165.360초·정확재개를완료했지만허위기억/약속·인격수렴때문에둘다기각했다. GPUreserved피크8.904/7.809GiB, 기존2GiB여유유지. 미표기원문을대량SFT정답으로복제하지않았고NC조건/개인정보/출처를유지한다. no-LoRA·앱src·운영자료·독립56/최종316유지,실제Discord0. [상세권리·자료·실측·마감](ADVANCED-CHARACTER-QA.md), [Phase별계획·재개](ADVANCED-CHARACTER-ROADMAP.md).
