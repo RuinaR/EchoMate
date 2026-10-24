@@ -30,7 +30,7 @@ def cosine(optimizer,total,warmup_ratio=.05):
     return torch.optim.lr_scheduler.LambdaLR(optimizer,multiplier)
 
 
-def train_window(model,examples,optimizer,scheduler,loss_fn,*,max_norm=1.):
+def train_window(model,examples,optimizer,scheduler,loss_fn,*,max_norm=1.,observe=None):
     """Batch1 microsteps; mean by supervised TOKEN count across the window.
 
     Normalizing each microbatch equally overweights short answers. Keep only
@@ -41,15 +41,19 @@ def train_window(model,examples,optimizer,scheduler,loss_fn,*,max_norm=1.):
     counts=[sum(x!=-100 for x in labels[1:]) for ids,labels in examples]
     if not all(counts):raise ValueError('Every microbatch needs supervised next tokens')
     total=sum(counts);optimizer.zero_grad(set_to_none=True);model.train();losses=[]
-    for (ids,labels),n in zip(examples,counts):
+    for micro,((ids,labels),n) in enumerate(zip(examples,counts)):
         device=next(model.parameters()).device
         loss=loss_fn(model,torch.tensor([ids],device=device),torch.tensor([labels],device=device))
+        if observe:observe('forward_'+str(micro+1))
         if not torch.isfinite(loss):raise ValueError('Non-finite loss')
         (loss*n/total).backward();losses.append(float(loss.detach()))
+        if observe:observe('backward_'+str(micro+1))
     parameters=[p for p in model.parameters() if p.requires_grad]
     if any(p.grad is None or not torch.isfinite(p.grad).all() for p in parameters):raise ValueError('Missing/non-finite gradient')
     norm=torch.nn.utils.clip_grad_norm_(parameters,max_norm,error_if_nonfinite=True)
-    optimizer.step();scheduler.step();optimizer.zero_grad(set_to_none=True)
+    optimizer.step();scheduler.step()
+    if observe:observe('optimizer_step')
+    optimizer.zero_grad(set_to_none=True)
     return dict(loss=sum(v*n for v,n in zip(losses,counts))/total,supervised_tokens=total,gradient_norm=float(norm),learning_rate=optimizer.param_groups[0]['lr'])
 
 

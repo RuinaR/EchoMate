@@ -50,6 +50,14 @@ def estimate(rows,cfg,*,rank=4,sequence=64,frozen_bf16=False,supervised_tokens=N
         bf16_parameters=embedding_parameters if frozen_bf16 else 0,adapter_parameters=adapter,target_count=len(targets),targets=targets,
         prepared_bytes=prepared,upcast_overlap_bytes=largest_cast,adapter_state_bytes=adapter_state,
         backward_planning_bytes=backward_workspace,allocator_driver_bytes=allocator_driver,safety_bytes=safety,
+        components=dict(nf4_with_scales=math.ceil(quantized*9/16),
+            frozen_embedding=embedding_parameters*2 if frozen_bf16 else 0,
+            other_floating=floating*4-(embedding_parameters*4 if frozen_bf16 else 0),
+            adapter_parameters=adapter*4,adapter_gradients=adapter*4,
+            optimizer_moments=adapter*8,adapter_save_copy=adapter*4,
+            checkpoint_activations=checkpoint,selected_logits_workspace=logits,
+            backward_workspace=GIB,allocator_driver=allocator_driver,safety=safety),
+        lifetime_formula='max(prepared + upcast_overlap, prepared + adapter_state + backward_planning) + allocator_driver + safety',
         planning_required_vram=max(prepared+largest_cast,prepared+adapter_state+backward_workspace)+allocator_driver+safety,
         caveat='Planning reserve, not a proven activation peak; sufficient headroom requires actual stage checks. No admission relaxation.')
 

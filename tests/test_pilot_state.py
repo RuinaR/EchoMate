@@ -46,6 +46,22 @@ class PilotState(unittest.TestCase):
         opt2=torch.optim.SGD(other.parameters(),lr=.01);total=sum(loss(other,torch.tensor([ids]),torch.tensor([labels]))*n/4 for (ids,labels),n in zip(batches,(1,3)))
         total.backward();opt2.step()
         for a,b in zip(self.model.parameters(),other.parameters()):torch.testing.assert_close(a,b)
+
+    def test_phase_observer_does_not_change_dropout_metrics_or_updates(self):
+        rng=torch.get_rng_state();other=copy.deepcopy(self.model);events=[]
+        expected=train_window(self.model,self.batches,self.opt,self.sched,loss)
+        torch.set_rng_state(rng);opt=torch.optim.AdamW(other.parameters(),lr=.0001);sched=cosine(opt,4)
+        actual=train_window(other,self.batches,opt,sched,loss,observe=events.append)
+        self.assertEqual(events,['forward_1','backward_1','forward_2','backward_2','optimizer_step'])
+        self.assertEqual(actual,expected)
+        for a,b in zip(self.model.parameters(),other.parameters()):torch.testing.assert_close(a,b,atol=0,rtol=0)
+
+    def test_observer_guard_stops_before_optimizer_and_scheduler(self):
+        from unittest.mock import Mock
+        optimizer=Mock();scheduler=Mock()
+        with self.assertRaisesRegex(RuntimeError,'reserve'):
+            train_window(self.model,self.batches,optimizer,scheduler,loss,observe=Mock(side_effect=RuntimeError('reserve')))
+        optimizer.step.assert_not_called();scheduler.step.assert_not_called()
     def test_corruption_extra_file_or_wrong_binding_rejected_before_load(self):
         with tempfile.TemporaryDirectory(dir='local_data') as folder:
             p=Path(folder)/'saved';save(p,self.model,self.opt,self.sched,step=0,data_hash='a',config={})

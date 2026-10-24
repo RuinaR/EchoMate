@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-def run(base_path,output,*,cache_hygiene=False):
+def run(base_path,output,*,cache_hygiene=False,phase_profile=False):
     from pilot_state import private_path,train_window,cosine,save,restore,inspect
     out=private_path(output);out.mkdir(parents=True,exist_ok=False)
     os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1')
@@ -22,6 +22,13 @@ def run(base_path,output,*,cache_hygiene=False):
     from qlora_recipe import prepare_frozen_bf16,supervised_loss
     lease=InstanceLease();base=None;model=None;opt=None;sched=None;weights=None;torch.set_num_threads(1);torch.manual_seed(881)
     report=dict(status='NOT_STARTED',before=memory_snapshot(),health=health)
+    from training_profile import PhasePeaks
+    phases=PhasePeaks(torch,phase_profile);report['phase_profiles']=phases.rows
+    def observe(name):
+        phases.boundary(name)
+        health=check_resources();memory=memory_snapshot()
+        if health['free_vram_mib']<2048 or memory['ram_available']<3*1024**3 or memory['commit_available']<2*1024**3:raise ValueError('Tiny phase reserve')
+        report.setdefault('phase_resources',[]).append(dict(name=name,health=health,memory=memory))
     from run_persona_pilot import clear_unused_before_phase
     report['cache_events']=[]
     def before_phase():
@@ -33,7 +40,7 @@ def run(base_path,output,*,cache_hygiene=False):
         model=get_peft_model(base,LoraConfig(r=4,lora_alpha=8,lora_dropout=.05,target_modules=r'.*language_model\.layers\.\d+\.self_attn\.(q_proj|v_proj)',task_type='CAUSAL_LM'))
         opt=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=.0001);sched=cosine(opt,4)
         batches=[([2,4,6,8,10],[-100,-100,6,8,10]),([3,5,7,9],[-100,-100,7,9])]*2
-        before_phase();train_window(model,batches,opt,sched,supervised_loss)
+        before_phase();train_window(model,batches,opt,sched,supervised_loss,observe=observe if phase_profile else None)
         save(out/'step1',model,opt,sched,step=1,data_hash='tiny-api-only',config=dict(dropout=.05,accumulation=4))
         before_phase();expected=train_window(model,batches,opt,sched,supervised_loss);weights=[p.detach().cpu().clone() for p in model.parameters() if p.requires_grad]
         base=model.unload();model=None;opt=None;sched=None;gc.collect();release_idle_cuda(torch)
@@ -41,11 +48,11 @@ def run(base_path,output,*,cache_hygiene=False):
         model=PeftModel.from_pretrained(base,out/'step1/adapter',is_trainable=True,local_files_only=True)
         opt=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=.0001);sched=cosine(opt,4)
         restore(out/'step1',opt,sched,data_hash='tiny-api-only',config=dict(dropout=.05,accumulation=4))
-        before_phase();actual=train_window(model,batches,opt,sched,supervised_loss)
+        before_phase();actual=train_window(model,batches,opt,sched,supervised_loss,observe=observe if phase_profile else None)
         assert actual==expected
         assert all(torch.equal(p.detach().cpu(),v) for p,v in zip((p for p in model.parameters() if p.requires_grad),weights))
-        assert torch.cuda.max_memory_reserved()<512*1024**2
-        report.update(status='TINY_NEW_RECIPE_PASS_NOT_12B_QUALITY',replay=actual,peak_allocated=torch.cuda.max_memory_allocated(),peak_reserved=torch.cuda.max_memory_reserved(),health_after=check_resources())
+        pa,pr=phases.peaks();assert pr<512*1024**2
+        report.update(status='TINY_NEW_RECIPE_PASS_NOT_12B_QUALITY',replay=actual,peak_allocated=pa,peak_reserved=pr,health_after=check_resources(),phase_profile_verified=phase_profile)
         report['cache_hygiene_verified']=cache_hygiene and len(report['cache_events'])==3
     finally:
         model=None;base=None;opt=None;sched=None;weights=None;gc.collect();release_idle_cuda(torch);lease.close()
@@ -54,7 +61,7 @@ def run(base_path,output,*,cache_hygiene=False):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--base',required=True);p.add_argument('--output',required=True);p.add_argument('--cache-hygiene',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--base',required=True);p.add_argument('--output',required=True);p.add_argument('--cache-hygiene',action='store_true');p.add_argument('--phase-profile',action='store_true');a=p.parse_args()
     import faulthandler
     faulthandler.dump_traceback_later(180,exit=True)
-    with patch('socket.socket.connect',side_effect=AssertionError('Offline')),patch('socket.getaddrinfo',side_effect=AssertionError('Offline')):run(a.base,a.output,cache_hygiene=a.cache_hygiene)
+    with patch('socket.socket.connect',side_effect=AssertionError('Offline')),patch('socket.getaddrinfo',side_effect=AssertionError('Offline')):run(a.base,a.output,cache_hygiene=a.cache_hygiene,phase_profile=a.phase_profile)

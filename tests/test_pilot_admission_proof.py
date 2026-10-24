@@ -20,6 +20,11 @@ class ObservedAdmission(unittest.TestCase):
         with self.assertRaises(ValueError):self.floor()
     def test_allocator_policy_not_interchangeable(self):
         with self.assertRaises(ValueError):observed_admission_floor(self.proof,data_hash='data',headers={'shard':'hash'},plan=self.plan,cache_hygiene=True)
+    def test_library_mismatch_is_not_matching_resource_evidence(self):
+        self.proof['versions']={'torch':'old'}
+        with self.assertRaisesRegex(ValueError,'libraries'):
+            observed_admission_floor(self.proof,data_hash='data',headers={'shard':'hash'},plan=self.plan,versions={'torch':'new'})
+        self.assertEqual(observed_admission_floor(self.proof,data_hash='data',headers={'shard':'hash'},plan=self.plan,versions={'torch':'old'}),15032*1024**2)
     def test_public_cleanup_preserves_live_allocations(self):
         torch=Mock();torch.cuda.memory_allocated.return_value=100;torch.cuda.memory_reserved.side_effect=[200,150]
         self.assertEqual(clear_unused_before_phase(torch,True),dict(allocated_unchanged=100,reserved_before=200,reserved_after=150))
