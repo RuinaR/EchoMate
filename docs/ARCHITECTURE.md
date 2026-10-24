@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 2026-10-24 1회 생성 평가 전용 구성
+
+`tools/service_persona_v4.py`의 compose는 기존 instruction/augment A와 반응 문단 B·가상 출처/배치 C만 비교한다. 앱/Settings/Runtime/Controller는 이를 import하지 않는다. `run_service_persona_v4.py`가 한 모델·기존 Worker에서 최종 template 입력을 비공개 계측하며 기존 metadata 직접 호출·Action·기억·원본 reply·SDK mock guard를 유지한다. C는 기존 selector와900/6000토큰 상한을 재사용하고 예산 부족을 기록한다. 인격·사실성 동시 개선이 없어 운영 기본 경로는 변경하지 않았다. [실제 입력/실패/검증 범위](SERVICE-PERSONA-V4-QA.md).
+
 ## 2026-10-24 기본 비활성 응답 파이프라인 주입
 
 Runtime(response_pipeline=None)은 기존 생성 경로다. 실험에만 TwoStage.respond를 주입해 동일 Worker의 계획1회→기존 CompanionStore/public_state/카드 선택의 읽기→기존 backend.text→Generated(text,fresh)를 연결한다. 계획은 신원·청자·Action·DB 쓰기 권한이 없고 원본 reply도 지정할 수 없다. Runtime의 마지막 transport fresh가 생성 근거 guard를 추가 호출한다. 빈 조회도 동일 질의로 재검사한다. 앱/설정/Controller/미리보기에는 활성화하지 않는다. 일반 기억 조회와 중복·형식/의미 실패·팩트 표현 준수 한계 때문에 운영 책임을 대체했다고 주장하지 않는다. [계약과 실험 기각](TWO-STAGE-GENERATION-V3-QA.md).

@@ -1,5 +1,9 @@
 # 모델·캐릭터·일반 배포 QA — 2026-10-19
 
+## 2026-10-24 v4 비교 마감 — 문서 증분 갱신
+
+운영 src는 시작440d294와 동일하다. 공개 src/docs160파일·README/기본 프로필162쌍 hash와 manifest21,564항목 membership/크기를 대조했다. 별도 데이터 경로의 번들 카드/기억19검사 OK2.202초, 두 VBS `/check` PASS. 전체 재빌드/새 GUI/번들 GPU/다른 Windows/전체 런타임 재해시는 하지 않았다. 운영4파일 hash 동일, 개인 자료/평가 원문을 추가하지 않았다. 후보 B·C는 평가 도구에만 있고 앱에는 적용하지 않는다. [실패·실제 검증 범위](SERVICE-PERSONA-V4-QA.md).
+
 ## 2026-10-24 2단계 후보 기본 비활성 마감
 
 공개 src/docs159파일·README/기본 프로필161쌍 hash와 manifest21,563파일 membership/크기를 대조했다. 번들22검사 OK3.042초·두 VBS `/check` PASS. 후보 모듈/Runtime 주입 경계는 포함하지만 기본None이며 UI/설정에서 활성화하지 않는다. 변경 공개 파일만 증분 반영했고 새 GUI·번들 GPU·다른 Windows·전체 인터프리터 재해시를 주장하지 않는다. 운영4파일 hash 동일·개인 자료 비포함. [실제 GPU 비교 및 기각](TWO-STAGE-GENERATION-V3-QA.md).
