@@ -38,8 +38,8 @@ def canonical(value):
 def atomic_private_json(path,value):
     """Retry transient Windows sharing/AV locks; keep old file on failure."""
     temporary=path.with_name(path.name+'.'+secrets.token_hex(4)+'.tmp')
-    temporary.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8')
     try:
+        temporary.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8')
         for attempt in range(5):
             try:temporary.replace(path);break
             except PermissionError:
