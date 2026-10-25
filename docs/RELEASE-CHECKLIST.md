@@ -2,7 +2,7 @@
 
 ## 2026-10-25 후속 Runtime 통합 게이트 — 현재 우선
 
-**RELEASE BLOCKED**. [최신 코드·실제 GPU·회귀·실패 기록](CHARACTER-RUNTIME-INTEGRATION-QA.md). 아래 이전 날짜의 PASS/미연결 목록은 당시 범위로 보존한다.
+**RELEASE BLOCKED**. 구현 `ff3de52`, 전체988/번들64 통과·운영/장부5hash·원본12shard 동일·Portable21,585파일 전체 감사 PASS. 아래 제품 품질/미검증 차단은 해제하지 않는다. [최신 코드·실제 GPU·회귀·실패 기록](CHARACTER-RUNTIME-INTEGRATION-QA.md). 아래 이전 날짜의 PASS/미연결 목록은 당시 범위로 보존한다.
 
 | 필수 조건 | 상태 | 현재 근거/남은 조건 |
 |---|---|---|

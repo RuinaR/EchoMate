@@ -63,3 +63,7 @@ Lime 파일: [공식 저장소](https://huggingface.co/naksyu/lime_Q6_K), revisi
 - 운영 설정/bootstrap/두 DB/평가 소비 장부 **5개 SHA256 동일**, 원본 모델 **12개 shard 동일**. 기존 adapter/학습/최종316 자료 미변경·미소비. 신규 운영 SQLite 이관0, 실제 Discord 인증/REST/Gateway/명령 변경/송신0.
 - 공개 예정27개 명시 경로의 전체 staged 내용/diff와 확장자·토큰/개인 경로/개인키 패턴을 감사했다. 모델·DB·원문 평가·비공개 로그 미포함. 패턴 미검출은 모든 비밀의 수학적 부재 보장은 아니다.
 - Portable 공개182경로는 소스/문서와 바이트 일치하도록 동기화했다. 전체 manifest 해시 감사 결과와 종료 Git HEAD는 이어지는 마감 기록/커밋 이력을 따른다. 다른 Windows/실제 Discord/장기 안정성의 필수 차단은 유지한다.
+
+### Git·Portable 마감
+
+구현 커밋 `ff3de52`(시작 `ba84c52`). Portable 전체 **21,585파일 / 4,877,730,478bytes**의 membership·size·SHA256 감사 PASS: missing/extra/mismatch/forbidden 모두0. 이 통계 기록으로 바뀐 공개 문서는 다시 동기화하고 최종 manifest를 재검사한다. 실제 번들 GPU·다른 Windows·신규 UI와 실서버 검증을 이 결과로 대체하지 않는다. 공개182경로 일치 및 비공개 원문/가중치 미포함 정책을 유지한다. 최종 문서 마감 커밋/원격 일치 상태는 Git 이력과 비공개 checkpoint에 보존한다.
