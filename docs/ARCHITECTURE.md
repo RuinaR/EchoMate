@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 사람 대화 경계와 복귀 근거
+
+기존 SocialRouter의 pending-human은 마지막 확인된 사람 대상 발언 경계다. SocialSource(범위/ID/보조 관측 시각/라우터 단조 발급 버전)를 Event에 연결해 최초 권한 await 전 packet과 함께 고정하고 판단 await 이후·생성/송신 시 최신성을 확인한다. GGUF의 사회적 판단만 현재 입력을 마지막에 배치하고, protected 원문 선택 후 예산 초과일 때만 동일 출처 본문을 참조로 축소한다. 실제 요청↔봇 reply쌍·정확한 현재 이름 호출이 있는 제한적 복귀는 같은 Lime이 의미를 고른 뒤 기존 validate_social을 통과해야 한다. DB 권한/기능 실행/영수증/단일 Worker는 그대로다. [제약·A/B·남은 실패](BOT-RETURN-QA.md).
+
 ## Router·의도·생성·문맥 계약
 
 기존 Conversation Router의 SocialDecision/validate_social, Response Generator의 GGUF.text/선택적 response_pipeline은 재사용한다. 새로운 intent_router.IntentPlan은 읽기 전용 실행 계획이며 청자·reply·권한을 변경하지 않는다. Context/Summary는 native 입력 예산과 출처/동의 유효성을 관리한다. 실제 DB 변경은 기존 companion+Receipt만 확정하며 송신 최신성 검사는 그대로다. 네 책임의 실제 호출 순서와 남은 간섭은 [계층 QA](RUNTIME-LAYERS-QA.md)를 따른다.

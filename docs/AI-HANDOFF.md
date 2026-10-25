@@ -1,5 +1,11 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-25 사람 대화 경계·봇 복귀 개선
+
+시작 `4169a81`. pending-human은 화자/채널별 마지막 확인된 사람 대상 발언 경계이며, 타이머 완화 없이 유지한다. 기존 SocialRouter/validate_social에 관계 후보 정합성·현재 입력 후치·native 최소 입력 중복 축소·실제 요청/reply 기반 이름 호출 복귀 선택·출처 버전 취소를 연결했다. 새 천가방 모임 실제 GPU→SDK mock 16상호작용(원본19개)/후보에서 응답 7/8→8/8, 사람 대상 오개입 0/4→0/4·인용1건 전송 없음. edit/철회/사람 경계 출처 삭제 뒤 생성 결과는 취소했다. 앞선 자전거 세션12건의 복귀 누락1→1도 기록하며, 과거3건 전부 해결 또는 일반 자율 참여 PASS는 아니다. 8108은 native 입력 초과를 확인했으나 7108 원본 근거 부족·9108/무이름 복귀의 의미 실패는 남는다. 자유 생성의 미래 기능 발언·요약 의미 검증·실제 Discord·다른 Windows가 남아 **RELEASE BLOCKED**. 장시간은 **DEFERRED — USER REAL-WORLD TEST**다. [실제 원인·A/B·기각·원문·재개](BOT-RETURN-QA.md).
+
+최종 전체 **1,076개 OK 282.049초**. Portable 번들 **180개 OK 17.808초**·공개 소스/manifest **21,605파일 전체 SHA256 감사 PASS**. 운영 설정/두 DB/장부5hash와 원본 Lime hash 동일·final316 소비0. 일반 이름/예약 새 GPU 시퀀스는 기한으로 미실행이며 기존 기능 회귀와 구분한다.
+
 ## 2026-10-25 Runtime 책임·의도·요약 경계
 
 최종 전체1,068개 OK280.928초·Portable172개 OK15.685초·전체21,603파일 감사 PASS·운영5hash/원본Lime 동일·final316 소비0. 시작c2e6ced. 기존 social/SocialDecision·권한·queue·Receipt를 유지하고 intent_router와 native context 선택을 분리했다. 현재 감정→과거 요약의 가로채기, 전달된 부탁의 실제 예약, 이름/기억 질문과 예약 응답의 선점을 수정했다. 세 능동 세션 각12이벤트에서 사람 대상 오개입은 양쪽0/6, 봇 복귀 누락은 양쪽3건으로 청자 의미 품질은 미달이다. 이름 관리자 경계/정상 예약·취소를 확인했고 자유 생성의 무근거 약속은 남았다. 요약은 검증 실패와 자료 부재를 구분하며 안전한 원문 선택으로 복귀한다. LOCAL_CHAT 명령 어댑터 회귀1건을 발견·수정했다. RELEASE BLOCKED·장시간 DEFERRED — USER REAL-WORLD TEST 유지. [실제 호출 흐름·A/B 한계·원문·재개](RUNTIME-LAYERS-QA.md).

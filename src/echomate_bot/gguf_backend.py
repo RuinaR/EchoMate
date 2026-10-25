@@ -238,7 +238,8 @@ class GGUFEngine:
             # Classifiers and summaries have different evidence contracts.
             # Never silently trim their JSON or reuse text-history selection.
             if social_context_budget.get():
-                from .context_budget import fit_social
+                from .context_budget import fit_social,current_last
+                messages=current_last(messages)
                 messages,tokens,removed=await fit_social(messages,self.context-budget-64,self.count_messages)
             else:
                 tokens=await self.count_messages(messages);removed=0
@@ -453,6 +454,7 @@ class GGUFLocalBackend(LocalBackend):
     """
     supports_visual=False
     supports_runtime_budget=True
+    supports_named_return=True
 
     def __init__(self, engine, model, root, *, name='라임', context=2048, max_pending=12, serving_lease=None):
         super().__init__(max_pending=max_pending, model_id='character:lime')
@@ -505,7 +507,15 @@ class GGUFLocalBackend(LocalBackend):
 
     async def _assess_social_semantic(self,packet):
         token=social_context_budget.set(True)
-        try:return await super()._assess_social_semantic(packet,grounded_choices=True)
+        try:
+            from .named_return import return_view,return_choices,parse_return,PROMPT
+            view=return_view(packet)
+            if view is not None:
+                raw=await self._job([dict(role='system',content=PROMPT),dict(role='user',content=json.dumps(view,ensure_ascii=False))],
+                                    budget=12,choices=return_choices(view))
+                return parse_return(raw,view)
+            packet=dict(packet);packet.pop('pending_human_source',None)
+            return await super()._assess_social_semantic(packet,grounded_choices=True)
         finally:social_context_budget.reset(token)
 
     async def link_direct(self,packet):

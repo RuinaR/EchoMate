@@ -1,7 +1,7 @@
 """Scoped RAM social evidence. Candidate context never grants membership or identity."""
 from collections import OrderedDict
 from dataclasses import dataclass
-from itertools import product
+from itertools import product,count
 import re
 import time
 
@@ -22,6 +22,15 @@ class SocialDecision:
     reaction_only:bool=False
     plan:str|None=None
     context_omitted:bool=False
+
+
+@dataclass(frozen=True)
+class SocialSource:
+    guild:int
+    channel:int
+    message:str
+    version:int
+    observed:float
 
 
 def confirmed_human_recipient(packet):
@@ -58,11 +67,30 @@ SOCIAL_CHOICES=choices()
 
 
 def grounded_social_choices(packet):
-    """Constrain references, never infer the addressee or participation intent."""
+    """Constrain already-enforced membership/return invariants, not audience.
+
+    Keep human/uncertain/no-response alternatives. A permitted resume still
+    needs semantic evidence and the unchanged validate_social checks.
+    """
     anchors={str(frame.get('index')) for frame in packet.get('frames',[])
              if isinstance(frame,dict) and type(frame.get('index')) in (int,str)
              and str(frame['index']) in ('0','1','2','3')}
-    return [choice for choice in SOCIAL_CHOICES if choice.split()[2]=='none' or choice.split()[2] in anchors]
+    frames={str(f['index']):f for f in packet.get('frames',[]) if str(f.get('index')) in anchors}
+    speaker=packet.get('current',{}).get('speaker')
+    unconfirmed=not packet.get('explicit_call') and not packet.get('bot_reply')
+    result=[]
+    for choice in SOCIAL_CHOICES:
+        target,relation,anchor,act,answer=choice.split()
+        if anchor!='none' and anchor not in anchors:continue
+        frame=frames.get(anchor)
+        if unconfirmed and frame and 'participants' in frame and 'current_peers' in frame:
+            if target=='bot_group' and speaker not in frame['current_peers']:continue
+            if relation in ('continue','end') and speaker not in frame['current_peers']:continue
+            if relation=='resume' and speaker not in frame['participants']:continue
+            if relation=='join' and target=='bot':continue
+        if unconfirmed and packet.get('pending_human_exchange') and target in ('bot','bot_group') and relation!='resume':continue
+        result.append(choice)
+    return result
 
 def parse_social(raw):
     # Historical cached acknowledgement votes are normalized to silence. New
@@ -113,13 +141,16 @@ def direct_signal(event,bot_id,name_result):
     return name_result=='direct' or leading
 
 class SocialRouter:
-    def __init__(self,clock=time.monotonic):self.clock=clock;self.places=OrderedDict()
+    def __init__(self,clock=time.monotonic):
+        self.clock=clock;self.places=OrderedDict();self._source_versions=count(1)
     def observe(self,event):
         key=(event.guild,event.channel);rows=self.places.setdefault(key,OrderedDict())
         roles=event.member_roles
         rows[str(event.id)]=dict(id=str(event.id),speaker=str(event.author),text=event.content[:600],
             addressee=str(roles.addressee) if roles and roles.addressee else None,
-            reply=str(event.reply_to) if event.reply_to else None,at=self.clock())
+            reply=str(event.reply_to) if event.reply_to else None,at=self.clock(),
+            version=next(self._source_versions),
+            **({'text_clipped':True} if len(event.content)>600 else {}))
         for mid,row in list(rows.items()):
             if self.clock()-row['at']>3600:rows.pop(mid,None)
         while len(rows)>32:rows.popitem(last=False)
@@ -136,10 +167,20 @@ class SocialRouter:
         row=self.places.get((guild,channel),{}).get(str(message))
         if row:
             if content is None:self.places[(guild,channel)].pop(str(message),None)
-            else:row.update(text=content[:600],addressee=None)
+            else:
+                row.update(text=content[:600],addressee=None,version=next(self._source_versions))
+                if len(content)>600:row['text_clipped']=True
+                else:row.pop('text_clipped',None)
+
+    def source_stamp(self,guild,channel,message):
+        row=self.places.get((guild,channel),{}).get(str(message))
+        return SocialSource(guild,channel,str(message),row.get('version',0),row['at']) if row else None
+
+    def source_current(self,stamp):
+        return isinstance(stamp,SocialSource) and self.source_stamp(stamp.guild,stamp.channel,stamp.message)==stamp
     def confirm(self,event,bot_id):
         row=self.places.get((event.guild,event.channel),{}).get(str(event.id))
-        if row:row['addressee']=str(bot_id)
+        if row and row['addressee']!=str(bot_id):row.update(addressee=str(bot_id),version=next(self._source_versions))
     def packet(self,event,conversations,states,bot_id):
         from .social_evidence import evidence_window,reply_recipient
         groups={};query=terms(event.content)
@@ -176,7 +217,7 @@ class SocialRouter:
         rows=list(self.places.get((event.guild,event.channel),{}).values());prefix=[]
         for row in rows:
             if row['id']==str(event.id):break
-            if row['speaker'] in people or row['addressee'] in people:prefix.append({k:v for k,v in row.items() if k!='at'})
+            if row['speaker'] in people or row['addressee'] in people:prefix.append({k:v for k,v in row.items() if k not in ('at','version')})
         pending=None
         for row in reversed(prefix):
             if row['speaker']==str(event.author) and row['addressee']==str(bot_id):break

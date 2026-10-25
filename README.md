@@ -1,5 +1,7 @@
 # EchoMate
 
+최신 개발: [사람 대화 보호·봇 복귀 GPU QA](docs/BOT-RETURN-QA.md). 새 다자 시나리오의 복귀 누락을 줄였지만 일반 자율 참여·자유 생성 사실성은 미완료로 **RELEASE BLOCKED**입니다. 장시간 검증은 사용자 실사용으로 이관했습니다.
+
 최신 개발: [Runtime 의도·요약 경계와 실제 Lime 대화 QA](docs/RUNTIME-LAYERS-QA.md). 일반 의미 청자·자유 생성 사실성은 아직 출시 차단 사항이며 RELEASE BLOCKED입니다.
 
 최근 Runtime 보호·실행 금지·문맥 예산 검증: [QA](docs/LIME-GROUNDED-RUNTIME-QA.md). 일반 의미 판단은 아직 RELEASE BLOCKED입니다.

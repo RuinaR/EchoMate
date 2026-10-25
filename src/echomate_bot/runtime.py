@@ -25,6 +25,7 @@ from .character import effective_character
 from .telemetry import Trace,active_trace,summarize
 from .naming import guild_name,name_address
 from .adult_policy import turn_profile,adult_request_blocked,boundary_limited
+from .social import SocialSource
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,7 @@ class Event:
     attention_followup:bool=False
     visual_inputs_present:bool=False
     character_epoch:int|None=None
+    social_source:SocialSource|None=None
 
 
 from .ledger import Ledger
@@ -912,7 +914,12 @@ class Runtime:
         task.add_done_callback(done)
 
     async def fresh(self,event,state,version,revision,require_adult=False):
+        if event.social_source is not None and not self.social.source_current(event.social_source):
+            trace=active_trace.get()
+            if trace:trace.outcome='cancelled'
+            self.note('social_source_changed');return False
         def current():return ((event.character_epoch is None or event.character_epoch==self.model_generation_epoch) and self.utterances.valid(event) and
+                (event.social_source is None or self.social.source_current(event.social_source)) and
                 not any(row.parts[0].response_to==(event.response_to or event.id) and
                     (row.parts[0].guild,row.parts[0].channel,row.parts[0].author)==(event.guild,event.channel,event.author)
                     and sum(len(p.content)+128 for p in (*event.raw_parts,*row.parts))<=self.utterances.budget
@@ -1008,8 +1015,19 @@ class Runtime:
         cfg=self.settings.get()
         packet['current']['bot_identity']=dict(id=str(self.transport.bot_id),effective_name=self.active_name(cfg,event.guild),
             name_version=getattr(self.backend,'name_version',None),character_epoch=event.character_epoch)
-        packet['reaction_available']=bool(cfg['reactions'] and scope(cfg,event.guild,event.channel,event.parent,action='reaction')!='silent' and (await self.transport.permissions(event)).get('react',False))
         packet['explicit_call']=direct;packet['bot_reply']=bot_reply
+        pending=packet.get('pending_human_exchange')
+        pending_stamp=self.social.source_stamp(event.guild,event.channel,pending['source']) if pending and not direct and not bot_reply else None
+        if pending_stamp and getattr(self.backend,'supports_named_return',False):
+            row=self.social.places.get((event.guild,event.channel),{}).get(pending_stamp.message)
+            if row:packet['pending_human_source']={k:v for k,v in row.items() if k not in ('at','version')}
+        # Bind the packet and its source before the first asynchronous wait.
+        # A permission lookup must not attach a newer stamp to older evidence.
+        packet['reaction_available']=bool(cfg['reactions'] and scope(cfg,event.guild,event.channel,event.parent,action='reaction')!='silent' and (await self.transport.permissions(event)).get('react',False))
+        if pending_stamp and not self.social.source_current(pending_stamp):
+            trace=active_trace.get()
+            if trace:trace.outcome='cancelled'
+            self.note('social_source_changed');return None
         if packet['candidates_truncated'] and not direct:
             self.note('social_candidate_capacity');return None
         actual_others=set(event.member_mentions)-{event.author,self.transport.bot_id}
@@ -1068,8 +1086,18 @@ class Runtime:
                 # Do not guess membership or suppress the independent reply.
                 decision=SocialDecision('bot','new','none','request',True)
                 self.note('social_group_link_unavailable_independent')
+        if pending_stamp and not self.social.source_current(pending_stamp):
+            trace=active_trace.get()
+            if trace:trace.outcome='cancelled'
+            self.note('social_source_changed');return None
+        if pending_stamp:event=replace(event,social_source=pending_stamp)
         anchor,reason=validate_social(decision,event,frames,bot_id=self.transport.bot_id,direct=direct,bot_reply=bot_reply,pending_human=bool(packet['pending_human_exchange']),allow_reaction=packet['reaction_available'])
         observed=dict(speaker=str(event.author),target=decision.target,relation=decision.relation,act=decision.act,
+            model_target=decision.target,model_relation=decision.relation,model_anchor=decision.anchor,
+            pending_source=pending['source'] if pending else None,
+            pending_source_version=pending_stamp.version if pending_stamp else None,
+            pending_basis='last_confirmed_human_address' if pending else None,
+            character_epoch=event.character_epoch,name_version=packet['current']['bot_identity']['name_version'],
             response_expected=decision.respond,decision_plan=decision.plan or ('metadata_direct' if direct and not group_call else 'composite'),
             candidate_count=len(frames),peer_candidate_count=len(packet['current_peer_frames']),context_omitted=decision.context_omitted,
             pending_human_exchange=bool(packet['pending_human_exchange']),
@@ -1683,6 +1711,8 @@ class Runtime:
                     self.latencies.append(round(time.time()-started,3));self.latencies=self.latencies[-100:]
                 except Exception as exc:
                     self.ledger.completed(event,"failed_or_uncertain")
+                    if event.social_source is not None and not self.social.source_current(event.social_source):
+                        active_trace.get().outcome='cancelled';self.note('social_source_changed');return
                     if dependency_stale and action.kind==Kind.TEXT:
                         active_trace.get().outcome='cancelled';self.note('evidence_superseded');return
                     # Transient failures do not make a Unicode emoji invalid.
