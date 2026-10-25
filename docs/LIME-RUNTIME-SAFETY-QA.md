@@ -37,3 +37,7 @@
 - 갱신 Portable 실제 번들 Python/번들 src **72개 OK6.921초**. 이전70개 성공은 추가 경주 수정 이전의 기록으로 별도 보존했다.
 - 공개184경로 소스/문서 동기화, 민감정보·확장자·staged 전체 내용/diff 감사. Portable 전체 manifest 검사는 마감 로그에 기록한다. 실제 Portable GPU·다른 Windows·새 Lime UI·장시간 운용을 이 CPU/단기 진단으로 대체하지 않는다.
 - 실제 GPU 보고서는 각각의 소스 SHA를 보존한다. 마지막 조회 실행 여부 경주 수정은 전체996/번들72에서 검증했으며 해당 추가 경주를 실제 GPU에서 다시 재현한 것은 아니다. 기존 GPU 6송신 결과를 최종 전체 제품 자격 PASS로 확대하지 않는다.
+
+### 마감
+
+구현 커밋 `9e869ee`(시작 `0c2c14b`). Portable 전체 **21,587파일**의 membership/size/SHA256 감사 PASS, missing/extra/mismatch/forbidden 모두0. 공개184경로 일치, staged14파일 전체 공개 감사 검출0, 운영/장부5hash 및 Lime 전체 가중치 hash 동일. 이 마감 문서 반영 뒤 manifest를 다시 동기화·검사한다. 최종 main/원격 일치·clean 및 종료 HEAD는 Git 이력과 비공개 checkpoint에 기록한다. **Lime RELEASE BLOCKED**, 청자 판단·일반 기능 약속·새 UI·장기/실환경을 미완료로 남긴다.
