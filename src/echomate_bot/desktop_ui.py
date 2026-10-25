@@ -832,6 +832,11 @@ class DesktopApp(CompanionViews):
         self.disposed=True
         self.root.after_cancel(self.poll_id)
         self.hits.clear();self.drafts.clear();self.snapshot=None
+        # Remove callback cycles while still on Tk's owning thread. Otherwise
+        # a later executor GC may finalize the Tcl interpreter on that worker.
+        self.feedback.clear()
+        for widget in (self.server_list,self.channel_list,self.people_list,self.record_list,self.job_list,self.model_list):
+            widget.callback=None
         self.pending_actions.clear()
         self.button_fonts.clear()
         self.root.destroy()

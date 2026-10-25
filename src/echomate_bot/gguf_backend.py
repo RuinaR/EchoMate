@@ -226,6 +226,9 @@ class GGUFEngine:
             grammar = None
         if self.generations:
             raise RuntimeError('Single GGUF slot already owned')
+        from .local_chat import local_token_budget, stream_observer
+        if local_token_budget.get():
+            messages = await self.fit_local_context(messages, budget)
         task = asyncio.current_task()
         self.generations.add(task)
         started = time.monotonic()
@@ -259,6 +262,9 @@ class GGUFEngine:
                         if delta.get('reasoning_content') or delta.get('tool_calls'):
                             raise ValueError('Unexpected output channel')
                         content = delta.get('content') or ''
+                        observer = stream_observer.get()
+                        if content and observer:
+                            observer('delta', content)
                         if content and first is None:
                             first = time.monotonic()
                         text.append(content)
@@ -286,6 +292,46 @@ class GGUFEngine:
             raise
         finally:
             self.generations.discard(task)
+
+    async def fit_local_context(self, messages, budget):
+        """Exact native counts, logarithmic suffix selection, protected facts.
+
+        Binary search is a selection heuristic, not a token monotonicity or
+        maximum-history proof. Every returned candidate is exactly checked.
+        """
+        started=time.monotonic();calls=0
+        values=[dict(m) for m in messages]
+        if (not values or values[0].get('role')!='system' or values[-1].get('role')!='user' or
+            len(values)%2 or any(m.get('role')!=('user' if i%2 else 'assistant')
+                for i,m in enumerate(values[1:-1],1))):
+            raise ValueError('Invalid protected local conversation structure')
+        pairs=(len(values)-2)//2
+        def candidate(keep):return [values[0],*values[-(2*keep+1):]]
+        async def count(selected):
+            nonlocal calls
+            calls+=1
+            async with self.session.post(self.url+'/apply-template', json={'messages':selected,'add_generation_prompt':True}) as response:
+                response.raise_for_status();prompt=(await response.json())['prompt']
+            async with self.session.post(self.url+'/tokenize', json={'content':prompt,'add_special':False,'parse_special':True}) as response:
+                response.raise_for_status();tokens=(await response.json())['tokens']
+            if not isinstance(tokens,list):raise ValueError('Invalid native tokenization')
+            return len(tokens)
+        limit=self.context-budget-64
+        tokens=await count(values);keep=pairs;selected=values
+        if tokens>limit:
+            selected=candidate(0);tokens=await count(selected);keep=0
+            if tokens>limit:
+                raise ValueError('현재 입력·필수 근거가 문맥 예산을 초과했어요. 입력을 줄여 주세요')
+            low,high=1,pairs-1
+            while low<=high:
+                middle=(low+high)//2;trial=candidate(middle);size=await count(trial)
+                if size<=limit:
+                    keep=middle;selected=trial;tokens=size;low=middle+1
+                else:high=middle-1
+        self.last_context=dict(input_tokens=tokens,removed_exchanges=pairs-keep,
+            context_limit=self.context,output_reserve=budget,margin=64,
+            preflight_counts=calls,preflight_seconds=time.monotonic()-started)
+        return selected
 
     async def cancel(self):
         jobs = [t for t in self.generations if t is not asyncio.current_task()]
@@ -487,6 +533,9 @@ class GGUFLocalBackend(LocalBackend):
         messages = with_identity(self.entry, self.name, [{'role': 'system', 'content': policy}, *context])
         # Bounded legacy output-policy retry, without restoring personality sliders.
         for attempt in range(2):
+            from .local_chat import stream_observer
+            observer=stream_observer.get()
+            if observer:observer('reset','')
             result = await self._job(messages, budget=384)
             if contains_code(result):
                 if attempt:

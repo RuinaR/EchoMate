@@ -62,10 +62,13 @@ class Controller(unittest.IsolatedAsyncioTestCase):
         model=Model();model.probe=AsyncMock(side_effect=RuntimeError('Model recipient classification validation failed'))
         with patch('echomate_bot.lime_desktop.GGUFLocalBackend',return_value=model):
             result=await self.c.command('lime_load')
-        self.assertFalse(result['ok']);self.assertTrue(model.closed)
-        self.assertFalse(model.capabilities_verified);self.assertIsNone(self.c.lime_backend)
-        self.assertEqual(self.c.lime['stage'],'failed')
-        self.assertIn('청자 판단',self.c.lime['error'])
+        self.assertTrue(result['ok']);self.assertFalse(model.closed)
+        self.assertFalse(model.capabilities_verified);self.assertIs(self.c.lime_backend,model)
+        self.assertEqual(self.c.lime['stage'],'local_ready')
+        self.assertIn('BLOCKED',self.c.lime['autonomous_error'])
+        self.assertFalse((await self.c.command('start'))['ok'])
+        self.assertTrue((await self.c.command('local_send',text='안녕'))['ok'])
+        self.assertEqual(self.c.local_chat.rows[-1]['text'],'라임이야.')
         with self.assertRaises(RuntimeError):await self.c.create_backend({})
 
     async def test_failed_cleanup_retains_model_and_refuses_second_load(self):
@@ -77,6 +80,18 @@ class Controller(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.c.lime['stage'],'recovery_required')
         self.assertFalse((await self.c.command('lime_load'))['ok'])
         model.clean=True
+
+    async def test_semantic_format_failure_is_local_only_but_resource_failure_is_not(self):
+        model=Model();model.probe=AsyncMock(side_effect=ValueError('Invalid constrained output'))
+        with patch('echomate_bot.lime_desktop.GGUFLocalBackend',return_value=model):
+            self.assertTrue((await self.c.command('lime_load'))['ok'])
+        self.assertEqual(self.c.lime['stage'],'local_ready')
+        await self.c.command('lime_unload')
+        from echomate_bot.processes import ResourceLimitError
+        model=Model();model.probe=AsyncMock(side_effect=ResourceLimitError('reserve','ram'))
+        with patch('echomate_bot.lime_desktop.GGUFLocalBackend',return_value=model):
+            self.assertFalse((await self.c.command('lime_load'))['ok'])
+        self.assertTrue(model.closed);self.assertIsNone(self.c.lime_backend)
 
     async def test_save_failure_rolls_back_live_model_name(self):
         self.c.lime_backend=Model(name='라임');self.c.lime_backend.capabilities_verified=True

@@ -71,7 +71,11 @@ from .ledger import Ledger
 
 
 class Runtime:
-    def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None,companion=None,followup_fast_path=True,response_pipeline=None):
+    def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None,companion=None,followup_fast_path=True,response_pipeline=None,execution_mode='DISCORD_AUTONOMOUS'):
+        from .execution_modes import ExecutionMode
+        self.execution_mode=ExecutionMode(execution_mode)
+        if self.execution_mode==ExecutionMode.LOCAL_CHAT:
+            raise ValueError('Use credential-free LocalChat, not Discord Runtime')
         character_id=getattr(backend,'character_id',None)
         if character_id and companion is not None and getattr(companion,'character_id',None)!=character_id:
             raise ValueError('Pretrained character requires a matching scoped personal store')
@@ -668,6 +672,19 @@ class Runtime:
         cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
         if self.stopped or event.bot or event.opted_out or mode=="silent":return
         if not (await self.transport.permissions(event)).get("view",False):self.note('permission_denied');return
+        if self.execution_mode.value=='DISCORD_DIRECT':
+            # A distinct restricted mode, not an autonomous quality workaround.
+            # Evaluate only assembled messages; quoted mentions remain prose.
+            from .social import direct_signal
+            verified_reply=False
+            if event.reply_to:
+                key=self.conversations.message_flow.get((event.guild,event.channel,str(event.reply_to)))
+                prior=self.states.get(key)
+                verified_reply=bool(prior and any(t.is_bot and t.message_id==str(event.reply_to)
+                    for t in prior.snapshot(channel_id=event.channel,thread_id=None)[1]))
+            if not (direct_signal(event,self.transport.bot_id,'none') or
+                    event.reply_to is not None and event.reply_author==self.transport.bot_id or verified_reply):
+                self.note('direct_mode_requires_structural_target');return
         if self.stopped or scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':return
         if not self.utterances.valid(event):self.note("utterance_invalidated");return
         if any(p.id in self.seen for p in event.raw_parts):return

@@ -1,5 +1,10 @@
 # EchoMate 프로젝트 정의서 — 현재 기준
 
+## 로컬 검증과 Discord 자격
+
+Lime 단일 출시 목표 안에서 자격 증명 없는 LOCAL_CHAT을 독립 제공한다. 로컬 기술 준비/이름 검증과 Discord 자율 참여 품질을 구분한다. 합성 테스트 기억·친밀도·예약과 저장 세션은 운영 자료와 분리한다. 제한적 Direct 모드는 오프라인 SDK 검증 범위이며 실제 Discord는 별도 승인 대상이다. LOCAL 성공만으로 정식 출시나 자율 참여 성공을 선언하지 않는다. [현재 모드 QA](LOCAL-CHAT-QA.md).
+
+
 ## 현재 Windows 기본 실행
 
 기본 진입점은 Lime 설치·이름·로딩 관리 앱이다. 기존 운영 자료를 자동 이관하지 않는 별도 저장소를 사용하며 legacy 실행 경로는 보존한다. 설치/기술 로딩과 제품 Ready는 다르다. 청자 semantic 검증 실패 시 Discord 실행을 금지한다. [실제 구현과 제한](LIME-WINDOWS-APP-QA.md).

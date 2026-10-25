@@ -326,7 +326,12 @@ class LimeInstall:
                 raise
 
     def copy_asset(self, source, asset):
-        source = private_path(source)
+        # Reading a user-selected pinned source is different from writing our
+        # private data home. Never scan its parent or modify/move the original.
+        source = Path(source).expanduser()
+        if source.is_symlink() or getattr(source.lstat(),'st_file_attributes',0)&0x400:
+            raise ValueError('Linked imported source is not supported')
+        source = source.resolve(strict=True)
         target = self.root/asset.name
         part = target.with_name(target.name+'.part')
         if source.is_symlink() or source.stat().st_size != asset.size or file_hash(source, self.cancelled) != asset.sha256:

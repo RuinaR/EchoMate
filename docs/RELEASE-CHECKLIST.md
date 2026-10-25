@@ -1,5 +1,28 @@
 # 릴리즈 요구사항 추적표
 
+
+### 이번 LOCAL_CHAT 게이트
+
+| 영역 | 상태 | 근거 / 남은 조건 |
+|---|---|---|
+| 로컬 독립 UI·합성 기능 경로 | PASS (한정) | 기술 검사 후 실제 GPU·별도 DB·stream/cancel·영수증·삭제 경합 검증 |
+| 직접 멘션/reply | PASS (오프라인 한정) | 실제 GPU→SDK mock7이벤트4응답·3침묵, live 시작 허용 아님 |
+| Discord 자율 청자 | FAIL/BLOCKED | 기존 strict qualification 기준 유지 |
+| 강한 이름 일관성·자유 생성 사실성 | FAIL | 과거 이름 유도 수용·무실행 미래 발언 남음 |
+| 마지막 소스30분/2·8시간·다른 Windows | NOT VERIFIED | 이전 linear32분 periodic 관측과 구분 |
+| 실제 Discord 통합 | BLOCKED | 별도 승인 전 인증/조회/송신 금지 |
+
+### LOCAL_CHAT 마감 근거와 다음 작업
+
+실제 능동10턴과 별도 scripted100회 연속 생성(장기50 포함), 기억20·예약20·인칭20·일상30 시나리오를 구분해 기록했다. 모델의 이전 이름 수용·근거 없는 조회/미래 약속은 남아 있어 RELEASE BLOCKED다. 실제 stream 취소·기억 삭제 경합·재시작 stale 세션 거절을 확인했다. 긴 문맥 native 사전 계산을 같은 선택 메시지 기준32초→약1.4초로 줄였으며 생성 속도 개선과 구분한다. 현재 세션 중복 모델 소유와 외부 고정 파일 가져오기도 보호했다. 최종 결과·실패 로그·Portable·정확한 재개는 [LOCAL-CHAT-QA](LOCAL-CHAT-QA.md)를 따른다.
+
+우선순위: (1) 원천 분리 사회적 시퀀스로 DISCORD_AUTONOMOUS의 오개입/누락 개선, (2) 기존 receipt 기반 기능 경로와 자유 생성의 거짓 약속 구분, (3) 이름 유도·긴 대화 사실성, (4) 최종 소스 장기 GPU/2·8시간·다른 Windows. 실제 Discord는 마지막 별도 승인이다. 재학습·새 모델 탐색으로 범위를 확장하지 않는다.
+
+## 2026-10-25 LOCAL_CHAT 분리·실제 대화 검증 — RELEASE BLOCKED
+
+청자 자격 실패가 로컬 채팅까지 막던 결합을 분리했다. 파일/자원/이름 기술 검사를 통과하면 LOCAL_CHAT을 사용하며 Discord 자율 참여는 계속 BLOCKED다. 로컬 채팅 UI·합성v8 저장소·명시 기능/영수증·native 토큰 예산·저장 세션의 삭제/철회 재생성 방어를 연결했다. 실제 능동10턴과 별도 scripted 기억/예약/일상/장기 대화를 수행했지만 자유 생성 사실성은 미해결이다. 제한 Direct GPU→SDK mock7이벤트/의도한4reply·오류0은 자율 참여의 PASS가 아니다. [검증 범위·실패·원문 위치·재개](LOCAL-CHAT-QA.md).
+
+
 ## 2026-10-25 Lime Windows 설치·이름·GPU 준비 연결 — RELEASE BLOCKED
 
 시작 `32cf372`. 기본 실행을 Lime 앱으로 연결하고 고정 출처 다운로드/가져오기·전체 파일 검증·취소/복구·이름 저장/rollback·별도v8 저장소와 기존 InstanceLease를 통합했다. 과거 앱은 명시적 legacy 실행으로 보존한다. 실제 기존 모델 설치28.219초·GPU 준비3.672초/유나 이름 확인 후 **strict 청자 검증 FAIL→안전 해제·Discord 시작 차단**을 확인했다. 최소freeVRAM7,132MiB/RAM5.49GiB/commit20.185GiB, 최고48°C. 운영 자료/실제 Discord는 건드리지 않았다.

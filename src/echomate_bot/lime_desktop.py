@@ -23,6 +23,7 @@ class LimeController(LocalController):
         root = private_path(data_root or ROOT/'lime')
         self.lime = dict(stage='not_installed', busy=False, name='라임', error=None,
                          done=0, total=0, local_result='')
+        self.local_chat = None
         self.lime_backend = None
         self.lime_diagnostics = {}
         self.lime_task = None
@@ -59,12 +60,31 @@ class LimeController(LocalController):
         engine = getattr(self.lime_backend, 'engine', None)
         samples = getattr(engine, 'samples', ())
         latest = samples[-1] if samples else self.lime_diagnostics.get('last_sample')
-        return dict(lime=dict(self.lime, resident=self.lime_backend is not None, resources=latest))
+        reason=getattr(engine,'last_error',None)
+        if reason not in ('ram','commit','vram','temperature','gpu_query'):reason=None
+        return dict(lime=dict(self.lime, resident=self.lime_backend is not None, resources=latest,
+                             safety_stop_reason=reason, diagnostics=dict(self.lime_diagnostics)),
+                    local_chat=self.local_chat.snapshot() if self.local_chat else None,
+                    execution_modes=dict(LOCAL_CHAT='READY' if self.lime_backend and self.lime.get('stage') in ('ready','local_ready') else 'NOT_READY',
+                        DISCORD_DIRECT='OFFLINE_ONLY_NOT_VERIFIED',
+                        DISCORD_AUTONOMOUS='READY' if self.lime_backend and self.lime_backend.capabilities_verified else 'BLOCKED'))
+
+    async def _local_clock(self):
+        while True:
+            await asyncio.sleep(1)
+            if self.local_chat:
+                try:await self.local_chat.tick()
+                except Exception as exc:
+                    self.local_chat.notification_service_failed=True
+                    self.error='로컬 테스트 알림 서비스 중단 · '+type(exc).__name__
+                    return  # No hidden/unbounded retries after a storage fault.
 
     async def _main(self):
+        timer=asyncio.create_task(self._local_clock())
         try:
             await super()._main()
         finally:
+            timer.cancel();await asyncio.gather(timer,return_exceptions=True)
             await self._cancel_lime()
             if self.lime_backend and not self.client:
                 await self.lime_backend.close()
@@ -96,6 +116,30 @@ class LimeController(LocalController):
         self.lime_task = None
 
     async def command(self, operation, **kwargs):
+        if operation=='local_ack':
+            if not self.lease:return dict(ok=False,error='다른 앱이 실행 자원을 소유하고 있어요')
+            if not self.local_chat:return dict(ok=False,error='로컬 받은 알림이 없어요')
+            try:
+                await self.local_chat.acknowledge_notifications()
+                result=dict(ok=True,error='')
+            except Exception as exc:
+                self.error='로컬 알림 확인 결과를 확인하지 못했어요 · '+type(exc).__name__
+                result=dict(ok=False,error=self.error)
+            self._publish();return result
+        if operation in ('local_reset','local_save','local_restore'):
+            if not self.lease:return dict(ok=False,error='다른 앱이 실행 자원을 소유하고 있어요')
+            await self._cancel_lime()
+            try:
+                chat=self.get_local_chat()
+                if operation=='local_reset':chat.reset()
+                elif operation=='local_save':await asyncio.to_thread(chat.save)
+                else:await asyncio.to_thread(chat.restore)
+                result=dict(ok=True,error='')
+            except (OSError,ValueError,KeyError,TypeError) as exc:
+                self.error='로컬 테스트 세션을 처리하지 못했어요 · '+type(exc).__name__
+                result=dict(ok=False,error=self.error)
+            self._publish()
+            return result
         if operation == 'start' and (not self.lime_backend or
                 not self.lime_backend.capabilities_verified or self.lime.get('stage') != 'ready'):
             return dict(ok=False, error='Lime 모델 준비 검증을 먼저 완료해 주세요')
@@ -106,10 +150,10 @@ class LimeController(LocalController):
                 self.lime_backend = None
         if operation == 'lime_cancel':
             await self._cancel_lime()
-            self.lime.update(busy=False, stage='cancelled')
+            self.lime.update(busy=False, stage=('ready' if self.lime_backend.capabilities_verified else 'local_ready') if self.lime_backend and not self.lime_backend.failed else 'cancelled')
             self._publish()
             return dict(ok=True, error='')
-        if operation.startswith('lime_'):
+        if operation.startswith('lime_') or operation=='local_send':
             if not self.lease:
                 return dict(ok=False, error='다른 EchoMate가 실행 자원을 소유하고 있어요')
             if self.lime_task and not self.lime_task.done():
@@ -124,6 +168,12 @@ class LimeController(LocalController):
         if operation == 'name':
             return dict(ok=False, error='Lime 이름은 모델 화면에서 변경해 주세요')
         return await super().command(operation, **kwargs)
+
+    def get_local_chat(self):
+        if self.local_chat is None:
+            from .local_chat import LocalChat
+            self.local_chat=LocalChat(self.data_root/'local-chat')
+        return self.local_chat
 
     async def _lime_action(self, operation, values):
         prior_stage = self.lime.get('stage')
@@ -153,10 +203,25 @@ class LimeController(LocalController):
                     await backend.ready()
                     await backend.probe_identity()
                     self.lime['identity_verified'] = True
-                    await backend.probe()  # Never bypass semantic qualification.
+                    # Local technical readiness is independent of Discord social quality.
+                    try:
+                        await backend.probe()
+                        social_error=None
+                    except (ValueError,RuntimeError) as exc:
+                        from .processes import ResourceLimitError
+                        if (isinstance(exc,ResourceLimitError) or backend.failed or backend.engine.failed or
+                            isinstance(exc,RuntimeError) and str(exc)!='Model recipient classification validation failed'):raise
+                        social_error='Discord 자율 참여: 청자 검증 실패 · BLOCKED'
                     self.lime_backend = backend
-                    self.lime.update(stage='ready')
+                    self.lime.update(stage='ready' if backend.capabilities_verified else 'local_ready',
+                                     autonomous_error=social_error)
                     backend = None
+            elif operation == 'local_send':
+                if not self.lime_backend or self.lime.get('stage') not in ('ready','local_ready'):
+                    raise RuntimeError('로컬 모델 준비 검증을 먼저 완료해 주세요')
+                if self.client:raise RuntimeError('Discord 실행 중 로컬 테스트는 사용할 수 없어요')
+                self.lime['local_result']=await self.get_local_chat().send(values['text'],self.lime_backend,
+                    scope=tuple(values.get('scope',(2,3,4))))
             elif operation == 'lime_name':
                 if getattr(self, 'starting_model', False):
                     raise RuntimeError('모델 시작 검사가 끝난 뒤 이름을 변경해 주세요')
@@ -183,6 +248,7 @@ class LimeController(LocalController):
                             self.lime['stage'] = 'recovery_required'
                     raise
                 self.lime['name'] = name
+                if self.local_chat:self.local_chat.epoch+=1
             elif operation == 'lime_repair':
                 await self.installer.repair(confirmed=values.get('confirmed') is True)
             elif operation == 'lime_unload':
@@ -193,7 +259,7 @@ class LimeController(LocalController):
                     self.lime_backend = None
                 self.lime['stage'] = 'installed'
             elif operation == 'lime_preview':
-                if not self.lime_backend or not self.lime_backend.capabilities_verified:
+                if not self.lime_backend or self.lime.get('stage') not in ('ready','local_ready'):
                     raise RuntimeError('모델 준비 검증을 먼저 완료해 주세요')
                 text = values['text']
                 if not isinstance(text, str) or not 1 <= len(text) <= 1000:
@@ -205,7 +271,7 @@ class LimeController(LocalController):
                 raise ValueError('Unknown Lime operation')
             return dict(ok=True, error='')
         except asyncio.CancelledError:
-            self.lime.update(stage='cancelled')
+            self.lime.update(stage=prior_stage if prior_stage in ('ready','local_ready') and self.lime_backend else 'cancelled')
             raise
         except Exception as exc:
             from .processes import ResourceLimitError, resource_message
@@ -220,10 +286,18 @@ class LimeController(LocalController):
                        if str(exc) == 'Model recipient classification validation failed'
                        else resource_message(exc,'PC 자원 보호로 중단했어요 · '+exc.reason) if isinstance(exc,ResourceLimitError)
                        else explanations.get(str(exc),'설치·입력·자원 상태를 확인해 주세요 · '+type(exc).__name__))
-            healthy = (operation in ('lime_name', 'lime_preview') and prior_stage == 'ready'
-                       and self.lime_backend and self.lime_backend.capabilities_verified
+            engine=getattr(self.lime_backend,'engine',None)
+            reason=getattr(engine,'last_error',None)
+            if reason in ('ram','commit','vram','temperature','gpu_query'):
+                message='모델 자원 안전 검사로 중단했어요 · '+reason+' · 안전 해제 후 자원을 확인해 주세요'
+            elif operation=='local_send' and str(exc).startswith('현재 입력·필수 근거'):
+                message='현재 입력·필수 근거가 문맥 예산을 초과했어요. 내용을 줄여 다시 보내 주세요'
+            elif operation=='local_send' and str(exc).startswith(('대화 근거가 바뀌어','실행 영수증이 바뀌어')):
+                message='동의·기억·실행 근거가 바뀌어 오래된 응답을 폐기했어요'
+            healthy = (operation in ('lime_name', 'lime_preview','local_send') and prior_stage in ('ready','local_ready')
+                       and self.lime_backend and not self.lime_backend.failed
                        and self.lime.get('stage') != 'recovery_required')
-            self.lime.update(stage='ready' if healthy else
+            self.lime.update(stage=prior_stage if healthy else
                              'recovery_required' if self.lime.get('stage') == 'recovery_required' else 'failed',
                              error=message)
             self.error = message
@@ -236,6 +310,7 @@ class LimeController(LocalController):
                 self.lime_diagnostics = dict(character_id='lime',
                     identity_verified=self.lime.get('identity_verified', False),
                     capabilities_verified=getattr(measured, 'capabilities_verified', False),
+                    safety_stop_reason=getattr(engine,'last_error',None) if getattr(engine,'last_error',None) in ('ram','commit','vram','temperature','gpu_query') else None,
                     load_seconds=getattr(measured, 'load_seconds', None),
                     extrema=dict(getattr(engine, 'extrema', {})),
                     last_sample=samples[-1] if samples else None)
@@ -254,17 +329,20 @@ class LimeController(LocalController):
 STATES = dict(not_installed='설치 확인 전', present_unverified='설치 파일 발견 · 검증 필요',
     downloading='다운로드 중', importing='기존 파일 복사 중',
     verifying='파일 검증 중', extracting='실행 엔진 설치 중', installed='파일 검증 완료 · 모델 로딩 전',
-    loading='모델 로딩·품질 검증 중', ready='모델 준비 완료', failed='검증 실패',
+    loading='모델 로딩·품질 검증 중', ready='모델 준비 완료', local_ready='로컬 대화 준비 · Discord 자율 참여 차단', failed='검증 실패',
     cancelled='작업 취소됨 · 부분 다운로드 보존', recovery_required='자원 정리 확인 필요')
 
 
-class LimeDesktopApp(DesktopApp):
+from .local_chat_ui import LocalChatView
+
+
+class LimeDesktopApp(LocalChatView, DesktopApp):
     def __init__(self, root, controller):
         super().__init__(root, controller)
         self.page = 'lime'
 
     def navigation(self):
-        return [('lime', '라임 · 설치와 이름'), ('setup', 'Discord 설정'), ('spaces', '대화할 곳'),
+        return [('lime', '라임 · 설치와 이름'), ('local','로컬 채팅'), ('setup', 'Discord 설정'), ('spaces', '대화할 곳'),
                 ('outputs', '응답 방식'), *PAGES.items(), ('status', '진행 상황')]
 
     def model_label(self):
@@ -280,30 +358,33 @@ class LimeDesktopApp(DesktopApp):
         return '/동의는 본인 데이터 동의·철회, /캐릭터는 현재 캐릭터를 본인만 보는 읽기 전용 응답이에요. 캐릭터 변경은 Windows 앱에서만 해요.'
 
     def page_title(self):
-        return '라임과 시작하기' if self.page == 'lime' else super().page_title()
+        return '로컬 채팅 · 합성 테스트' if self.page=='local' else '라임과 시작하기' if self.page == 'lime' else super().page_title()
 
     def can_start(self):
         value = (self.snapshot or {}).get('lime', {})
         return value.get('stage') == 'ready' and not value.get('busy')
 
     def phase_caption(self, phase):
+        if self.page=='local':
+            return 'LOCAL_CHAT · Discord 자격 증명 없이 사용' if (self.snapshot or {}).get('lime',{}).get('stage') in ('ready','local_ready') else '먼저 라임 모델을 설치·로딩해 주세요'
         if self.page == 'lime':
             return STATES.get((self.snapshot or {}).get('lime', {}).get('stage'), 'Lime 설치를 먼저 확인해 주세요')
         return phase
 
     def footer_message(self, footer):
+        if self.page=='local':return '합성 테스트 DB · 실제 Discord 연결 없음 · 선택 후 Ctrl+C로 복사'
         if self.page == 'lime':
             value = (self.snapshot or {}).get('lime', {})
             return ('모델 작업에 실패했어요 · 상태·오류에서 원인을 확인해 주세요' if value.get('error') else
-                    '모델 검증 통과 후에만 실행 가능해요 · 실제 Discord 연결은 별도 작업이에요')
+                    '로컬 채팅은 자격 증명 없이 사용해요 · Discord 자율 참여는 별도 검증해요')
         return footer
 
     def draw_lime(self, w, h, cfg):
         value = (self.snapshot or {}).get('lime', {})
         busy = value.get('busy', False)
-        ready = value.get('stage') == 'ready'
+        ready = value.get('stage') in ('ready','local_ready')
         rounded(self.canvas, 226, 143, w-252, h-207, PANEL)
-        self.text(250, 164, '① 모델 설치 → ② 이름 설정 → ③ 모델 로딩 → ④ Discord 설정', 10, bold=True, width=w-300)
+        self.text(250, 164, '① 모델 설치 → ② 이름 설정 → ③ 모델 로딩 → ④ 로컬 채팅 · Discord는 별도', 10, bold=True, width=w-300)
         self.text(250, 218, 'Lime Q6_K · naksyu/lime_Q6_K · 모델 약 5.8GiB + 실행 엔진', 9, MUTED)
         self.text(250, 246, STATES.get(value.get('stage'), '설치 확인 전'), 11, ACCENT, True)
         self.button(250, 276, 162, 34, '동의하고 다운로드', self.install_dialog, enabled=not busy and not ready)
@@ -323,9 +404,9 @@ class LimeDesktopApp(DesktopApp):
         self.button(600, 371, 150, 34, '이름 변경', self.rename_dialog, enabled=not busy)
         self.button(250, 433, 170, 38, '모델 로딩·검증', lambda:self.controller.submit('lime_load'), primary=True, enabled=not busy and not ready)
         self.button(432, 433, 150, 38, '모델 안전 해제', lambda:self.controller.submit('lime_unload'), enabled=value.get('resident', False) and not busy)
-        self.button(594, 433, 170, 38, '로컬 대화 확인', self.preview_dialog, enabled=ready and not busy)
+        self.button(594, 433, 170, 38, '로컬 채팅 열기', lambda:self.set_page('local'), enabled=ready and not busy)
         message=(value.get('error') or value.get('local_result') or
-                 '파일 설치와 GPU 로딩은 품질 승인과 달라요. 검증 실패 시 Discord 실행을 막아요.')
+                 value.get('autonomous_error') or 'LOCAL_CHAT과 Discord 자율 참여 준비는 별도로 검사해요.')
         self.text(250, 497, self.ellipsize(message,w-300,10), 10, MUTED)
         self.text(250, 533, '긴 오류는 상단 상태·오류에서, 로컬 답변은 전체 응답에서 확인해 주세요.', 9, MUTED)
         self.button(250, h-150, 170, 34, 'Discord 설정으로', lambda:self.set_page('setup'), enabled=not busy)

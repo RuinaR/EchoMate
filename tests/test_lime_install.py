@@ -91,6 +91,12 @@ class Provisioning(unittest.IsolatedAsyncioTestCase):
             await self.install.blocking(self.install.copy_asset,source,Asset('bad.gguf',ASSET.url,len(DATA),'0'*64))
         self.assertFalse((self.root/'bad.gguf').exists())
 
+    async def test_selected_source_outside_data_home_is_read_only_and_hash_pinned(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/'explicitly-selected.gguf';source.write_bytes(DATA)
+            result=await self.install.blocking(self.install.copy_asset,source,ASSET)
+            self.assertEqual(result.read_bytes(),DATA);self.assertEqual(source.read_bytes(),DATA)
+
     async def test_worker_cancellation_drains_before_next_operation(self):
         import threading,time
         entered=threading.Event();finished=threading.Event()

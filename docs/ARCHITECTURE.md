@@ -1,5 +1,10 @@
 # 아키텍처
 
+## 실행 모드 분리
+
+LOCAL_CHAT은 LimeController의 로컬 기술 준비와 LocalChat 합성 저장소를 사용하며 Discord transport/token을 사용하지 않는다. DISCORD_DIRECT는 Runtime의 별도 제한 정책으로 조립된 구조적 멘션/봇 reply만 처리한다. DISCORD_AUTONOMOUS가 기존 기본 Runtime/strict social gate이며 LOCAL/Direct 검증으로 자격을 승격하지 않는다. 기존 공정 큐·scope·reply·송신 guard는 재사용한다. [구체 호출 경로·근거/세션 무효화·QA](LOCAL-CHAT-QA.md).
+
+
 ## Lime 제품 진입점 연결
 
 `lime_desktop.LimeDesktopApp → LimeController → LimeInstall / GGUFLocalBackend → 기존 EchoClient/Runtime` 경로다. `desktop.LocalController`의 데이터 위치/store/backend/snapshot hook을 재사용한다. 새 저장소는 기존 ROOT의 `lime/`, serving lease는 기존 ROOT와 공유한다. 캐릭터 데이터는v8 namespace·공통 consent/reminder이며 legacy DB 자동 열기/변환은 하지 않는다. 실제 서버 호출은 준비 검증과 명시적 시작 이후에만 가능하며 현재 semantic FAIL로 차단한다. `OwnedChild` Job은 자체 Popen child만 관리한다. [구체 상태·실제 실행·미검증 경계](LIME-WINDOWS-APP-QA.md).
