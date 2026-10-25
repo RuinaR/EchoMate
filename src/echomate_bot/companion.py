@@ -1,5 +1,6 @@
 """Deterministic private requests; successful acknowledgement follows DB commit."""
 import re
+from dataclasses import dataclass
 from .companion_store import safe_subject_text
 from .temporal import parse_when,duration,display_time
 
@@ -16,6 +17,31 @@ def request_kind(text):
     return None
 
 
+@dataclass(frozen=True)
+class OperationPlan:
+    kind:str
+    action:str
+
+
+def request_plan(text):
+    """The existing deterministic command grammar, not a general Korean NLP judge."""
+    kind=request_kind(text)
+    if kind is None:return None
+    if kind=='summary':return OperationPlan(kind,'read')
+    if kind=='memory':
+        action='delete' if re.search(r'삭제|지워|잊어',text) else 'read' if re.search(r'목록|보여',text) else 'save'
+    else:
+        action='read' if re.search(r'뭐\s*있|목록|조회|보여',text) else 'execute'
+    return OperationPlan(kind,action)
+
+
+def operation_failure(plan):
+    if plan is not None and plan.action=='read':
+        label={'memory':'기억','summary':'대화 요약','reminder':'알림 목록'}[plan.kind]
+        return label+' 조회에 실패했어. 자료가 없다는 뜻은 아니야. 지금은 목록이나 완료 상태를 확인할 수 없어.'
+    return '처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
+
+
 def handle_request(store,event,cfg,bot_id,*,recent=None,receipts=None):
     text=re.sub(r'<@!?'+str(bot_id)+r'>','',event.content).strip()
     kind=request_kind(text)
@@ -30,7 +56,7 @@ def handle_request(store,event,cfg,bot_id,*,recent=None,receipts=None):
         rows=store.summaries(event.guild,event.author,event.channel)
         if receipts is not None:
             from .operation_receipts import read_receipt
-            receipts.append(read_receipt('summaries',event,rows[:4],consent))
+            receipts.append(read_receipt('summaries',event,rows[:4],consent,character_id=getattr(store,'character_id',None)))
         if rows:return '이 채널에 저장된 네 발언 요약(발췌)이야.\n'+'\n'.join(r['summary'] for r in rows[:4])
         excerpts=[t.content[:160] for t in (recent or ()) if t.author_id==str(event.author) and t.message_id!=str(event.id) and safe_subject_text(t.content)]
         if excerpts:return '이번 실행 중 이 채널에서 확인한 네 발언만 발췌하면:\n'+'\n'.join(excerpts[-3:])+'\n재시작 후 보존되는 요약과는 달라.'
@@ -46,7 +72,7 @@ def handle_request(store,event,cfg,bot_id,*,recent=None,receipts=None):
             rows=store.memories(event.guild,event.author,event.channel)
             if receipts is not None:
                 from .operation_receipts import read_receipt
-                receipts.append(read_receipt('memory',event,rows[:3],consent))
+                receipts.append(read_receipt('memory',event,rows[:3],consent,character_id=getattr(store,'character_id',None)))
             return '이 채널에서 사용할 수 있는 네 기억이 없어.' if not rows else '이 채널의 네 기억 중 최대 3개야.\n'+'\n'.join(r['summary'] for r in rows[:3])
         if not store.automatic_allowed(event.guild,event.author,'memory'):return '/동의에서 장기 기억 저장을 직접 켠 다음 부탁해 줘. 다른 항목의 동의와는 별개야.'
         key=store.extract(event,tz,text=text,policy=cfg,receipts=receipts)

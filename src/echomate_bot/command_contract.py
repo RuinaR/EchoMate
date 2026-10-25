@@ -1,5 +1,11 @@
 """Public command shape. Remote metadata is evidence, never an approval."""
 COMMAND_ACCESS={'동의':'self_ephemeral','성격':'owner_ephemeral'}
+PRETRAINED_COMMAND_ACCESS={'동의':'self_ephemeral','캐릭터':'public_ephemeral'}
+
+def command_access(mode='legacy'):
+    if mode=='legacy':return dict(COMMAND_ACCESS)
+    if mode=='pretrained':return dict(PRETRAINED_COMMAND_ACCESS)
+    raise ValueError('Unknown command contract')
 
 def rows(commands,application,guild=None):
     result=[]
@@ -22,13 +28,14 @@ def rows(commands,application,guild=None):
     return sorted(result,key=lambda row:row['id'])
 
 
-def consent_contract(commands):
+def consent_contract(commands,*,mode='legacy'):
     """Require the complete guild-installed slash set, without an admin gate.
 
     Server permission overrides and actual client visibility need separate checks.
     Missing remote context fields are unknown, not proof of the intended scope.
     """
-    return (len(commands)==len(COMMAND_ACCESS) and {c['name'] for c in commands}==set(COMMAND_ACCESS)
+    access=command_access(mode)
+    return (len(commands)==len(access) and {c['name'] for c in commands}==set(access)
         and all(c['type']==1 and c.get('contexts')==[0] and c.get('integration_types')==[0]
             and c.get('default_member_permissions') is None and not c.get('nsfw',False) for c in commands))
 

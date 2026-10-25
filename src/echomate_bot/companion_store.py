@@ -34,6 +34,9 @@ class CompanionStore(MemberAliases,PrivacyStore,SummaryStore):
                 version=db.execute('PRAGMA user_version').fetchone()[0]
                 self.schema_version=version
                 if version>7:raise ValueError('Newer companion schema')
+                if (not getattr(self,'character_namespaced',False) and
+                    db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='character_store_version'").fetchone()):
+                    raise ValueError('Character database requires a namespace-aware store')
                 db.executescript('''
 BEGIN IMMEDIATE;
 CREATE TABLE IF NOT EXISTS relationships(guild TEXT,user TEXT,affinity REAL DEFAULT 50,interactions INTEGER DEFAULT 0,last_at REAL DEFAULT 0,day TEXT,delta REAL DEFAULT 0,PRIMARY KEY(guild,user));

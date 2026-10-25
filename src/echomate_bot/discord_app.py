@@ -186,6 +186,24 @@ class DiscordTransport:
 
 
 class EchoClient(discord.Client):
+    @property
+    def backend(self):
+        runtime=getattr(self,'runtime',None)
+        if runtime is not None and getattr(runtime.backend,'character_id',None):return runtime.backend
+        return self._backend
+
+    @backend.setter
+    def backend(self,value):self._backend=value
+
+    @property
+    def companion(self):
+        runtime=getattr(self,'runtime',None)
+        if runtime is not None and getattr(runtime.backend,'character_id',None):return runtime.companion
+        return self._companion
+
+    @companion.setter
+    def companion(self,value):self._companion=value
+
     def __init__(self,settings,backend,admin_guilds,*,companion=None):
         intents=discord.Intents.none();intents.guilds=True;intents.guild_messages=True
         intents.message_content=True;intents.emojis_and_stickers=True;intents.guild_reactions=True
@@ -204,6 +222,7 @@ class EchoClient(discord.Client):
         self.install_commands()
 
     def install_commands(self):
+        self.command_mode='pretrained' if getattr(self.backend,'character_id',None) else 'legacy'
         from .consent_ui import open_consent
         @app_commands.guild_only()
         @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
@@ -215,7 +234,15 @@ class EchoClient(discord.Client):
         @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
         @app_commands.allowed_installs(guilds=True,users=False)
         async def personality(i:discord.Interaction):await open_personality(self,i)
-        self.tree.add_command(app_commands.Command(name='성격',description='소유자 전용 · 현재 적용된 캐릭터와 기분 확인',callback=personality))
+        if self.command_mode=='pretrained':
+            from .character_ui import open_character
+            @app_commands.guild_only()
+            @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
+            @app_commands.allowed_installs(guilds=True,users=False)
+            async def character_info(i:discord.Interaction):await open_character(self,i)
+            self.tree.add_command(app_commands.Command(name='캐릭터',description='현재 캐릭터와 로컬 모델 상태 확인',callback=character_info))
+        else:
+            self.tree.add_command(app_commands.Command(name='성격',description='소유자 전용 · 현재 적용된 캐릭터와 기분 확인',callback=personality))
         @self.tree.error
         async def command_error(i,error):
             missing=isinstance(error,app_commands.CommandNotFound)
@@ -256,8 +283,9 @@ class EchoClient(discord.Client):
                 plan['guilds'][str(gid)]=await self._fetch_command_rows(gid)
         except (Exception,asyncio.CancelledError) as exc:
             self.command_status=failure_details(exc,self.command_status['stage']);raise
-        from .command_contract import COMMAND_ACCESS
-        plan['global_after']=list(COMMAND_ACCESS);plan['guild_after']=[];plan['access_policy']=COMMAND_ACCESS
+        from .command_contract import command_access
+        access=command_access(self.command_mode)
+        plan['global_after']=list(access);plan['guild_after']=[];plan['access_policy']=access
         plan['fingerprint']=hashlib.sha256(json.dumps(plan,sort_keys=True).encode()).hexdigest()
         self.command_review=plan
         self.command_status=dict(status='reviewed',stage='read_complete',global_count=len(plan['global_before']),
@@ -276,7 +304,7 @@ class EchoClient(discord.Client):
                 raise ValueError('Command list changed; review again')
             from .command_contract import consent_contract,failure_details
             payload=[c.to_dict(self.tree) for c in self.tree.get_commands()]
-            if not consent_contract(payload):
+            if not consent_contract(payload,mode=self.command_mode):
                 self.command_review=None;self.command_status=dict(status='failed',stage='preflight',error='LocalContractInvalid')
                 raise ValueError('Unexpected local command contract')
             from .settings import atomic_private_json
@@ -290,7 +318,7 @@ class EchoClient(discord.Client):
                 # commands. An empty/wrong global result must stop the sequence.
                 audit['stage']='verify_global'
                 atomic_private_json(path,audit)
-                if not consent_contract(await self._fetch_command_rows()):
+                if not consent_contract(await self._fetch_command_rows(),mode=self.command_mode):
                     raise ValueError('Command verification failed')
                 for gid in current['guilds']:
                     audit['stage']='write_guild';audit['guild']=gid
@@ -299,7 +327,7 @@ class EchoClient(discord.Client):
                 audit['stage']='verify_all'
                 atomic_private_json(path,audit)
                 after=await self._review_commands(owner)
-                if not consent_contract(after['global_before']) or any(after['guilds'].values()):raise ValueError('Command verification failed')
+                if not consent_contract(after['global_before'],mode=self.command_mode) or any(after['guilds'].values()):raise ValueError('Command verification failed')
                 audit.update(status='verified',stage='api_verified',client_visibility='not_verified',after=after);atomic_private_json(path,audit)
                 self.settings.set(owner,'command_sync_pending',False);self.command_review=None
                 self.command_status=dict(status='verified',stage='api_verified',client_visibility='not_verified')

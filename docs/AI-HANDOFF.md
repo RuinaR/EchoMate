@@ -1,5 +1,11 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-25 캐릭터 Runtime·GGUF·기억 경계 통합 — RELEASE BLOCKED
+
+시작 `ba84c52`. 최종 전체988개 OK279.346초, 번들64개 OK5.799초; 운영/장부5hash·원본12shard 동일. 실제 Lime backend를 기존 InstanceLease/fair queue/CharacterModelManager에 연결하고 Runtime epoch·이름 변경·drain/회수·CharacterId별 SQLite 기억/관계와 공통 동의/알림을 합성 검증했다. 새 모드 로컬 명령은 `/동의`·읽기 전용 `/캐릭터`, legacy 명령은 그대로다. 운영 DB/설정/모델 자동 전환과 실제 Discord는 실행하지 않았다.
+
+Lime 실제 GPU에서 이름5턴/취소→native slot idle/종료 후 순차 재로딩은 확인했지만 **semantic 청자 gate FAIL**이다. frames 기반 grammar 보정도 의미 정답을 회복하지 못했다. 제품 READY는 없고 Yaho 라이선스/기획자 weights도 BLOCKED다. Windows selector/installer/첫 controller handoff·실제 운영 migration·장기/다른 Windows는 미완료다. [실측·회귀·실패·마감·다음 재개](CHARACTER-RUNTIME-INTEGRATION-QA.md). 아래 기록은 해당 시점의 검증 범위다.
+
 ## 2026-10-25 사전 학습 여성 캐릭터 제품 전환 — 현재 최우선
 
 최신 사용자 요구는 학습 중심 개발을 대체한다. 시작 `92e01dd`, 구현 `a80d67d`. 새 카탈로그/이름 문서/opt-in CharacterModelManager와 전환 epoch 기반 기존 알림 경주 수정을 완료했다. **아직 기존 앱에 신규 backend·캐릭터 기억 namespace·선택 UI/명령을 연결하지 않았다.** 운영 Gemma/개인 자료는 자동 변경하지 않는다.

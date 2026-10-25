@@ -80,6 +80,25 @@ class CharacterModelManager:
         self.epoch += 1
         self.active = None
 
+    async def adopt(self,backend,entry,name):
+        """Attach an already resident, lease-owning backend without reloading."""
+        async with self._lock:
+            if self.backend is not None or CharacterModelManager._resident_owner is not None:
+                raise RuntimeError('Character residency already owned')
+            name=valid_name(name)
+            CharacterModelManager._resident_owner=self
+            self.backend=backend
+            self.state=State.VALIDATING
+            try:
+                if await self._bounded(backend.health_check(entry,name)) is not True:
+                    raise RuntimeError('Existing character identity not verified')
+                self.entry=entry;self.name_version+=1
+                self.active=Identity(entry.character_id,self.epoch,self.name_version,name)
+                self.state=State.READY
+            except BaseException as exc:
+                self.last_error=type(exc).__name__;self.state=State.RECOVERY_REQUIRED
+                raise
+
     async def _bounded(self, awaitable):
         # wait_for can wait forever if a backend suppresses CancelledError.
         # Retain such operations explicitly, fail closed and forbid another load.

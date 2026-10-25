@@ -23,6 +23,23 @@ class SocialDecision:
     plan:str|None=None
     context_omitted:bool=False
 
+
+def confirmed_human_recipient(packet):
+    """Trusted Runtime role evidence outranks a model's participation proposal.
+
+    Never infer an ID from prose. Ambiguous/group/bot invitations retain the
+    existing semantic path. This handles any confirmed human ID or language.
+    """
+    current=packet.get('current') or {}
+    roles=current.get('roles') or {}
+    recipient=roles.get('addressee')
+    mentioned=roles.get('mentioned_people') or []
+    bot=packet.get('bot_id')
+    if (packet.get('explicit_call') or roles.get('ambiguous') is not False or
+        not isinstance(recipient,str) or not recipient.isdecimal() or int(recipient)<=0 or
+        recipient==str(bot) or recipient not in mentioned or str(bot) in mentioned):return None
+    return SocialDecision('human','shift','none','information',False)
+
 def choices():
     result=[]
     for target,relation,anchor,act,answer in product(TARGETS,RELATIONS,('none','0','1','2','3'),ACTS,('yes','no','react')):
@@ -38,6 +55,14 @@ def choices():
     return result
 
 SOCIAL_CHOICES=choices()
+
+
+def grounded_social_choices(packet):
+    """Constrain references, never infer the addressee or participation intent."""
+    anchors={str(frame.get('index')) for frame in packet.get('frames',[])
+             if isinstance(frame,dict) and type(frame.get('index')) in (int,str)
+             and str(frame['index']) in ('0','1','2','3')}
+    return [choice for choice in SOCIAL_CHOICES if choice.split()[2]=='none' or choice.split()[2] in anchors]
 
 def parse_social(raw):
     # Historical cached acknowledgement votes are normalized to silence. New

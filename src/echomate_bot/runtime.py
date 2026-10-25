@@ -64,6 +64,7 @@ class Event:
     attention_only:bool=False
     attention_followup:bool=False
     visual_inputs_present:bool=False
+    character_epoch:int|None=None
 
 
 from .ledger import Ledger
@@ -71,6 +72,9 @@ from .ledger import Ledger
 
 class Runtime:
     def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None,companion=None,followup_fast_path=True,response_pipeline=None):
+        character_id=getattr(backend,'character_id',None)
+        if character_id and companion is not None and getattr(companion,'character_id',None)!=character_id:
+            raise ValueError('Pretrained character requires a matching scoped personal store')
         self.response_pipeline=response_pipeline
         self.settings=settings;self.backend=backend;self.transport=transport;self.cache=cache;self.library=None
         self.ledger=Ledger(ledger_path);self.rng=rng or random.Random()
@@ -81,6 +85,9 @@ class Runtime:
         self.telemetry_lock=asyncio.Lock()
         self.model_lock=asyncio.Lock();self.changing_model=False;self.deferred_events={}
         self.model_generation_epoch=0
+        self.character_transition_state='Idle'
+        self.character_manager=None
+        self.character_draining=set();self.character_quiesce_timeout=30.
         self.companion=companion;self.service_task=None;self.memory_queue=asyncio.Queue(maxsize=64)
         self.summary_tasks=set();self.summary_attempts={};self.summary_successes={};self.totals=Counter()
         from .sessions import Conversations
@@ -181,7 +188,7 @@ class Runtime:
                     for uid,names in await self.transport.member_lookup(event,users):self.members.observe(event.guild,event.channel,uid,names)
                 except (OSError,sqlite3.Error,RuntimeError,asyncio.TimeoutError):self.note('member_lookup_unavailable')
         g=self.settings.get()['guilds'].get(str(event.guild),{})
-        bot_names=[guild_name(self.settings.get(),event.guild),*g.get('aliases',())]
+        bot_names=[self.active_name(self.settings.get(),event.guild),*g.get('aliases',())]
         if hasattr(self.transport,'address_names'):bot_names.extend(self.transport.address_names(event))
         roles=self.members.resolve(event,self.transport.bot_id,aliases,bot_names)
         evidence=corroboration(event,roles)
@@ -198,6 +205,9 @@ class Runtime:
 
     @staticmethod
     def key(event):return event.flow_key if event.flow_key is not None else event.channel
+
+    def active_name(self,cfg,guild):
+        return self.backend.name if getattr(self.backend,'character_id',None) else guild_name(cfg,guild)
 
     def activity_changed(self):
         now=self.activity_clock();lease=min(300,self.settings.get()['engagement_seconds'])
@@ -310,7 +320,7 @@ class Runtime:
                 try:
                     for _ in range(min(8,self.memory_queue.qsize())):
                         event,revision=self.memory_queue.get_nowait();cfg=self.settings.get()
-                        if revision==self.settings.revision and cfg['memory_auto'] and scope(cfg,event.guild,event.channel,event.parent)!='silent' and await self.automatic_subject_allowed(event.guild,event.author,'memory'):
+                        if revision==self.settings.revision and cfg['memory_auto'] and scope(cfg,event.guild,event.channel,event.parent)!='silent' and await self.automatic_subject_allowed(event.guild,event.author,'memory') and not self.changing_model and (event.character_epoch is None or event.character_epoch==self.model_generation_epoch):
                             tz=cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul')
                             await asyncio.to_thread(self.companion.extract,event,tz,policy=cfg)
                     if time.monotonic()-cleaned>=60:
@@ -467,6 +477,97 @@ class Runtime:
                         if not self.stopped and state and not self.ledger.contains(event) and scope(self.settings.get(),event.guild,event.channel,event.parent)!='silent':
                             self._schedule(event,state,request)
 
+    async def _quiesce_character(self):
+        if any(not task.done() for task in self.character_draining):
+            raise RuntimeError('Previous character tasks still draining')
+        self.changing_model=True
+        self.model_generation_epoch+=1
+        self.character_transition_state='Quiescing'
+        self.character_transition_state='Cancelling'
+        for task in self.summary_tasks:task.cancel()
+        tasks=list(self.tasks.values())+list(self.summary_tasks)
+        if self.service_task:
+            self.service_task.cancel();tasks.append(self.service_task)
+        for task in tasks:task.cancel()
+        tasks.append(asyncio.create_task(self.utterances.close()))
+        done,pending=await asyncio.wait(tasks,timeout=self.character_quiesce_timeout)
+        for task in done:
+            if not task.cancelled():task.exception()
+        if pending:
+            self.character_draining.update(pending)
+            def finished(task):
+                self.character_draining.discard(task)
+                if not task.cancelled():task.exception()
+            for task in pending:task.add_done_callback(finished)
+            raise TimeoutError('Character tasks did not drain; model retained')
+        while not self.memory_queue.empty():self.memory_queue.get_nowait()
+        self.deferred_events.clear()
+        self.direct_bursts.clear();self.pending_mentions.clear();self.members.alias_cache.clear()
+        # RAM transcripts do not cross character identities. Consented durable
+        # records remain in their namespace and are not deleted by switching.
+        self.invalidate_all()
+        from .utterances import Utterances
+        self.utterances=Utterances(self.ingest,self.note)
+
+    async def switch_character(self,owner,candidate,store):
+        """Explicit controller action; never migrates operating data/settings.
+
+        First activation from a legacy controller requires a separate verified
+        lease/store handoff. This path switches already scoped character Runtimes.
+        """
+        self.settings.authorize(owner)
+        cid=getattr(candidate,'character_id',None)
+        if not cid or getattr(store,'character_id',None)!=cid:
+            raise ValueError('Matching character store required')
+        if candidate.entry.blocker:raise ValueError(candidate.entry.blocker)
+        if not getattr(self.backend,'character_id',None):
+            raise ValueError('Legacy controller handoff not yet verified')
+        async with self.model_lock:
+            self.character_transition_state='SwitchingRequested'
+            try:
+                await self._quiesce_character()
+                manager=await self._character_lifecycle()
+                manager.factory=lambda entry:candidate
+                manager.admission=candidate.admission
+                self.character_transition_state='SwitchingRequested'
+                await manager.switch(candidate.entry,candidate.name)
+                self.backend=manager.backend
+                if self.stopped:raise RuntimeError('Runtime closed during character switch')
+                self.companion=store
+                self.character_transition_state='Ready'
+                self.changing_model=False
+                self.start_services()
+                self.note('character_ready')
+            except BaseException:
+                if self.character_manager and self.character_manager.backend is not None:
+                    self.backend=self.character_manager.backend
+                self.character_transition_state='RecoveryRequired'
+                # No assumption that the old model was restored. The UI may
+                # explicitly retry; intake/send remain paused after failure.
+                self.note('character_recovery_required')
+                raise
+
+    async def _character_lifecycle(self):
+        if self.character_manager is None:
+            from .character_manager import CharacterModelManager
+            manager=CharacterModelManager(lambda entry:None,self.backend.admission,timeout=150)
+            self.character_manager=manager
+            await manager.adopt(self.backend,self.backend.entry,self.backend.name)
+        return self.character_manager
+
+    async def rename_character(self,owner,name):
+        self.settings.authorize(owner)
+        if not getattr(self.backend,'character_id',None):raise ValueError('Pretrained character required')
+        async with self.model_lock:
+            try:
+                await self._quiesce_character()
+                manager=await self._character_lifecycle()
+                await manager.rename(name)
+                self.changing_model=False;self.character_transition_state='Ready'
+                self.start_services();self.note('character_name_ready')
+            except BaseException:
+                self.character_transition_state='RecoveryRequired';raise
+
     def note(self,code):
         self.totals[code]+=1
         trace=active_trace.get()
@@ -515,6 +616,10 @@ class Runtime:
     async def ingest(self,event):
         self.note('event_received')
         if self.stopped or event.bot or event.opted_out:return
+        if getattr(self.backend,'character_id',None):
+            if self.changing_model:self.note('character_intake_paused');return
+            if event.character_epoch is None:event=replace(event,character_epoch=self.model_generation_epoch)
+            elif event.character_epoch!=self.model_generation_epoch:self.note('stale_character_event');return
         if scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':self.note('scope_denied');return
         lock=self.ingest_locks.setdefault(event.channel,asyncio.Lock())
         async with lock:await self._ingest(event)
@@ -529,11 +634,11 @@ class Runtime:
             if hasattr(self.transport,'address_names'):aliases.extend(self.transport.address_names(event))
             from .naming import address_forms
             from .routing import prose
-            names=address_forms(guild_name(cfg,event.guild),aliases,g.get('partial_names',True))
+            names=address_forms(self.active_name(cfg,event.guild),aliases,g.get('partial_names',True))
             clean=prose(event.content).strip().strip(' ,!.?~…:')
             bare=clean in {f+suffix for f in names for suffix in ('','아','야','님')} or clean in ('<@'+str(self.transport.bot_id)+'>','<@!'+str(self.transport.bot_id)+'>')
             event=replace(event,attention_only=bare)
-            direct=mentions_bot(event.content,self.transport.bot_id) or name_address(event.content,guild_name(cfg,event.guild),aliases,g.get('partial_names',True))=='direct'
+            direct=mentions_bot(event.content,self.transport.bot_id) or name_address(event.content,self.active_name(cfg,event.guild),aliases,g.get('partial_names',True))=='direct'
             human=bool(event.member_roles and (event.member_roles.addressee not in (None,self.transport.bot_id) or event.member_roles.ambiguous))
             from .sessions import SUPPLEMENT,INDEPENDENT
             own=[v[0] for v in self.requests.values() if (v[0].guild,v[0].channel,v[0].author)==(event.guild,event.channel,event.author)]
@@ -575,7 +680,7 @@ class Runtime:
         while len(self.seen)>5000:self.seen.pop(next(iter(self.seen)))
         extra=list(cfg['guilds'].get(str(event.guild),{}).get('aliases',()))
         if hasattr(self.transport,'address_names'):extra.extend(self.transport.address_names(event))
-        name_evidence=name_address(event.content,guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True),
+        name_evidence=name_address(event.content,self.active_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True),
                                    self.members.names(event.guild,event.channel,self.transport.bot_id))
         if name_evidence=='direct' and event.member_roles.bot_collision:name_evidence='ambiguous'
         event=replace(event,member_seconds=time.monotonic()-member_started,name_result=name_evidence)
@@ -602,7 +707,7 @@ class Runtime:
             if len(self.direct_bursts)>1000:self.direct_bursts.pop(next(iter(self.direct_bursts)))
         from .naming import address_forms
         intent=re.sub(r'^\s*<@!?'+str(self.transport.bot_id)+r'>[, :]*','',event.content)
-        for form in sorted(address_forms(guild_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True)),key=len,reverse=True):
+        for form in sorted(address_forms(self.active_name(cfg,event.guild),extra,cfg['guilds'].get(str(event.guild),{}).get('partial_names',True)),key=len,reverse=True):
             intent=re.sub(r'^\s*'+re.escape(form)+r'(?:아|야|님)?(?:[, :]+|$)','',intent,flags=re.I)
         # A new speaker's bare, verified call has no independent topic. It can
         # join the unique invited dialogue without inventing a Discord reply.
@@ -742,12 +847,12 @@ class Runtime:
             metadata=json.dumps(details,ensure_ascii=False)
         extra_names=list(cfg['guilds'].get(str(event.guild),{}).get('aliases',()))
         if hasattr(self.transport,'address_names'):extra_names.extend(self.transport.address_names(event))
-        if guild_name(cfg,event.guild)!='EchoMate' or extra_names:
+        if self.active_name(cfg,event.guild)!='EchoMate' or extra_names:
             details=json.loads(metadata) if metadata else {}
-            details['configured_bot_name']=guild_name(cfg,event.guild)
+            details['configured_bot_name']=self.active_name(cfg,event.guild)
             from .naming import address_forms
             g=cfg['guilds'].get(str(event.guild),{})
-            details['bot_names']=sorted(address_forms(guild_name(cfg,event.guild),extra_names,g.get('partial_names',True)))
+            details['bot_names']=sorted(address_forms(self.active_name(cfg,event.guild),extra_names,g.get('partial_names',True)))
             metadata=json.dumps(details,ensure_ascii=False)
         for part in event.raw_parts:
             if not state.append(channel_id=event.channel,thread_id=None,turn=Turn(str(part.id),str(part.author),part.content[:8000],part.timestamp,reply_to=str(part.reply_to) if part.reply_to else None,context_metadata=metadata)):
@@ -790,7 +895,7 @@ class Runtime:
         task.add_done_callback(done)
 
     async def fresh(self,event,state,version,revision,require_adult=False):
-        def current():return (self.utterances.valid(event) and
+        def current():return ((event.character_epoch is None or event.character_epoch==self.model_generation_epoch) and self.utterances.valid(event) and
                 not any(row.parts[0].response_to==(event.response_to or event.id) and
                     (row.parts[0].guild,row.parts[0].channel,row.parts[0].author)==(event.guild,event.channel,event.author)
                     and sum(len(p.content)+128 for p in (*event.raw_parts,*row.parts))<=self.utterances.budget
@@ -897,7 +1002,7 @@ class Runtime:
             decision=SocialDecision('bot','continue' if anchor!='none' else 'new',anchor,'request',True)
             from .sessions import INDEPENDENT
             from .context import terms
-            bot_names=[guild_name(cfg,event.guild),*cfg['guilds'].get(str(event.guild),{}).get('aliases',())]
+            bot_names=[self.active_name(cfg,event.guild),*cfg['guilds'].get(str(event.guild),{}).get('aliases',())]
             if hasattr(self.transport,'address_names'):bot_names.extend(self.transport.address_names(event))
             name_terms=set().union(*(terms(n) for n in bot_names))
             source_terms=lambda text:terms(MENTION.sub('',text))-name_terms
@@ -1032,7 +1137,7 @@ class Runtime:
             guild_cfg=cfg['guilds'].get(str(event.guild),{})
             aliases=list(guild_cfg.get('aliases',()))
             if hasattr(self.transport,'address_names'):aliases.extend(self.transport.address_names(event))
-            name_evidence=name_address(event.content,guild_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True),
+            name_evidence=name_address(event.content,self.active_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True),
                                        self.members.names(event.guild,event.channel,self.transport.bot_id))
             if name_evidence=='direct' and event.member_roles and event.member_roles.bot_collision:name_evidence='ambiguous'
             named=name_evidence!='none'
@@ -1102,7 +1207,7 @@ class Runtime:
                 if roles:facts['member_roles']=roles.facts()
                 intent=await self.backend.assess_dialogue(semantic_context,facts=facts)
                 from .naming import address_forms
-                mentioned_name=any(n.casefold() in event.content.casefold() for n in address_forms(guild_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True)))
+                mentioned_name=any(n.casefold() in event.content.casefold() for n in address_forms(self.active_name(cfg,event.guild),aliases,guild_cfg.get('partial_names',True)))
                 if not guaranteed_direct and hasattr(self.backend,'verify_target') and intent.link!='end' and (mentioned_name or intent.target!='bot' and last_bot):
                     verified=await self.backend.verify_target(semantic_context,facts=facts)
                     self.note('target_verified_'+verified)
@@ -1232,7 +1337,7 @@ class Runtime:
                         summary_id=engine.last_digest
                     except (ValueError,RuntimeError,sqlite3.Error):self.note('summary_request_failed');command_answer='대화 요약 검증을 완료하지 못했어. 없던 내용을 만들어 답하지 않을게.'
             if command_answer is None and self.companion and speech_eligible and (direct or continuing):
-                from .companion import handle_request,request_kind
+                from .companion import handle_request,request_kind,request_plan,operation_failure
                 self.stage(event,'private_request' if request_kind(event.content) else 'memory_lookup',started)
                 if request_kind(event.content):
                     try:
@@ -1242,7 +1347,7 @@ class Runtime:
                         await asyncio.shield(asyncio.to_thread(self.companion.delete_source,event.guild,event.id));raise
                     except (OSError,RuntimeError,ValueError,sqlite3.Error):
                         operation_receipts.clear()
-                        command_answer='처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
+                        command_answer=operation_failure(request_plan(event.content))
                 else:
                     try:
                         memory_version=await asyncio.to_thread(self.companion.consent_version,event.guild,event.author,'memory')
@@ -1255,7 +1360,7 @@ class Runtime:
                             from .operation_receipts import MemorySelection,read_values
                             remembered=remembered[:3]
                             memory_selection=MemorySelection(event.guild,event.author,event.channel,event.content,event.conversation_id,
-                                                             archive,read_values('memory',remembered),memory_version)
+                                                             archive,read_values('memory',remembered),memory_version,getattr(self.companion,'character_id',None))
                         if remembered:
                             remembered=remembered[:3]
                             if not await asyncio.to_thread(self.companion.memory_evidence_current,event.guild,event.author,event.channel,remembered,memory_version):
@@ -1279,7 +1384,7 @@ class Runtime:
                     from .web_research import WebResearch
                     if not hasattr(self,'web_research'):self.web_research=WebResearch()
                     blocked=self.members.names(event.guild,event.channel,self.transport.bot_id)
-                    blocked.extend([guild_name(cfg,event.guild),*cfg['guilds'].get(str(event.guild),{}).get('aliases',[])])
+                    blocked.extend([self.active_name(cfg,event.guild),*cfg['guilds'].get(str(event.guild),{}).get('aliases',[])])
                     for (g,ch,uid),(names,at) in self.members.people.items():
                         if g==event.guild and ch==event.channel:blocked.extend(names)
                     blocked.extend(a['alias'] for a in self.members.alias_cache.get((event.guild,event.channel),(0,()))[1])
@@ -1373,7 +1478,7 @@ class Runtime:
                 adult_for_turn=profile['_adult_active']
                 character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
                 character['_current_utterance']=event.content
-                character['_guild_name']=guild_name(cfg,event.guild)
+                character['_guild_name']=self.active_name(cfg,event.guild)
                 if self.companion:
                     try:character['_familiarity']=await asyncio.to_thread(self.companion.familiarity,event.guild,event.author) if await self.automatic_subject_allowed(event.guild,event.author) else None
                     except (OSError,RuntimeError,sqlite3.Error):self.note('relationship_lookup_failed')
@@ -1548,4 +1653,6 @@ class Runtime:
         self.states.clear();self.conversations.flows.clear();self.conversations.message_flow.clear()
         while not self.memory_queue.empty():self.memory_queue.get_nowait()
         self.deferred_events.clear()
-        async with self.model_lock:await self.backend.close()
+        async with self.model_lock:
+            if self.character_manager:await self.character_manager.recover()
+            else:await self.backend.close()

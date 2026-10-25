@@ -1,5 +1,22 @@
 # 릴리즈 요구사항 추적표
 
+## 2026-10-25 후속 Runtime 통합 게이트 — 현재 우선
+
+**RELEASE BLOCKED**. [최신 코드·실제 GPU·회귀·실패 기록](CHARACTER-RUNTIME-INTEGRATION-QA.md). 아래 이전 날짜의 PASS/미연결 목록은 당시 범위로 보존한다.
+
+| 필수 조건 | 상태 | 현재 근거/남은 조건 |
+|---|---|---|
+| Lime concrete backend·단일 Worker | PASS | 고정2048/b11721, 실제 취소→slot idle·종료 뒤 순차 reload. 같은 호스트 기술 범위만. |
+| Runtime 전환·이름 stale 차단 | PASS | epoch·manager·공정큐/미종료 작업/회수 실패 합성 회귀. 실제 manager의 제품 Ready 전체 전환은 아래 semantic gate로 미검증. |
+| 캐릭터별 기억·관계/공통 동의·예약 | PASS | 합성 SQLite namespace/원자 삭제/legacy 보존/영수증. 운영 migration·downgrade·공통 사실 공유 UI는 NOT VERIFIED. |
+| 기능 조회 실패·실행 영수증 | PASS | 명시 기능 경로의 실패≠빈 목록/미실행≠성공 계약. 자유 생성 일반 사실성은 FAIL 유지. |
+| Lime 의미 청자/기억·기능 사실성 | FAIL | strict semantic gate와 이전 허위 기억/알림. grammar 유효성 보정으로 의미 품질 해결 안 됨. |
+| Yaho·기획자 제공 자격 | BLOCKED | Yaho 연구 제한/기획자 adapter weights 부재 재확인. |
+| 명령 마이그레이션 | NOT VERIFIED | 로컬 pretrained `/동의`·`/캐릭터` mock PASS, legacy `/성격` 호환. 실제 원격 집합 미조회·미변경. |
+| Windows UI·다운로드·첫 활성화 | NOT VERIFIED | 기존 앱 유지, 새로운 선택/installer/controller handoff 미구현. |
+| 새 구조 장기 운용·다른 Windows·Portable GPU | NOT VERIFIED | 단기 native 수명주기/번들 CPU와 구분. |
+| 실제 Discord | BLOCKED | 별도 승인 필요, 인증/REST/Gateway/명령/송신 미실행. |
+
 ## 현재 제품 전환 게이트 — 2026-10-25
 
 최신 제품은 사전 학습 여성 캐릭터 선택 구조다. 아래 과거 C/F/S/L 게이트의 안전 요구와 실패 근거를 보존하되, 학습 성공 자체는 더 이상 제품 필수 조건이 아니다. **RELEASE BLOCKED**. [재사용 감사·새 QA/재개](PRETRAINED-CHARACTER-TRANSITION.md).

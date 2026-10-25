@@ -1,5 +1,11 @@
 # 작업 로그
 
+## 2026-10-25 캐릭터 Runtime·GGUF·기억 경계 통합 — RELEASE BLOCKED
+
+시작 `ba84c52`. 최종 전체988개 OK279.346초, 번들64개 OK5.799초; 운영/장부5hash·원본12shard 동일. 실제 Lime backend를 기존 InstanceLease/fair queue/CharacterModelManager에 연결하고 Runtime epoch·이름 변경·drain/회수·CharacterId별 SQLite 기억/관계와 공통 동의/알림을 합성 검증했다. 새 모드 로컬 명령은 `/동의`·읽기 전용 `/캐릭터`, legacy 명령은 그대로다. 운영 DB/설정/모델 자동 전환과 실제 Discord는 실행하지 않았다.
+
+Lime 실제 GPU에서 이름5턴/취소→native slot idle/종료 후 순차 재로딩은 확인했지만 **semantic 청자 gate FAIL**이다. frames 기반 grammar 보정도 의미 정답을 회복하지 못했다. 제품 READY는 없고 Yaho 라이선스/기획자 weights도 BLOCKED다. Windows selector/installer/첫 controller handoff·실제 운영 migration·장기/다른 Windows는 미완료다. [실측·회귀·실패·마감·다음 재개](CHARACTER-RUNTIME-INTEGRATION-QA.md). 아래 기록은 해당 시점의 검증 범위다.
+
 ## 2026-10-25 사전 학습 캐릭터 전환 첫 구현·Lime 실제 GPU
 
 시작92e01dd clean/main/원격 일치, 구현a80d67d. 기존 기능 재사용 감사를 작성하고 고정 revision/hash/크기/라이선스의 세 캐릭터 카탈로그, 별도 ID별 이름 저장, epoch/name-version 기반 단일 manager 소유권/전환/cancel/drain/reclaim/복구를 구현했다. 기존 Runtime 알림이 모델 전환을 검사하지 않던 경주를 세대 검증으로 수정했다. 새 backend/기억 namespace/UI는 미연결이며 운영 자료를 자동 이관하지 않았다.

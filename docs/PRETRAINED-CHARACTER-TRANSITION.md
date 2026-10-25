@@ -1,5 +1,9 @@
 # 사전 학습 캐릭터 제품 전환 — 단계별 구현 및 QA
 
+## 2026-10-25 후속 구현 — 현재 상태
+
+후속 [Runtime 통합 QA](CHARACTER-RUNTIME-INTEGRATION-QA.md)가 아래 초기 구현의 미연결 항목 일부를 대체한다. concrete Lime GGUF/InstanceLease/fair queue/manager/Runtime epoch, 캐릭터별 임시 SQLite·legacy snapshot·원자 삭제, 새 모드의 로컬 `/캐릭터` 계약을 연결했다. 실제 Lime 취소/idle/해제/순차 reload·짧은 이름5턴은 확인했으나 semantic 청자 gate가 FAIL이다. 새 Windows selector/installer/첫 controller handoff와 운영 migration·장시간·다른 Windows는 여전히 미완료다. 세 모델 READY/정식 RELEASE를 선언하지 않는다.
+
 시작 코드 `92e01dd` (main/원격 일치, 기존 작업 트리 clean). 현재 **RELEASE BLOCKED**.
 이 문서는 학습 중심 연구 계획을 대체하는 현재 제품 전환 계획이다. 과거 학습 자료와 결과는 삭제하지 않는다.
 

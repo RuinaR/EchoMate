@@ -1,5 +1,11 @@
 # EchoMate
 
+## 2026-10-25 캐릭터 Runtime·GGUF·기억 경계 통합 — RELEASE BLOCKED
+
+시작 `ba84c52`. 실제 Lime backend를 기존 InstanceLease/fair queue/CharacterModelManager에 연결하고 Runtime epoch·이름 변경·drain/회수·CharacterId별 SQLite 기억/관계와 공통 동의/알림을 합성 검증했다. 새 모드 로컬 명령은 `/동의`·읽기 전용 `/캐릭터`, legacy 명령은 그대로다. 운영 DB/설정/모델 자동 전환과 실제 Discord는 실행하지 않았다.
+
+Lime 실제 GPU에서 이름5턴/취소→native slot idle/종료 후 순차 재로딩은 확인했지만 **semantic 청자 gate FAIL**이다. frames 기반 grammar 보정도 의미 정답을 회복하지 못했다. 제품 READY는 없고 Yaho 라이선스/기획자 weights도 BLOCKED다. Windows selector/installer/첫 controller handoff·실제 운영 migration·장기/다른 Windows는 미완료다. [실측·회귀·실패·마감·다음 재개](docs/CHARACTER-RUNTIME-INTEGRATION-QA.md). 아래 기록은 해당 시점의 검증 범위다.
+
 현재 제품 방향은 **사전 학습된 여성 캐릭터 모델을 선택하는 로컬 Discord 동반자**입니다. 한 번에 캐릭터와 GPU 모델은 하나, 대화 사용자는 여럿이며 기존 기억·동의·관계·알림·공정 큐를 유지합니다. Yaho/Lime/여성 IT 기획자의 제공 파일과 라이선스를 감사하고 전환 수명주기 API를 구현 중입니다. **아직 세 모델을 앱에서 사용할 수 있는 배포판이 아니며 RELEASE BLOCKED입니다.** [구현 범위·모델별 차단·다음 단계](docs/PRETRAINED-CHARACTER-TRANSITION.md).
 
 기존 운영 설정과 개인 DB는 자동 변경하지 않습니다. 아래 날짜별 학습 결과는 보존된 연구 기록이며 현재 제품의 필수 학습 절차가 아닙니다.

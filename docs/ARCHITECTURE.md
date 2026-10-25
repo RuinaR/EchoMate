@@ -1,5 +1,11 @@
 # 아키텍처
 
+## 2026-10-25 opt-in 캐릭터 실행 경로
+
+`GGUFLocalBackend` → 기존 GPUScheduler/InstanceLease → 자체 인증 loopback `GGUFEngine` → 검증된 Lime/b11721/2048이다. Runtime은 기존 CharacterModelManager에 상주 backend를 adopt하고 전환/이름 epoch로 intake·조립·자동 추출·생성·송신을 무효화/drain한다. native slot idle 또는 자체 프로세스 종료 확인 전 새 작업/GPU 모델을 허용하지 않는다. 재검증 실패는 RecoveryRequired이며 이전 모델 자동 복구를 가정하지 않는다.
+
+`CharacterStores`의 새 SQLite snapshot/namespace가 v7 기능을 재사용한다. 동의·예약은 공통, 기억·관계·사건·요약은 캐릭터별이다. global privacy mutation은 전체 namespace/legacy에 원자 적용하고 receipt/MemorySelection에도 CharacterId를 결합한다. 실제 운영 migration·구형 바이너리 downgrade 방지는 별도 미완료다. EchoClient 읽기 view는 Runtime을 따라가며 pretrained 모드의 로컬 slash 계약만 `/캐릭터`로 변경한다. UI/controller 최초 handoff/installer는 아직 미연결이다. [수명주기·자원·검증 한계](CHARACTER-RUNTIME-INTEGRATION-QA.md).
+
 ## 2026-10-25 사전 학습 캐릭터 전환 경계
 
 `character_models`는 버전 catalog/고정 provenance/라이선스 차단과 별도 이름 저장을 담당한다. `character_manager`는 opt-in 비동기 전환·단일 backend 소유권·취소/drain/reclaim·이름 버전/생성 epoch를 관리한다. timeout 후 작업을 버리지 않고 RecoveryRequired에서 명시 복구를 요구한다. 구체 GGUF/PEFT adapter, 기존 InstanceLease/fair queue, 수신부터 SDK 송신까지 identity stamp, 캐릭터별 기억 namespace와 신규 UI는 아직 연결 전이다. 따라서 기존 앱 실행 경로를 새 모델 지원 완료로 해석하지 않는다. [현재/다음 경계](PRETRAINED-CHARACTER-TRANSITION.md).

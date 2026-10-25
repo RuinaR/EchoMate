@@ -18,8 +18,10 @@ class Receipt:
     key:str
     values:tuple
     consent_version:int|None=None
+    character_id:str|None=None
 
     def current(self,store):
+        if self.kind.startswith('memory') and self.character_id!=getattr(store,'character_id',None):return False
         with store.db() as db:
             db.execute('BEGIN')
             expected=dict(self.values)
@@ -60,7 +62,7 @@ def memory_receipt(db,kind,guild,user,channel,key='',row=None):
     data=dict(row) if row is not None else {}
     if kind in ('memory_saved','memory_removed') and (not data or tuple(data[k] for k in ('guild','user','channel'))!=(g,u,ch)):
         raise ValueError('Memory acknowledgement scope changed')
-    return Receipt(kind,g,u,ch,key,tuple(sorted(data.items())),consent['version'])
+    return Receipt(kind,g,u,ch,key,tuple(sorted(data.items())),consent['version'],getattr(db,'character_id',None))
 
 
 def reminder_receipt(row):
@@ -76,8 +78,10 @@ class ReadReceipt:
     channel:int
     values:tuple
     consent:tuple
+    character_id:str|None=None
 
     def current(self,store):
+        if self.kind!='reminders' and self.character_id!=getattr(store,'character_id',None):return False
         if self.consent and read_epochs(self.kind,store.subject_snapshot(self.guild,self.user))!=self.consent:return False
         if self.kind=='memory':rows=store.memories(self.guild,self.user,self.channel)[:3]
         elif self.kind=='summaries':rows=store.summaries(self.guild,self.user,self.channel)[:4]
@@ -96,13 +100,13 @@ def read_values(kind,rows):
                  else tuple(sorted(row.items())) for row in rows)
 
 
-def read_receipt(kind,event,rows,consent):
+def read_receipt(kind,event,rows,consent,*,character_id=None):
     maximum={'memory':3,'summaries':4,'reminders':10}.get(kind)
     if maximum is None or len(rows)>maximum:raise ValueError('Read acknowledgement bounds')
     owner='requester' if kind=='reminders' else 'user'
     if any((r['guild'],r[owner],r['channel'])!=(str(event.guild),str(event.author),str(event.channel)) for r in rows):
         raise ValueError('Read acknowledgement scope')
-    return ReadReceipt(kind,event.guild,event.author,event.channel,read_values(kind,rows),read_epochs(kind,consent))
+    return ReadReceipt(kind,event.guild,event.author,event.channel,read_values(kind,rows),read_epochs(kind,consent),character_id)
 
 
 @dataclass(frozen=True)
@@ -120,8 +124,10 @@ class MemorySelection:
     archive:bool
     values:tuple
     consent_version:int
+    character_id:str|None=None
 
     def current(self,store):
+        if self.character_id!=getattr(store,'character_id',None):return False
         rows=[dict(row) for row in self.values]
         def valid(values):
             if values:return store.memory_evidence_current(self.guild,self.user,self.channel,values,self.consent_version)

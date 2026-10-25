@@ -28,12 +28,14 @@ async def public_state(runtime,event,permissions,*,visual='not_provided'):
         try:consents=await asyncio.to_thread(store.consent,event.guild,event.author)
         except (OSError,RuntimeError,sqlite3.Error):runtime.note('capability_consent_unavailable')
     allowed=scope(cfg,event.guild,event.channel,event.parent,action='text')!='silent' and permissions.get('view',False)
-    mode='failed' if getattr(runtime.backend,'failed',False) else 'not_ready' if getattr(runtime.backend,'model',True) is None else 'ready'
+    mode='failed' if getattr(runtime.backend,'failed',False) or getattr(runtime,'character_transition_state',None)=='RecoveryRequired' else 'not_ready' if getattr(runtime,'changing_model',False) or getattr(runtime.backend,'model',True) is None else 'ready'
     features={}
     def feature(key,enabled,*,consent=None,permission=True):
         state='off' if not enabled else 'permission_denied' if not permission else 'failed' if key in ('memory','relationships','summaries','reminders') and (not store or store.error) else 'unknown' if consent and consents is None else 'consent_required' if consent and not consents.get(consent,False) else 'ready'
         features[key]=dict(implemented=True,enabled=bool(enabled),state=state)
     feature('vision',cfg['vision'],permission=allowed)
+    if getattr(runtime.backend,'supports_visual',True) is False:
+        features['vision']=dict(implemented=False,enabled=False,state='unsupported')
     feature('web',cfg['web_search'],permission=allowed)
     feature('memory',cfg['memory_auto'],consent='memory',permission=allowed)
     feature('relationships',cfg['relations_auto'],consent='relationships',permission=allowed)
@@ -46,7 +48,8 @@ async def public_state(runtime,event,permissions,*,visual='not_provided'):
     if features['web']['state']=='ready' and web in ('failed','unavailable','unverified','blocked'):features['web']['state']='failed'
     for key in ('stickers','media_send','voice','screen_control','code_output'):features[key]=dict(implemented=False,enabled=False,state='unsupported')
     return dict(features=features,own_consent=consents,visual_observation=visual,model=mode,
-        model_kind='Gemma 4 12B' if cfg['model']=='base' else '선택한 로컬 모델',
+        model_kind=('사전 학습 '+runtime.backend.entry.default_name+' / '+runtime.backend.entry.base_dependency
+                    if getattr(runtime.backend,'character_id',None) else 'Gemma 4 12B' if cfg['model']=='base' else '선택한 로컬 모델'),
         text_enabled=bool(cfg['text'] and cfg['enabled'] and allowed and permissions.get('send',False)),
         mood=cfg['mood'],activity=cfg['activity'],gpu_queue=bool(getattr(runtime.backend,'pending',0)))
 
@@ -57,6 +60,7 @@ def _describe(text,view,event,bot_id):
         return '다른 사람의 기억이나 동의 상태는 알려줄 수 없어. /동의에서는 네 계정의 설정만 확인할 수 있어.'
     if re.search(r'스티커|(?:음성|영상)\s*통화|화면\s*공유',text):return '그 기능은 지원하지 않아. 텍스트 대화와 허용된 Unicode 이모지 반응을 지원해.'
     if VISUAL.search(text):
+        if view['features']['vision']['state']=='unsupported':return '선택한 캐릭터 모델은 사진 분석을 지원하지 않아. 텍스트로 내용을 설명해 주면 그 설명을 바탕으로 이야기할 수 있어.'
         if re.search(r'그려\s*줘|생성해|만들어\s*줘|보내\s*줘',text):return '이미지나 영상을 만들어 보내는 기능은 없어. 글로 설명하는 건 도와줄 수 있어.'
         if view['visual_observation']=='verified_observation' and not re.search(r'볼\s*(?:수|줄)|기능|가능',text):return None
         if view['visual_observation']=='analysis_failed':return '지금은 사진 분석에 실패해서 내용을 확인하지 못했어. 무엇이 있는지는 추측하지 않을게.'
