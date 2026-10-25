@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 추가 발췌·로컬 기능 안내·요약 충돌 경계
+
+Context의 추가 발췌는 실제 reply 및 관련 결정/정정 출처를 required로 표시한다. native 최소 입력도 초과할 때만 선택 발췌를 항목 단위로 줄이고 생략을 표시하며 현재 원문·기능/영수증은 보호한다. LOCAL_CHAT은 기존 명시 명령 정책을 유지하되 기능 질문/명시 요청에 읽기 전용 안내를 제공한다. 응답 출처와 실제 새 GPU metric을 구분한다. Summary는 좁은 행동/확정 충돌을 검사하고 저장 당시 참가자 동의 version을 재검사한다. DB schema·운영 데이터의 자동 migration이나 모델 출력에 의한 권한/기억/실행 성공 승격은 없다. [범위와 실패](SEMANTIC-FOCUS-QA.md).
+
 ## 사람 대화 경계와 복귀 근거
 
 기존 SocialRouter의 pending-human은 마지막 확인된 사람 대상 발언 경계다. SocialSource(범위/ID/보조 관측 시각/라우터 단조 발급 버전)를 Event에 연결해 최초 권한 await 전 packet과 함께 고정하고 판단 await 이후·생성/송신 시 최신성을 확인한다. GGUF의 사회적 판단만 현재 입력을 마지막에 배치하고, protected 원문 선택 후 예산 초과일 때만 동일 출처 본문을 참조로 축소한다. 실제 요청↔봇 reply쌍·정확한 현재 이름 호출이 있는 제한적 복귀는 같은 Lime이 의미를 고른 뒤 기존 validate_social을 통과해야 한다. DB 권한/기능 실행/영수증/단일 Worker는 그대로다. [제약·A/B·남은 실패](BOT-RETURN-QA.md).

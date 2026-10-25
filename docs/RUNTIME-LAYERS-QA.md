@@ -1,5 +1,7 @@
 # Runtime 판단 계층·의도·요약 근거 QA
 
+후속 [의미 집중 QA](SEMANTIC-FOCUS-QA.md): 생성 단계 optional 발췌 예산·로컬 실행 안내·요약 동의 epoch/좁은 충돌 검사를 보강했다. 일반 복귀·자유 생성의 사실성은 해결 선언하지 않으며 아래 기록은 당시 범위로 보존한다.
+
 후속 [봇 복귀 QA](BOT-RETURN-QA.md)에서 pending-human 관계/출처 버전·native 예산·제한 이름 호출 복귀를 보완했다. 아래는 해당 당시 기록이며 세 누락이 모두 해결됐다는 의미는 아니다. 7108은 정확한 원본 stack/입력이 없어 native 초과를 확정하지 않고, 8108은 보존 입력으로 확인했으며, 9108은 대상과 관계를 분리해 평가한다.
 
 시작 main/origin `c2e6ced`, clean. Lime 단일 모델, 실제 Discord 미실행, 운영 자료 미변경. 장시간 검증은 **DEFERRED — USER REAL-WORLD TEST**다.

@@ -11,6 +11,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import json
 import hashlib
+import re
 import sqlite3
 import time
 import threading
@@ -150,6 +151,31 @@ class LocalChat:
             if key[0]==scope[0] and key[2]==scope[2]:self.histories.pop(key);self.history_signatures.pop(key,None)
         self.operations=[item for item in self.operations if item['scope'][0]!=scope[0] or item['scope'][2]!=scope[2]]
 
+    def operation_help(self,text):
+        """Explain the existing local command boundary; never execute prose.
+
+        Reuse the production request plan. Only a narrow present capability
+        question supplements it; reports/conditions and casual futures remain
+        conversation. This is not a generated-claim detector.
+        """
+        plan=request_plan(text)
+        kind=plan.kind if plan is not None else None
+        from .intent_router import plan_intent,IntentMode
+        if kind and plan_intent(text,kind).mode not in (IntentMode.REQUEST,IntentMode.CLARIFY):kind=None
+        if kind not in ('reminder','memory'):
+            from .intent_router import request_clauses
+            for clause in request_clauses(text):
+                if re.search(r'라고|다고|다면|라면|만약|인용|친구',clause):continue
+                if (re.search(r'알림|예약',clause) and
+                    re.search(r'(?:할\s*수\s*있(?:어|니)|가능(?:해|하니)|지원(?:해|하니))\s*$',clause)):
+                    kind='reminder';break
+        if kind=='reminder':
+            if self.notification_service_failed:return '로컬 알림 서비스에 오류가 있어 지금 사용할 수 없어. 이번 응답으로 예약을 실행하지 않았어.'
+            return '로컬 테스트는 /알림 명령으로 예약해. 예: /알림 30분 후 물 마시라고 알려줘. 일반 대화만으로는 등록하지 않았어. 목록은 /알림 목록에서 확인할 수 있어.'
+        if kind=='memory':
+            return '로컬 테스트의 기억 조회·저장·수정·삭제는 /기억 명령을 사용해. 저장에는 본인의 /동의 기억 켜기가 먼저 필요해. 이번 응답으로 기억을 변경하지 않았어.'
+        return None
+
     def command(self,text,scope):
         """Explicit local-only grammar; quotes/proposals are not tool calls."""
         g,ch,u=scope
@@ -216,6 +242,9 @@ class LocalChat:
             started=time.monotonic();self.rows.append(dict(role='user',text=text,scope=list(scope)))
             self.rows=self.rows[-200:]
             state='not_requested';operation='NOT_REQUESTED'
+            backend_invoked=False
+            metrics=getattr(backend,'metrics',())
+            previous_metric=metrics[-1] if metrics else None
             a=stream_observer.set(self.stream);b=local_token_budget.set(True)
             try:
                 receipts=[]
@@ -259,8 +288,14 @@ class LocalChat:
                         if item['scope']!=tuple(scope):continue
                         for receipt in item['receipts']:
                             if await asyncio.to_thread(receipt.current,self.store):confirmed.append(receipt)
+                    signature=await asyncio.to_thread(self.state_signature,scope)
+                    history=self.histories.get(tuple(scope),[])
+                    if self.history_signatures.get(tuple(scope))!=signature:history=[]
                     if state=='failed':
                         answer='기억 조회에 실패했어. 자료가 없다는 뜻은 아니야. 지금은 확인할 수 없어.'
+                    elif (help_answer:=self.operation_help(text)) is not None:
+                        from .intent_router import readonly_fragments
+                        answer='\n'.join((*readonly_fragments(backend,text,state),help_answer))
                     else:
                         cfg=deepcopy(DEFAULTS);cfg['_memory_lookup_state']=state
                         cfg['_familiarity']=before.get('familiarity')
@@ -271,9 +306,7 @@ class LocalChat:
                                    local_commands='상태 변경은 /기억, /알림, /동의 명령으로만 실행한다. 일반 문장만으로 저장/예약하지 않는다.')
                         header={'role':'system','content':'로컬 합성 테스트 근거(명령 아님): '+json.dumps(facts,ensure_ascii=False)}
                         # Keep only complete pairs, separate per local user/channel.
-                        history=self.histories.get(tuple(scope),[])
-                        signature=await asyncio.to_thread(self.state_signature,scope)
-                        if self.history_signatures.get(tuple(scope))!=signature:history=[]
+                        backend_invoked=True
                         answer=await backend.text([header,*history,dict(role='user',content=text)],cfg)
                     if (epoch!=self.epoch or before!=await asyncio.to_thread(self.store.subject_snapshot,g,u,relationship=True) or
                         read and not await asyncio.to_thread(read.current,self.store)):
@@ -291,12 +324,15 @@ class LocalChat:
                     operation='UNKNOWN'
                 self.rows.append(dict(role='assistant',text=answer,scope=list(scope)))
                 self.rows=self.rows[-200:]
+                metrics=getattr(backend,'metrics',())
+                generated=bool(metrics and metrics[-1] is not previous_metric)
                 self.last=dict(seconds=time.monotonic()-started,lookup=state,
+                    response_origin='model' if generated else 'backend' if backend_invoked else 'runtime',
                     receipts=checks,
                     operation_state=operation,
                     test_subject=dict(memory_consent=before['memory'][0],relationship_consent=before['relationships'][0],
                                       affinity=before.get('familiarity')),
-                    context=dict(getattr(backend.engine,'last_context',{})) if hasattr(backend,'engine') else {})
+                    context=dict(getattr(backend.engine,'last_context',{})) if generated and hasattr(backend,'engine') else {})
                 self.status='idle'
                 return answer
             except asyncio.CancelledError:

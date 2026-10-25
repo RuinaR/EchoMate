@@ -1,5 +1,7 @@
 # 사람 대화 보호와 봇 복귀 — 실제 Lime QA
 
+후속 [의미 집중 QA](SEMANTIC-FOCUS-QA.md): 생성 단계 optional 발췌 예산·로컬 실행 안내·요약 동의 epoch/좁은 충돌 검사를 보강했다. 일반 복귀·자유 생성의 사실성은 해결 선언하지 않으며 아래 기록은 당시 범위로 보존한다.
+
 기준 `4169a81`, 2026-10-25. **RELEASE BLOCKED**. 기존 SocialRouter/SocialDecision/validate_social을 재사용한다. 별도 Router나 상주 모델을 추가하지 않았고 참여 허용 기준·native context 2048·GPU 안전 여유 2GiB를 낮추지 않았다. 장시간은 **DEFERRED — USER REAL-WORLD TEST**다.
 
 ## 이전 누락 3건의 원인과 증거 한계

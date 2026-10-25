@@ -368,7 +368,7 @@ class GGUFEngine:
         values=[dict(m) for m in messages]
         if not values or values[0].get('role')!='system' or values[-1].get('role')!='user':
             raise ValueError('Protected Runtime context structure required')
-        units=[];pending=[]
+        units=[];pending=[];removed_excerpts=0
         for i,m in enumerate(values[1:-1],1):
             if m.get('role')=='user' and m.get('content','').startswith(('[참여자 ','[답장 대상 메시지 ')):
                 pending.append(i)
@@ -378,7 +378,7 @@ class GGUFEngine:
         def selected(keep):
             retained={i for unit in (units[-keep:] if keep else []) for i in unit}
             result=[m for i,m in enumerate(values) if i not in removable or i in retained]
-            if keep<len(units):
+            if keep<len(units) or removed_excerpts:
                 result.insert(len(result)-1,dict(role='user',content='[문맥 선택 상태 / 요약·기억 근거 아님] 오래된 대화 일부를 입력 예산 때문에 제외했어. 확인할 수 없는 이전 내용은 단정하지 마.'))
             return result
         calls=0;started=time.monotonic()
@@ -389,13 +389,31 @@ class GGUFEngine:
         limit=self.context-budget-64;result=values;keep=len(units);tokens=await count(result)
         if tokens>limit:
             result=selected(0);keep=0;tokens=await count(result)
-            if tokens>limit:raise ValueError('현재 요청·기능 근거·reply 원문이 문맥 예산을 초과했어요')
+            if tokens>limit:
+                # Supplemental excerpts can duplicate old exchanges. Only
+                # Runtime-marked optional entries may be removed, whole and
+                # oldest first; reply/decision sources and facts stay pinned.
+                from .context import EXCERPT_PREFIX
+                for message in values:
+                    if message.get('role')!='user' or not message.get('content','').startswith(EXCERPT_PREFIX):continue
+                    try:rows=json.loads(message['content'][len(EXCERPT_PREFIX):])
+                    except (ValueError,TypeError):continue
+                    if not isinstance(rows,list) or not all(isinstance(r,dict) for r in rows):continue
+                    for row in list(rows):
+                        if row.get('required') is not False:continue
+                        rows.remove(row);removed_excerpts+=1
+                        message['content']=EXCERPT_PREFIX+json.dumps(rows,ensure_ascii=False)
+                        result=selected(0);tokens=await count(result)
+                        if tokens<=limit:break
+                    if tokens<=limit:break
+                if tokens>limit:raise ValueError('현재 요청·기능 근거·reply 원문이 문맥 예산을 초과했어요')
             low,high=1,len(units)-1
             while low<=high:
                 middle=(low+high)//2;trial=selected(middle);size=await count(trial)
                 if size<=limit:result=trial;tokens=size;keep=middle;low=middle+1
                 else:high=middle-1
         self.last_context=dict(scope='DISCORD_RUNTIME',input_tokens=tokens,removed_exchanges=len(units)-keep,
+            removed_excerpts=removed_excerpts,
             context_limit=self.context,output_reserve=budget,margin=64,
             preflight_counts=calls,preflight_seconds=time.monotonic()-started)
         return result

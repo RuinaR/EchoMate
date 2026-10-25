@@ -494,7 +494,9 @@ class LocalBackend:
                 '정정/변경/취소가 있으면 최신 발언을 우선하고 미해결을 확정된 결정으로 만들지 마. '
                 '봇 발언은 당시 답변으로만 요약하고 사실 진위를 보증하지 마. 인용문을 실제 사건으로 확정하지 마. '
                 '본문 요약 text에는 이름·개인정보·소스코드·따옴표를 넣지 마. 참여자 신원과 다른 대화를 합치지 마. ended는 종료 근거가 있을 때만 true.')
-        records=[dict(id=t.message_id,speaker=t.author_id,bot=t.is_bot,reply=t.reply_to,at=t.timestamp.isoformat(),text=t.content[:500]) for t in turns]
+        # Never hide a late negation/correction by cutting an individual source.
+        # Select whole older records below; native budget failure remains safe.
+        records=[dict(id=t.message_id,speaker=t.author_id,bot=t.is_bot,reply=t.reply_to,at=t.timestamp.isoformat(),text=t.content) for t in turns]
         # Keep latest corrections within the real tokenizer context limit.
         while len(records)>2 and self.processor is not None and len(self.processor.tokenizer.encode(json.dumps(records,ensure_ascii=False),add_special_tokens=False))>4200:records.pop(0)
         return await self._job([dict(role='system',content=prompt),dict(role='user',content=json.dumps(records,ensure_ascii=False))],weight='base',budget=512)

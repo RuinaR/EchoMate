@@ -60,8 +60,9 @@ class SummaryStore:
                 if not isinstance(row['body'],dict) or not isinstance(row['body'].get('items'),list) or any(not isinstance(i,dict) or not all(isinstance(i.get(k),str) for k in ('kind','text','source')) for i in row['body']['items']):row['body']=dict(items=[]);row['damaged']=True
                 row['sources']=[r[0] for r in db.execute('SELECT source FROM summary_sources WHERE id=?',(row['id'],))]
                 row['participants']=[r[0] for r in db.execute('SELECT user FROM summary_participants WHERE id=?',(row['id'],))]
+                row['consent_versions']={r[0]:r[1] for r in db.execute('SELECT user,version FROM summary_participants WHERE id=?',(row['id'],))}
                 # A participant's withdrawal suspends automatic/shared retrieval.
-                row['usable']=all(db.execute("SELECT 1 FROM consent_choices WHERE guild=? AND user=? AND category='summaries' AND enabled=1",(str(guild),u)).fetchone() for u in row['participants'])
+                row['usable']=all(db.execute("SELECT 1 FROM consent_choices c JOIN summary_participants p ON p.guild=c.guild AND p.user=c.user WHERE p.id=? AND c.guild=? AND c.user=? AND c.category='summaries' AND c.enabled=1 AND c.version=p.version",(row['id'],str(guild),u)).fetchone() for u in row['participants'])
                 if row.get('damaged'):row['usable']=False
         return rows
     def delete_digest(self,guild,key):
