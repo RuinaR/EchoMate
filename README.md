@@ -1,5 +1,7 @@
 # EchoMate
 
+청자 무공백 멘션·이름 권한·조회 상태의 후속 구현과 실제 GPU 검증: [최신 QA](docs/LIME-QUALITY-ITERATION-QA.md). 장시간 운용은 사용자 실사용으로 연기했으며 RELEASE BLOCKED는 유지합니다.
+
 ## 2026-10-25 LOCAL_CHAT 분리·실제 대화 검증 — RELEASE BLOCKED
 
 청자 자격 실패가 로컬 채팅까지 막던 결합을 분리했다. 파일/자원/이름 기술 검사를 통과하면 LOCAL_CHAT을 사용하며 Discord 자율 참여는 계속 BLOCKED다. 로컬 채팅 UI·합성v8 저장소·명시 기능/영수증·native 토큰 예산·저장 세션의 삭제/철회 재생성 방어를 연결했다. 실제 능동10턴과 별도 scripted 기억/예약/일상/장기 대화를 수행했지만 자유 생성 사실성은 미해결이다. 제한 Direct GPU→SDK mock7이벤트/의도한4reply·오류0은 자율 참여의 PASS가 아니다. [검증 범위·실패·원문 위치·재개](docs/LOCAL-CHAT-QA.md).

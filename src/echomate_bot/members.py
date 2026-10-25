@@ -119,7 +119,15 @@ class MemberDirectory:
         # A mention in a report/subject is not automatically its addressee.
         # A leading ID call or a matching vocative supplies address evidence;
         # otherwise the actual reply remains independent from mentioned people.
-        mention_call=bool(len(actual)==1 and (re.match(r'^<@!?'+str(actual[0])+r'>(?=$|[\s,:!?])',clean) or any(c.user==actual[0] and c.direct for c in candidates)))
+        # '>' already delimits an actual Discord mention ID. Korean/English
+        # calls need no following space. A separate subject/object particle
+        # still marks a reference, not an addressee. Never invent an ID absent
+        # from authoritative member_mentions.
+        leading=re.match(r'^<@!?'+str(actual[0])+r'>(.*)$',clean,re.S) if len(actual)==1 else None
+        # Without spaces a particle-prefix can also be a word prefix. Leave
+        # that ambiguity to the existing semantic path; do not force a target.
+        particle=bool(leading and re.match(r'^(?:에게|한테|[이가은는을를의])',leading[1]))
+        mention_call=bool(len(actual)==1 and ((leading and not particle) or any(c.user==actual[0] and c.direct for c in candidates)))
         if mention_call:addressee=actual[0]
         elif event.reply_author:addressee=event.reply_author
         elif len(targets)==1 and not collision:addressee=next(iter(targets))

@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 이름·조회 상태의 읽기 전용 사실 경로
+
+명확한 자기 이름 요청은 관리자 이름/NameVersion을, 명확한 과거 기억 확인은 Runtime 조회 상태를 사용한다. 일반 출력의 코드 제한·기억 최신성 검사는 유지한다. 한정 입력 문법이며 모든 자연어 주장 검증이나 모델 인격 개선을 보장하지 않는다. 장시간 운용은 DEFERRED — USER REAL-WORLD TEST다. [후속 QA](LIME-QUALITY-ITERATION-QA.md).
+
 ## 실행 모드 분리
 
 LOCAL_CHAT은 LimeController의 로컬 기술 준비와 LocalChat 합성 저장소를 사용하며 Discord transport/token을 사용하지 않는다. DISCORD_DIRECT는 Runtime의 별도 제한 정책으로 조립된 구조적 멘션/봇 reply만 처리한다. DISCORD_AUTONOMOUS가 기존 기본 Runtime/strict social gate이며 LOCAL/Direct 검증으로 자격을 승격하지 않는다. 기존 공정 큐·scope·reply·송신 guard는 재사용한다. [구체 호출 경로·근거/세션 무효화·QA](LOCAL-CHAT-QA.md).

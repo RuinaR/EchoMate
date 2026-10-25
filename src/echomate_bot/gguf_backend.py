@@ -391,6 +391,7 @@ class GGUFLocalBackend(LocalBackend):
         super().__init__(max_pending=max_pending, model_id='character:lime')
         self.entry = character('lime')
         self.name = valid_name(name)
+        self.name_version = 0
         self.engine = GGUFEngine(engine, model, root, context=context)
         self.lease = None
         self._loading = asyncio.Lock()
@@ -483,6 +484,7 @@ class GGUFLocalBackend(LocalBackend):
         except BaseException:
             self.name=previous
             raise
+        if name!=previous:self.name_version+=1
 
     async def reclaimed(self):
         return await self.engine.reclaimed() and self.model is None
@@ -509,7 +511,13 @@ class GGUFLocalBackend(LocalBackend):
                 self.failed = True
 
     async def text(self, context, cfg):
+        stamp=(self.name,self.name_version)
         from .output_policy import INSTRUCTION, contains_code, FALLBACK
+        from .identity_contract import answer_identity
+        if context and context[-1].get('role')=='user':
+            identity=answer_identity(context[-1]['content'],self.name,self.entry.default_name)
+            if identity is not None:
+                return FALLBACK if contains_code(self.name) or contains_code(identity) else identity
         from .character import needs_rewrite
         policy = (INSTRUCTION+' 한국어 Discord 대화로 답한다. 실제 기억과 실행 결과는 제공된 근거만 사용한다. '
                   '학습된 캐릭터 성향은 유지하되 사용자와의 현실 공동 경험을 창작하지 않는다. '
@@ -523,6 +531,10 @@ class GGUFLocalBackend(LocalBackend):
         lookup=cfg.get('_memory_lookup_state','not_requested')
         if lookup not in ('not_requested','not_authorized','found','empty','invalidated','failed'):
             raise ValueError('Invalid Runtime memory lookup state')
+        from .lookup_inquiries import memory_inquiry_answer
+        if context and context[-1].get('role')=='user':
+            inquiry=memory_inquiry_answer(context[-1]['content'],lookup)
+            if inquiry is not None:return inquiry
         state['memory_lookup']=lookup
         if type(familiarity) in (int,float) and math.isfinite(familiarity) and 0<=familiarity<=100:
             state['consented_familiarity']=familiarity
@@ -537,6 +549,8 @@ class GGUFLocalBackend(LocalBackend):
             observer=stream_observer.get()
             if observer:observer('reset','')
             result = await self._job(messages, budget=384)
+            if stamp!=(self.name,self.name_version):
+                raise RuntimeError('Character identity changed during generation')
             if contains_code(result):
                 if attempt:
                     return FALLBACK

@@ -22,7 +22,7 @@ class LimeController(LocalController):
     def __init__(self, *, data_root=None):
         root = private_path(data_root or ROOT/'lime')
         self.lime = dict(stage='not_installed', busy=False, name='라임', error=None,
-                         done=0, total=0, local_result='')
+                         name_version=0,done=0, total=0, local_result='')
         self.local_chat = None
         self.lime_backend = None
         self.lime_diagnostics = {}
@@ -34,6 +34,7 @@ class LimeController(LocalController):
         try:
             self.names = CharacterNames(root/'character-names.json')
             self.lime['name'] = self.names.effective('lime')
+            self.lime['name_version'] = self.names.version('lime')
         except (OSError, ValueError):
             self.names = None
             self.lime.update(stage='failed', error='이름 파일을 읽지 못했어요. 원본을 보존하고 백업을 확인해 주세요.')
@@ -200,6 +201,7 @@ class LimeController(LocalController):
                     self.lime['identity_verified'] = False
                     backend = GGUFLocalBackend(engine, model, self.data_root/'engine-log',
                         name=self.names.effective('lime'), serving_lease=self.lease)
+                    backend.name_version=self.names.version('lime')
                     await backend.ready()
                     await backend.probe_identity()
                     self.lime['identity_verified'] = True
@@ -248,6 +250,7 @@ class LimeController(LocalController):
                             self.lime['stage'] = 'recovery_required'
                     raise
                 self.lime['name'] = name
+                self.lime['name_version'] = self.names.version('lime')
                 if self.local_chat:self.local_chat.epoch+=1
             elif operation == 'lime_repair':
                 await self.installer.repair(confirmed=values.get('confirmed') is True)

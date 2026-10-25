@@ -232,7 +232,11 @@ class LocalChat:
                         raise
                     self.operations.append(dict(scope=tuple(scope),command=text.split()[0],state=operation,receipts=receipts))
                     self.operations=self.operations[-20:]
-                    state='command'
+                    state='not_requested'
+                    if text in ('/기억 목록','/알림 목록'):
+                        state=('failed' if operation=='FAILED' else
+                               'found' if receipts and any(r.values for r in receipts) else
+                               'empty' if receipts and operation=='SUCCESS' else 'not_requested')
                     try:before=await asyncio.to_thread(self.store.subject_snapshot,g,u,relationship=True)
                     except (OSError,RuntimeError,sqlite3.Error):before={'memory':(None,0),'relationships':(None,0)}
                     read=None;epoch=self.epoch

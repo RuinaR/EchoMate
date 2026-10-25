@@ -1,13 +1,25 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
 
+## 2026-10-25 청자 구문·이름 권한·조회 상태
+
+최종 전체1,052개 OK297.497초·Portable138개 OK12.895초, 운영5hash/원본Lime 동일·final316 소비0. 시작4a9033a. 실제 멘션 뒤 무공백 사람 호출의 청자 누락을 수정했다. 같은 Lime·새7이벤트 A/B에서 오개입1→0, 정상4reply 유지·Runtime오류0. 역할 별칭 classifier 후보는 전달/타인 오류가 남아 기각했다. 이름은 명확한 읽기 전용 요청에 검증된 EffectiveName/NameVersion을 적용하고, 과거 기억 확인은 실제 조회 상태로 답한다. 혼합 이름/평서 기억 유도/일반 기능 약속은 미해결이며 자율 참여·RELEASE BLOCKED 유지. 능동14턴(실제 모델10/Runtime 사실4)을 구분했고 원문은 비공개 폴더에 보존했다. 장시간 검증은 DEFERRED — USER REAL-WORLD TEST. [실제 변경·실패·검증·재개](LIME-QUALITY-ITERATION-QA.md).
+
+
+## 2026-10-25 품질 우선 후속 작업
+
+장시간 GPU30분/Runtime2시간/8시간/누수 목적 반복 재시작은 **DEFERRED — USER REAL-WORLD TEST**다. 이번 차수에서는 실행하지 않는다. 짧은 취소·종료·재로딩·데이터 변경 경합은 유지한다. 다른 Windows와 실제 Discord의 별도 검증/승인 조건은 유지하며 장시간 미실행을 PASS로 바꾸지 않는다.
+
+현재 변경과 실제 원문·채택/기각 근거는 [이름·조회 상태 및 청자 후속 QA](LIME-QUALITY-ITERATION-QA.md)를 따른다. LOCAL_CHAT·명시 호출·자율 참여는 따로 판정하고 자율 청자와 일반 자유 생성 사실성은 계속 차단 항목이다.
+
+
 ### LOCAL_CHAT 마감 근거와 다음 작업
 
 최신 전체1,041개 OK286.074초·Portable 번들117개 OK12.391초·최종 격리 UI9화면 검증. 운영5hash/원본 Lime hash 동일, final316 소비0.
 
 실제 능동10턴과 별도 scripted100회 연속 생성(장기50 포함), 기억20·예약20·인칭20·일상30 시나리오를 구분해 기록했다. 모델의 이전 이름 수용·근거 없는 조회/미래 약속은 남아 있어 RELEASE BLOCKED다. 실제 stream 취소·기억 삭제 경합·재시작 stale 세션 거절을 확인했다. 긴 문맥 native 사전 계산을 같은 선택 메시지 기준32초→약1.4초로 줄였으며 생성 속도 개선과 구분한다. 현재 세션 중복 모델 소유와 외부 고정 파일 가져오기도 보호했다. 최종 결과·실패 로그·Portable·정확한 재개는 [LOCAL-CHAT-QA](LOCAL-CHAT-QA.md)를 따른다.
 
-우선순위: (1) 원천 분리 사회적 시퀀스로 DISCORD_AUTONOMOUS의 오개입/누락 개선, (2) 기존 receipt 기반 기능 경로와 자유 생성의 거짓 약속 구분, (3) 이름 유도·긴 대화 사실성, (4) 최종 소스 장기 GPU/2·8시간·다른 Windows. 실제 Discord는 마지막 별도 승인이다. 재학습·새 모델 탐색으로 범위를 확장하지 않는다.
+우선순위: (1) 원천 분리 사회적 시퀀스로 DISCORD_AUTONOMOUS의 오개입/누락 개선, (2) 기존 receipt 기반 기능 경로와 자유 생성의 거짓 약속 구분, (3) 이름 유도·긴 대화 사실성, (4) 다른 Windows 검증. 장시간 운용은 DEFERRED — USER REAL-WORLD TEST. 실제 Discord는 마지막 별도 승인이다. 재학습·새 모델 탐색으로 범위를 확장하지 않는다.
 
 ## 2026-10-25 LOCAL_CHAT 분리·실제 대화 검증 — RELEASE BLOCKED
 

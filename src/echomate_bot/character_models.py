@@ -132,13 +132,26 @@ class CharacterNames:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.names = {}
+        self.versions = {}
         if self.path.exists():
             data = json.loads(self.path.read_text('utf-8'))
-            if not isinstance(data, dict) or set(data) != {'schema', 'names'} or data['schema'] != 1 or not isinstance(data['names'], dict):
+            if (not isinstance(data, dict) or type(data.get('schema')) is not int or data.get('schema') not in (1,2) or
+                set(data) != ({'schema','names'} if data['schema']==1 else {'schema','names','versions'}) or
+                not isinstance(data['names'], dict)):
                 raise ValueError('Unsupported character-name document')
             for key, name in data['names'].items():
                 character(key)
                 self.names[key] = valid_name(name)
+            if data['schema']==2:
+                versions=data['versions']
+                if (not isinstance(versions,dict) or set(versions)!=set(self.names) or
+                    any(type(v) is not int or v<0 for v in versions.values())):
+                    raise ValueError('Invalid name versions')
+                self.versions=dict(versions)
+
+    def version(self, character_id: str) -> int:
+        character(character_id)
+        return self.versions.get(character_id,0)
 
     def effective(self, character_id: str) -> str:
         return self.names.get(character_id, character(character_id).default_name)
@@ -146,8 +159,11 @@ class CharacterNames:
     def save(self, character_id: str, name: str):
         character(character_id)
         updated = dict(self.names, **{character_id: valid_name(name)})
-        atomic_private_json(self.path, {'schema': 1, 'names': updated})
+        versions={key:self.version(key) for key in updated}
+        versions[character_id]+=int(self.effective(character_id)!=updated[character_id])
+        atomic_private_json(self.path, {'schema': 2, 'names': updated,'versions':versions})
         self.names = updated
+        self.versions = versions
 
 
 def identity_message(entry: CharacterModel, name: str) -> dict:

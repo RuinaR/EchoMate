@@ -20,6 +20,19 @@ def event(text,**kw):
     return Event(100,2,3,4,text,datetime.now(timezone.utc),**kw)
 
 class MemberRecognition(unittest.TestCase):
+    def test_actual_id_delimiter_needs_no_whitespace_but_reference_does(self):
+        for uid in (5,6,82):
+            for tail in ('내일 준비될까?','너는 어때?','Can you help?','🙂 오늘 좋아 보여'):
+                for token in (f'<@{uid}>',f'<@!{uid}>'):
+                    with self.subTest(token=token,tail=tail):
+                        r=self.resolve(token+tail,member_mentions=(uid,))
+                        self.assertEqual(r.addressee,uid)
+        for text in ('<@5>가 오늘 말했어','<@5>가말한뜻은뭐야','<@5>에게 물어봤어','"<@5>너는 어때?"라고 썼어',
+                     '아까 <@5>한테 물었어','<@5>와 <@6> 너희는 어때?'):
+            roles=self.resolve(text,member_mentions=(5,6) if '너희' in text else (5,))
+            self.assertIsNone(roles.addressee,text)
+        self.assertIsNone(self.resolve('<@82>내일 준비될까?').addressee)
+
     def setUp(self):
         self.directory=MemberDirectory()
         for uid,name in ((5,'가온mk2'),(6,'노을beta'),(7,'김도윤')):self.directory.observe(2,3,uid,(name,))

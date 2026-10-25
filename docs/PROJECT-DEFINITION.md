@@ -1,5 +1,9 @@
 # EchoMate 프로젝트 정의서 — 현재 기준
 
+## 이름·조회 상태의 읽기 전용 사실 경로
+
+명확한 자기 이름 요청은 관리자 이름/NameVersion을, 명확한 과거 기억 확인은 Runtime 조회 상태를 사용한다. 일반 출력의 코드 제한·기억 최신성 검사는 유지한다. 한정 입력 문법이며 모든 자연어 주장 검증이나 모델 인격 개선을 보장하지 않는다. 장시간 운용은 DEFERRED — USER REAL-WORLD TEST다. [후속 QA](LIME-QUALITY-ITERATION-QA.md).
+
 ## 로컬 검증과 Discord 자격
 
 Lime 단일 출시 목표 안에서 자격 증명 없는 LOCAL_CHAT을 독립 제공한다. 로컬 기술 준비/이름 검증과 Discord 자율 참여 품질을 구분한다. 합성 테스트 기억·친밀도·예약과 저장 세션은 운영 자료와 분리한다. 제한적 Direct 모드는 오프라인 SDK 검증 범위이며 실제 Discord는 별도 승인 대상이다. LOCAL 성공만으로 정식 출시나 자율 참여 성공을 선언하지 않는다. [현재 모드 QA](LOCAL-CHAT-QA.md).

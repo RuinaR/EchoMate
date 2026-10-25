@@ -10,6 +10,17 @@ from echomate_bot.local_chat import LocalChat,stream_observer,local_token_budget
 
 
 class LocalRuntime(unittest.IsolatedAsyncioTestCase):
+    async def test_read_commands_report_empty_and_failed_not_generic_command_state(self):
+        c=self.chat;b=self.backend
+        await c.send('/동의 기억 켜기',b)
+        await c.send('/기억 목록',b)
+        self.assertEqual(c.last['lookup'],'empty')
+        with patch.object(c.store,'memories',side_effect=OSError('synthetic failed lookup')):
+            await c.send('/기억 목록',b)
+        self.assertEqual(c.last['lookup'],'failed')
+        self.assertEqual(c.last['operation_state'],'FAILED')
+        b.text.assert_not_awaited()
+
     async def asyncSetUp(self):
         self.folder=tempfile.TemporaryDirectory(dir='local_data')
         self.chat=LocalChat(Path(self.folder.name))
@@ -23,6 +34,8 @@ class LocalRuntime(unittest.IsolatedAsyncioTestCase):
         await c.send('/기억 저장 나는 바둑을 좋아한다',b)
         self.assertTrue(c.store.memories(2,4,3))
         self.assertTrue(c.last['receipts']);self.assertEqual(c.last['operation_state'],'SUCCESS')
+        await c.send('/기억 목록',b)
+        self.assertEqual(c.last['lookup'],'found')
         self.assertFalse(c.store.memories(2,5,3))
         await c.send('내 취미는?',b)
         self.assertIn('바둑',b.text.await_args.args[0][0]['content'])

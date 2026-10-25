@@ -1,6 +1,13 @@
 # 릴리즈 요구사항 추적표
 
 
+## 2026-10-25 품질 우선 후속 작업
+
+장시간 GPU30분/Runtime2시간/8시간/누수 목적 반복 재시작은 **DEFERRED — USER REAL-WORLD TEST**다. 이번 차수에서는 실행하지 않는다. 짧은 취소·종료·재로딩·데이터 변경 경합은 유지한다. 다른 Windows와 실제 Discord의 별도 검증/승인 조건은 유지하며 장시간 미실행을 PASS로 바꾸지 않는다.
+
+현재 변경과 실제 원문·채택/기각 근거는 [이름·조회 상태 및 청자 후속 QA](LIME-QUALITY-ITERATION-QA.md)를 따른다. LOCAL_CHAT·명시 호출·자율 참여는 따로 판정하고 자율 청자와 일반 자유 생성 사실성은 계속 차단 항목이다.
+
+
 ### 이번 LOCAL_CHAT 게이트
 
 | 영역 | 상태 | 근거 / 남은 조건 |
@@ -9,14 +16,15 @@
 | 직접 멘션/reply | PASS (오프라인 한정) | 실제 GPU→SDK mock7이벤트4응답·3침묵, live 시작 허용 아님 |
 | Discord 자율 청자 | FAIL/BLOCKED | 기존 strict qualification 기준 유지 |
 | 강한 이름 일관성·자유 생성 사실성 | FAIL | 과거 이름 유도 수용·무실행 미래 발언 남음 |
-| 마지막 소스30분/2·8시간·다른 Windows | NOT VERIFIED | 이전 linear32분 periodic 관측과 구분 |
+| 장시간30분/2·8시간/누수 반복 재시작 | DEFERRED — USER REAL-WORLD TEST | 사용자 실사용으로 이관, 이번 실행 없음 |
+| 다른 Windows | NOT VERIFIED | 실제 별도 환경 필요 |
 | 실제 Discord 통합 | BLOCKED | 별도 승인 전 인증/조회/송신 금지 |
 
 ### LOCAL_CHAT 마감 근거와 다음 작업
 
 실제 능동10턴과 별도 scripted100회 연속 생성(장기50 포함), 기억20·예약20·인칭20·일상30 시나리오를 구분해 기록했다. 모델의 이전 이름 수용·근거 없는 조회/미래 약속은 남아 있어 RELEASE BLOCKED다. 실제 stream 취소·기억 삭제 경합·재시작 stale 세션 거절을 확인했다. 긴 문맥 native 사전 계산을 같은 선택 메시지 기준32초→약1.4초로 줄였으며 생성 속도 개선과 구분한다. 현재 세션 중복 모델 소유와 외부 고정 파일 가져오기도 보호했다. 최종 결과·실패 로그·Portable·정확한 재개는 [LOCAL-CHAT-QA](LOCAL-CHAT-QA.md)를 따른다.
 
-우선순위: (1) 원천 분리 사회적 시퀀스로 DISCORD_AUTONOMOUS의 오개입/누락 개선, (2) 기존 receipt 기반 기능 경로와 자유 생성의 거짓 약속 구분, (3) 이름 유도·긴 대화 사실성, (4) 최종 소스 장기 GPU/2·8시간·다른 Windows. 실제 Discord는 마지막 별도 승인이다. 재학습·새 모델 탐색으로 범위를 확장하지 않는다.
+우선순위: (1) 원천 분리 사회적 시퀀스로 DISCORD_AUTONOMOUS의 오개입/누락 개선, (2) 기존 receipt 기반 기능 경로와 자유 생성의 거짓 약속 구분, (3) 이름 유도·긴 대화 사실성, (4) 다른 Windows 검증. 장시간 운용은 DEFERRED — USER REAL-WORLD TEST. 실제 Discord는 마지막 별도 승인이다. 재학습·새 모델 탐색으로 범위를 확장하지 않는다.
 
 ## 2026-10-25 LOCAL_CHAT 분리·실제 대화 검증 — RELEASE BLOCKED
 
@@ -49,7 +57,9 @@
 | 기억/동의/친밀도/예약·원본 reply·취소 경계 | PASS | 합성 namespace/영수증·동의·수정/삭제·공정 큐·조각 회귀. 실제 운영 migration은 미실행. |
 | Windows Lime 설치·선택·이름·로딩·오류 복구 | NOT VERIFIED | 설치/가져오기·이름·로딩/실패 해제·격리 DPI/취소/복구 연결. strict semantic FAIL로 정상 활성화 전체 흐름·실제 전체 다운로드 재개는 미검증. |
 | `/캐릭터`·`/동의`와 기존 명령 호환 | NOT VERIFIED | 로컬 모드별 mock 계약 PASS, 실제 등록 집합/사용 접근은 미검증. |
-| 병렬 대화/새 구조 GPU 장기 안정성 | NOT VERIFIED | 기존 합성 공정큐/분할/epoch는 통과, 30분GPU·2/8시간 새 구조 검증 필요. |
+| 청자 구조의 짧은 GPU 통합 | PASS (한정) | 실제7이벤트 GPU A/B·원본reply/오개입 경계 개선, 전체 의미 판단은 FAIL 유지 |
+| 다중 채널/스레드 GPU 병렬 통합 확대 | NOT VERIFIED | 기존 공정큐 회귀와 이번 순서형7이벤트를 구분하며 광범위 병렬 인증 아님 |
+| 장시간 GPU/Runtime·누수 반복 재시작 | DEFERRED — USER REAL-WORLD TEST | 이번 실행 없음. 사용자 실사용에서 추적하며 PASS 아님 |
 | Portable 첫 설치·업데이트/다른 Windows | NOT VERIFIED | 최신 번들94개 통과. 설치 fixture/시작 차단 확인. 실제 첫 사용자 GPU/다른 Windows 미검증. |
 | 실제 Discord 최종 통합 | BLOCKED | 마지막 별도 승인: 인증/REST/Gateway·명령 변경·송신 구분. 현재 미실행. |
 | Yaho / IT 기획자 출시 제공 | NOT APPLICABLE | 추후 미지원 후보. 삭제/READY 승격 없음; 미확보 자체는 Lime 출시 차단 아님. |
@@ -123,7 +133,7 @@
 | M2 원본 단일 파일 안전 로딩 | NOT VERIFIED | 운영 base의 선택은 자동 변경하지 않음, [모델 레지스트리](MODEL-REGISTRY.md) | 원본에 shard 측정 재사용 금지; 자원 여유가 허용할 때 별도 검증 |
 | M3 취소·전환·종료·실패 복구 | PASS | 현재929 기능 회귀/기존 실제 모델 해제 기록 | 경쟁/장시간은L2, 실제 다른 환경은W2 |
 | L1 지연·TTFT·큐·메모리 SLO | NOT VERIFIED | 이번같은8입력/조건 측정·전체TTFT/queue0, [GPU 표](RELEASE-READINESS-QA.md); 출력 길이/seed 효과 구분 | 이번2문장 workload8개/조건의 관측 p50/p95는10/20초 이내; 포화 부하/긴 운용·통계적 신뢰 범위 추가 확인 |
-| L2 장시간 운용·누수·재시작 | NOT VERIFIED | 72546e4 진단 누수 수정·실경과1시간3108반복/59재시작·포인터23·퇴역0/오류0; private25.23→41.10MiB로소폭증가잔존 [범위](TRAINING-STABILITY-QA.md) | 이전2시간시도는quota fixtureFAIL·약70분자원중단; 최신39dab96의CPU/mock7200초ON/OFF·6204/6275반복/각118재시작PASS·오류/잔류Task/반환후참조0 [신규 QA](DATASET-QLORA-QA.md); 실경과8시간/주기적GPU·회수·재시작은별도확인 |
+| L2 장시간 운용·누수·재시작 | DEFERRED — USER REAL-WORLD TEST | 72546e4 진단 누수 수정·실경과1시간3108반복/59재시작·포인터23·퇴역0/오류0; private25.23→41.10MiB로소폭증가잔존 [범위](TRAINING-STABILITY-QA.md) | 이전2시간시도는quota fixtureFAIL·약70분자원중단; 최신39dab96의CPU/mock7200초ON/OFF·6204/6275반복/각118재시작PASS·오류/잔류Task/반환후참조0 [신규 QA](DATASET-QLORA-QA.md); 실경과8시간/주기적GPU·회수·재시작은별도확인 |
 | U1 Windows UI 입력→저장→표시 | PASS | 이전420조합·격리 렌더66화면, 최근800 회귀는 기능 근거 [UI](RESUMED-MEMORY-UX-QA.md) | 현재 주요 화면 격리 렌더/이벤트 확인; 실제 사용자 만족도 별도 |
 | U2 격리된 최신 화면/오류/DPI | PASS | setup/models/character/status와팝업, 100/125/150%·두 창 크기30행/55PNG, callback0·own Desktop 검증, [범위](RELEASE-READINESS-QA.md) | 대표4이미지 직접 확인; 나머지 심미성/모든 화면·실제 사용자 만족도 미검증 |
 | W1 Portable 소스·파일·동작 | PASS | 앱src는f243675 그대로·기존번들83검사 근거 보존; 공개176쌍/manifest21,578파일 전체hash·금지 파일 경계 감사 [신규 QA](QLORA-ADMISSION-QA.md) | 같은 호스트의 파일 정합성 범위; 다른Windows/번들GPU별도 |
