@@ -74,6 +74,9 @@ class ScopedConnection:
 
 class CharacterCompanionStore(CompanionStore):
     character_namespaced=True
+    # Old v7 binaries reject >7 before reading/writing personal records. A
+    # separate marker alone was insufficient because those binaries ignore it.
+    SCHEMA_VERSION=8
 
     def __init__(self, hub, character_id=None):
         self.hub = hub
@@ -94,7 +97,7 @@ class CharacterCompanionStore(CompanionStore):
         store=cls.__new__(cls)
         store.hub=hub;store.character_id=character_id;store.prefix=prefix
         store.path=hub.path;store.clock=hub.clock;store.lock=threading.RLock()
-        store.error=None;store.last_error=None;store.schema_version=7
+        store.error=None;store.last_error=None;store.schema_version=cls.SCHEMA_VERSION
         return store
 
     def __getattribute__(self, name):
@@ -118,7 +121,7 @@ class CharacterCompanionStore(CompanionStore):
                     yield ScopedConnection(connection, self.prefix, character_id=self.character_id)
 
     def recover_readonly(self):
-        # The parent only verifies v7 legacy tables. Verify this namespace too.
+        # Verify character tables in addition to the shared versioned schema.
         with self.hub.lock:
             with closing(sqlite3.connect(self.path.resolve().as_uri()+'?mode=ro', uri=True)) as db:
                 names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}

@@ -1308,6 +1308,7 @@ class Runtime:
             if flow and (speech_eligible or reaction_only):flow.engaged=True;self.activity_changed()
             command_answer=None;summary_guard=None;summary_id=None;memory_guard=None;generation_guard=None
             operation_receipts=[];subject_guard=None;subject_snapshot=None;dependency_stale=False;memory_selection=None;selection_guard=None
+            memory_lookup_state='not_requested'
             if self.companion:
                 try:
                     subject_snapshot=await asyncio.to_thread(self.companion.subject_snapshot,event.guild,event.author,relationship=cfg['relations_auto'])
@@ -1350,26 +1351,40 @@ class Runtime:
                         command_answer=operation_failure(request_plan(event.content))
                 else:
                     try:
+                        pretrained=bool(getattr(self.backend,'character_id',None))
+                        permitted=await self.automatic_subject_allowed(event.guild,event.author,'memory')
+                        memory_lookup_state='not_authorized' if not permitted else 'not_requested'
+                        lookup_performed=permitted or not pretrained
                         memory_version=await asyncio.to_thread(self.companion.consent_version,event.guild,event.author,'memory')
                         archive=bool(re.search(r'내\s*(?:약속|일정|목표|취향|기억)',event.content))
-                        remembered=await asyncio.to_thread(self.companion.memories,event.guild,event.author,event.channel,event.content,
-                            conversation_id=event.conversation_id,allow_user_archive=archive)
+                        remembered=(await asyncio.to_thread(self.companion.memories,event.guild,event.author,event.channel,event.content,
+                            conversation_id=event.conversation_id,allow_user_archive=archive)) if lookup_performed else []
                         permitted=await self.automatic_subject_allowed(event.guild,event.author,'memory')
-                        if not permitted:remembered=[]
-                        elif memory_version is not None:
+                        if not permitted:remembered=[];memory_lookup_state='not_authorized'
+                        elif memory_version is not None and lookup_performed:
                             from .operation_receipts import MemorySelection,read_values
                             remembered=remembered[:3]
                             memory_selection=MemorySelection(event.guild,event.author,event.channel,event.content,event.conversation_id,
                                                              archive,read_values('memory',remembered),memory_version,getattr(self.companion,'character_id',None))
+                            memory_lookup_state='found' if remembered else 'empty'
+                        elif not lookup_performed:memory_lookup_state='not_requested'
                         if remembered:
                             remembered=remembered[:3]
                             if not await asyncio.to_thread(self.companion.memory_evidence_current,event.guild,event.author,event.channel,remembered,memory_version):
-                                remembered=[]
+                                remembered=[];memory_lookup_state='invalidated'
                         if remembered:
                             memory_guard=(remembered,memory_version)
                             from .memory_context import memory_context
                             context.insert(max(0,len(context)-1),dict(role='user',content=memory_context(remembered,cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul'))))
-                    except (OSError,RuntimeError,sqlite3.Error):self.note('memory_lookup_failed')
+                    except (OSError,RuntimeError,sqlite3.Error):
+                        self.note('memory_lookup_failed');memory_lookup_state='failed'
+                        # A failed dependency is not an empty result. The Lime
+                        # path fails closed with Runtime-owned wording instead
+                        # of asking free generation to guess unavailable facts.
+                        if getattr(self.backend,'character_id',None):
+                            from .companion import OperationPlan
+                            command_answer=operation_failure(OperationPlan('memory','read'))
+            cfg['_memory_lookup_state']=memory_lookup_state
             visual=[]
             from .output_policy import explicit_code_request,FALLBACK
             if command_answer is None and speech_eligible and (direct or continuing) and explicit_code_request(event.content):

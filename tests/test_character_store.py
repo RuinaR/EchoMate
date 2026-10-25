@@ -32,6 +32,24 @@ class CharacterStorage(unittest.TestCase):
     def event(self):
         return SimpleNamespace(id=77,guild=2,author=4,channel=3,parent=None,timestamp=datetime.fromtimestamp(self.now,timezone.utc),raw_parts=())
 
+    def test_character_database_version_refuses_legacy_downgrade_and_recovers_readonly(self):
+        self.add(self.a)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],8)
+        old=CompanionStore(self.path)
+        self.assertEqual(old.error,'ValueError')
+        self.a.error='OperationalError'
+        self.assertTrue(self.a.recover_readonly())
+        self.assertEqual(self.a.schema_version,8)
+        self.assertTrue(self.a.memories(2,4))
+        # A copied v7 file upgrades only in the explicitly separate destination.
+        source=self.path.parent/'legacy.sqlite3';legacy=CompanionStore(source)
+        self.assertEqual(legacy.schema_version,7)
+        before=hashlib.sha256(source.read_bytes()).hexdigest()
+        imported=CharacterStores.import_legacy_copy(source,self.path.parent/'imported.sqlite3')
+        self.assertEqual(imported.legacy.schema_version,8)
+        self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(),before)
+
     def test_same_source_and_user_have_distinct_memories_and_affinity(self):
         self.add(self.a);self.add(self.b,'나는 독서를 좋아한다')
         self.add(self.hub.legacy,'나는 산책을 좋아한다')

@@ -1,5 +1,11 @@
 # 아키텍처
 
+## 2026-10-25 조회 상태와 캐릭터 DB 버전 경계
+
+pretrained Runtime은 자동 기억 조회 전후 허용 범위·실제 조회 여부를 확인하고 실패는 Runtime 실패 안내로 닫는다. 미조회/접근 미허용/실패/빈 결과/항목/무효화는 GGUF 생성 문맥에 구분해 전달하며 실행 영수증으로 승격하지 않는다. 기존 MemorySelection/원본·동의·송신 최신성은 유지한다.
+
+캐릭터 namespace 파일은 물리 schema8, legacy CompanionStore는schema7이다. namespace marker만으로 구형 바이너리를 막을 수 없던 공백을 보완했다. 새 파일/명시적 읽기 전용 원본의 별도 사본에만 적용하며 운영 DB 자동 이관은 하지 않는다. [구현·실제 GPU/과거 reader 검증·한계](LIME-RUNTIME-SAFETY-QA.md).
+
 ## 2026-10-25 Lime 최초 출시와 확장 경계
 
 기본 CharacterId=`lime`, 기본 이름=`라임`, 최초 출시 필수 ID 집합은 Lime 하나다. `character_models.default_character()`와 `product_characters()`가 기본 설치/선택 정책을 제공한다. 전체 `discover()`는 Yaho/기획자를 포함한 확장/진단 카탈로그를 보존한다. **출시 범위·설치 여부·기술 로딩·품질 READY는 별개 상태**이며 출시 선택만으로 상태를 승격하지 않는다. 미지원 미래 모델은 기본 선택 목록에서 제외한다.

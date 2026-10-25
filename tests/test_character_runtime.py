@@ -120,6 +120,68 @@ class Transitions(unittest.IsolatedAsyncioTestCase):
         self.assertIn('조회에 실패',text);self.assertIn('없다는 뜻은 아니야',text)
         self.assertFalse(self.old.calls)
 
+    async def test_automatic_lookup_failure_cannot_fall_through_to_free_generation(self):
+        self.store.set_consent(2,4,'memory',True)
+        with patch.object(self.store,'memories',side_effect=RuntimeError('unavailable')):
+            await self.runtime.ingest(self.event(content='<@999> 전에 내가 좋아한다고 한 취미가 뭐였지?'))
+            await self.settle()
+        self.assertEqual(len(self.transport.sent),1)
+        self.assertIn('조회에 실패',self.transport.sent[0][1].text)
+        self.assertIn('없다는 뜻은 아니야',self.transport.sent[0][1].text)
+        self.assertFalse(self.old.calls)
+
+    async def test_no_consent_skips_automatic_lookup_and_never_claims_empty(self):
+        seen=[]
+        async def text(context,cfg):
+            seen.append(cfg['_memory_lookup_state']);return '안녕.'
+        self.old.text=text
+        with patch.object(self.store,'memories',side_effect=AssertionError('Unconsented read')):
+            await self.runtime.ingest(self.event());await self.settle()
+        self.assertEqual(seen,['not_authorized'])
+        self.assertEqual(len(self.transport.sent),1)
+
+    async def test_successful_empty_and_found_lookup_are_distinct_generation_states(self):
+        self.store.set_consent(2,4,'memory',True)
+        seen=[]
+        async def text(context,cfg):
+            seen.append(cfg['_memory_lookup_state']);return '확인했어.'
+        self.old.text=text
+        await self.runtime.ingest(self.event(content='<@999> 내 취향을 참고해 줄래?'));await self.settle()
+        self.store.add_memory(2,4,3,'나는 퍼즐 게임을 좋아한다')
+        await self.runtime.ingest(self.event(id=24,content='<@999> 퍼즐 게임에 대해 이야기해 줘'));await self.settle()
+        self.assertEqual(seen,['empty','found'])
+
+    async def test_consent_granted_after_initial_check_does_not_turn_skipped_read_into_empty(self):
+        seen=[];original=self.store.consent_version
+        def grant_then_version(*args):
+            self.store.set_consent(2,4,'memory',True)
+            return original(*args)
+        async def text(context,cfg):
+            seen.append(cfg['_memory_lookup_state']);return '지금은 조회하지 않았어.'
+        self.old.text=text
+        with patch.object(self.store,'consent_version',side_effect=grant_then_version),patch.object(self.store,'memories',side_effect=AssertionError('Skipped read')):
+            await self.runtime.ingest(self.event());await self.settle()
+        # The existing subject epoch guard cancels before generation when the
+        # actual consent changes; skipped queries still must not be executed.
+        self.assertEqual(seen,[])
+        self.assertFalse(self.transport.sent)
+
+    async def test_access_recovers_after_initial_denial_skipped_read_is_not_empty(self):
+        self.store.set_consent(2,4,'memory',True)
+        original=self.runtime.automatic_subject_allowed;checks=0;seen=[]
+        async def allowed(guild,user,category='relationships'):
+            nonlocal checks
+            if category=='memory':
+                checks+=1
+                if checks==1:return False
+            return await original(guild,user,category)
+        async def text(context,cfg):
+            seen.append(cfg['_memory_lookup_state']);return '이번에는 조회하지 않았어.'
+        self.old.text=text
+        with patch.object(self.runtime,'automatic_subject_allowed',side_effect=allowed),patch.object(self.store,'memories',side_effect=AssertionError('Skipped read')):
+            await self.runtime.ingest(self.event());await self.settle()
+        self.assertEqual(seen,['not_requested'])
+
     async def test_cancel_ignoring_generation_cannot_hang_switch_or_load_next(self):
         entered=asyncio.Event();release=asyncio.Event()
         async def stubborn(context,cfg):

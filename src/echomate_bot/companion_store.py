@@ -26,6 +26,7 @@ def safe_subject_text(text):
 
 
 class CompanionStore(MemberAliases,PrivacyStore,SummaryStore):
+    SCHEMA_VERSION=7
     def __init__(self,path,clock=time.time):
         self.path=private_path(path);self.clock=clock;self.lock=threading.RLock();self.error=None;self.last_error=None;self.schema_version=None
         try:
@@ -33,7 +34,7 @@ class CompanionStore(MemberAliases,PrivacyStore,SummaryStore):
             with self.db() as db:
                 version=db.execute('PRAGMA user_version').fetchone()[0]
                 self.schema_version=version
-                if version>7:raise ValueError('Newer companion schema')
+                if version>self.SCHEMA_VERSION:raise ValueError('Newer companion schema')
                 if (not getattr(self,'character_namespaced',False) and
                     db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='character_store_version'").fetchone()):
                     raise ValueError('Character database requires a namespace-aware store')
@@ -60,9 +61,9 @@ INSERT OR IGNORE INTO consent_choices SELECT s.guild,s.user,'relationships',1,1,
 INSERT OR IGNORE INTO consent_choices SELECT s.guild,s.user,'memory',1,1,s.at FROM subject_consents s WHERE NOT EXISTS(SELECT 1 FROM optouts o WHERE o.guild=s.guild AND o.user=s.user) AND NOT EXISTS(SELECT 1 FROM memory_optouts o WHERE o.guild=s.guild AND o.user=s.user);
 PRAGMA user_version=7;
 COMMIT;
-''')
+'''.replace('PRAGMA user_version=7;',f'PRAGMA user_version={self.SCHEMA_VERSION};'))
             self.cleanup()
-            self.schema_version=7
+            self.schema_version=self.SCHEMA_VERSION
         except (sqlite3.Error,OSError,ValueError) as exc:self.error=type(exc).__name__;self.last_error=type(exc).__name__
 
     def recover_readonly(self):
@@ -78,7 +79,7 @@ COMMIT;
                     db.execute('PRAGMA query_only=ON')
                     db.execute('BEGIN')
                     version=db.execute('PRAGMA user_version').fetchone()[0]
-                    if version!=7:return False
+                    if version!=self.SCHEMA_VERSION:return False
                     required={'relationships','relationship_events','optouts','memory_optouts','tombstones','source_parts','memory_cutoffs','memories','reminders','memory_flows','subject_consents','member_aliases','alias_evidence','consent_choices','conversation_summaries','dialogue_summaries','summary_participants','summary_sources','summary_tombstones'}
                     if not required<={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}:return False
                     for table,columns in (('consent_choices','guild,user,category,enabled,version,at'),('relationships','guild,user'),('memories','guild,user,source'),('reminders','guild,requester'),('source_parts','guild,source,part'),('summary_participants','guild,user'),('conversation_summaries','guild,user')):

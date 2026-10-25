@@ -1,5 +1,11 @@
 # Lime 최초 출시 계획과 변경 QA
 
+## 2026-10-25 Lime 조회 실패·저장소 downgrade 보호 — RELEASE BLOCKED
+
+기준 `0c2c14b`. 자동 기억 검색 실패의 자유 생성 fallthrough를 Runtime 실패 응답으로 막고, 미동의 자동 조회를 생략하며 실패/빈 결과/실제 항목 상태를 분리했다. 캐릭터 DB는v8, legacy는v7로 유지해 marker를 모르는 과거 구현의 접근을 거부한다. 임시 사본/읽기 전용 복구·실제 과거 코드 거부를 확인했고 운영 DB는 변경하지 않았다.
+
+실제 Lime 진단→SDK mock6송신/원본reply·예약영수증을 확인했지만 semantic gate FAIL을 유지했다. 작은 행동 계획2후보는 다른 유형 회귀로 기각했다. UI/장기/실서버 검증은 미완료이며 Yaho/기획자는 출시 필수가 아니다. [실제 수정·GPU·회귀·보존·다음 과제](LIME-RUNTIME-SAFETY-QA.md).
+
 ## 확정 계약
 
 시작 HEAD `246424320592a20a1ecaba19bb072d49555bafad`, main/origin 일치·clean에서 시작했다. 최초 정식 제품은 **Lime 단일 모델**이다. 기본 출처 [naksyu/lime_Q6_K](https://huggingface.co/naksyu/lime_Q6_K), 기본 이름 라임, 사용자 이름 변경 지원이다. Yaho/여성 IT 기획자는 확장 카탈로그에 남는 미지원·추후 제공 후보이며 출시 조건에서 제외한다. 라이선스/가중치 문제를 해결했다고 주장하거나 READY로 표시하지 않는다.

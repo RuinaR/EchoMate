@@ -462,9 +462,14 @@ class GGUFLocalBackend(LocalBackend):
         from .adult_policy import ADULT_INSTRUCTION
         familiarity=cfg.get('_familiarity')
         state={'mood':cfg.get('mood') if cfg.get('mood') in MOOD_TEXT else '평온'}
+        lookup=cfg.get('_memory_lookup_state','not_requested')
+        if lookup not in ('not_requested','not_authorized','found','empty','invalidated','failed'):
+            raise ValueError('Invalid Runtime memory lookup state')
+        state['memory_lookup']=lookup
         if type(familiarity) in (int,float) and math.isfinite(familiarity) and 0<=familiarity<=100:
             state['consented_familiarity']=familiarity
         policy+=' Runtime이 확인한 표현 상태: '+json.dumps(state,ensure_ascii=False)+'. '
+        policy+='memory_lookup의 empty는 이번 허용 범위 검색의 빈 결과만 뜻하며 사건 부재가 아니다. not_requested는 미조회, not_authorized는 접근 미허용, failed는 조회 실패, invalidated는 근거 변경이다. found도 제공된 근거만 사용할 수 있다. 이 상태는 저장/알림 실행 영수증이 아니다. '
         policy+='기분·관계는 학습된 인격을 대체하지 않고 사실·참여·기억 접근 권한을 늘리지 않는다. 동의된 관계 값이 없으면 이전 친분을 추정하지 않는다. '
         policy+=(ADULT_INSTRUCTION if cfg.get('_adult_active') is True else '성인 유머는 현재 허용되지 않았다. 일반 대화로 답한다.')
         messages = with_identity(self.entry, self.name, [{'role': 'system', 'content': policy}, *context])

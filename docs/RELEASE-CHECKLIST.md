@@ -1,5 +1,9 @@
 # 릴리즈 요구사항 추적표
 
+## 2026-10-25 실제 기능 보강 — Lime 필수 게이트 유지
+
+자동 기억 조회 실패는 Runtime 실패 안내로 닫고 미동의 조회를 생략한다. 실패/빈 결과/항목 상태와 캐릭터v8/legacyv7 downgrade 거부를 검증했다. **기억 실패 경로의 구성요소 PASS**이며 일반 자유 생성 기능 약속/청자 FAIL은 해제하지 않는다. 실제GPU→SDK mock6응답은 semantic gate FAIL 상태의 진단용 증거로만 사용한다. 새 UI·장기·다른 Windows·실제 Discord는 미검증이다. [구현/기각/실측](LIME-RUNTIME-SAFETY-QA.md). 아래 Lime 단일 출시 필수 집합은 그대로다.
+
 ## 2026-10-25 현재 RELEASE 필수 집합 — Lime 한 모델
 
 이 표가 아래 과거 다중 모델 게이트보다 우선한다. **Yaho/IT 기획자는 최초 출시 필수 조건에서 제외**한다. 후보 자체의 라이선스/가중치 BLOCKED는 보존하되 이 RELEASE의 차단으로 합산하지 않는다. 필수 실패/미검증이 남으므로 RELEASE BLOCKED다. [제품 범위·증거·실행 계획](LIME-RELEASE-PLAN.md).
