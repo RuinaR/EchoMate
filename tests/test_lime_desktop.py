@@ -50,8 +50,9 @@ class Controller(unittest.IsolatedAsyncioTestCase):
     async def test_real_backend_protocol_load_and_unload_are_ordered(self):
         with patch('echomate_bot.lime_desktop.GGUFLocalBackend',Model):
             self.assertTrue((await self.c.command('lime_load'))['ok'])
-        self.assertEqual(self.c.lime['stage'],'ready')
+        self.assertEqual(self.c.lime['stage'],'local_ready')
         model=self.c.lime_backend
+        self.assertFalse(model.capabilities_verified)
         self.assertFalse((await self.c.command('lime_load'))['ok'])
         # A failed duplicate request must not unload or replace the resident.
         self.assertIs(self.c.lime_backend,model);self.assertFalse(model.closed)
@@ -61,7 +62,7 @@ class Controller(unittest.IsolatedAsyncioTestCase):
     async def test_semantic_failure_never_publishes_ready_or_starts_discord(self):
         model=Model();model.probe=AsyncMock(side_effect=RuntimeError('Model recipient classification validation failed'))
         with patch('echomate_bot.lime_desktop.GGUFLocalBackend',return_value=model):
-            result=await self.c.command('lime_load')
+            result=await self.c.command('lime_load',validation_mode='DISCORD_AUTONOMOUS')
         self.assertTrue(result['ok']);self.assertFalse(model.closed)
         self.assertFalse(model.capabilities_verified);self.assertIs(self.c.lime_backend,model)
         self.assertEqual(self.c.lime['stage'],'local_ready')
@@ -75,23 +76,31 @@ class Controller(unittest.IsolatedAsyncioTestCase):
         model=Model();model.probe=AsyncMock(side_effect=RuntimeError('probe'))
         model.clean=False
         with patch('echomate_bot.lime_desktop.GGUFLocalBackend',return_value=model):
-            self.assertFalse((await self.c.command('lime_load'))['ok'])
+            self.assertFalse((await self.c.command('lime_load',validation_mode='DISCORD_AUTONOMOUS'))['ok'])
         self.assertIs(self.c.lime_backend,model)
         self.assertEqual(self.c.lime['stage'],'recovery_required')
-        self.assertFalse((await self.c.command('lime_load'))['ok'])
+        self.assertFalse((await self.c.command('lime_load',validation_mode='DISCORD_AUTONOMOUS'))['ok'])
         model.clean=True
 
     async def test_semantic_format_failure_is_local_only_but_resource_failure_is_not(self):
         model=Model();model.probe=AsyncMock(side_effect=ValueError('Invalid constrained output'))
         with patch('echomate_bot.lime_desktop.GGUFLocalBackend',return_value=model):
-            self.assertTrue((await self.c.command('lime_load'))['ok'])
+            self.assertTrue((await self.c.command('lime_load',validation_mode='DISCORD_AUTONOMOUS'))['ok'])
         self.assertEqual(self.c.lime['stage'],'local_ready')
         await self.c.command('lime_unload')
         from echomate_bot.processes import ResourceLimitError
         model=Model();model.probe=AsyncMock(side_effect=ResourceLimitError('reserve','ram'))
         with patch('echomate_bot.lime_desktop.GGUFLocalBackend',return_value=model):
-            self.assertFalse((await self.c.command('lime_load'))['ok'])
+            self.assertFalse((await self.c.command('lime_load',validation_mode='DISCORD_AUTONOMOUS'))['ok'])
         self.assertTrue(model.closed);self.assertIsNone(self.c.lime_backend)
+
+    async def test_default_load_never_calls_autonomous_classifier(self):
+        model=Model();model.probe=AsyncMock(side_effect=AssertionError('Autonomy is not local loading'))
+        with patch('echomate_bot.lime_desktop.GGUFLocalBackend',return_value=model):
+            self.assertTrue((await self.c.command('lime_load'))['ok'])
+        model.probe.assert_not_awaited()
+        self.assertEqual(self.c.lime['stage'],'local_ready')
+        self.assertFalse((await self.c.command('start'))['ok'])
 
     async def test_save_failure_rolls_back_live_model_name(self):
         self.c.lime_backend=Model(name='라임');self.c.lime_backend.capabilities_verified=True
@@ -146,7 +155,13 @@ class LimeUI(unittest.TestCase):
                         error='긴 합성 오류 안내 '*8 if stage=='failed' else None))
                     app.page='lime';app.render();root.update_idletasks()
                     self.assertTrue(all(x+w<=1040 and y+h<=740 for x,y,w,h,callback in app.hits))
-                    self.assertEqual(app.can_start(),stage=='ready')
+                    # Technical readiness alone no longer grants live startup.
+                    self.assertFalse(app.can_start())
+                    from echomate_bot.execution_modes import current_mode_reports
+                    app.snapshot['execution_readiness']=current_mode_reports(stage=='ready')
+                    app.page='modes';app.render();root.update_idletasks()
+                    self.assertTrue(all(x+w<=1040 and y+h<=740 for x,y,w,h,callback in app.hits))
+                    self.assertIn('modes',dict(app.navigation()))
                 with patch.object(app,'form') as form:
                     app.rename_dialog();callback=form.call_args.args[2];callback({'name':'하루'})
                     c.submit.assert_called_with('lime_name',name='하루')

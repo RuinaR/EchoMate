@@ -60,6 +60,7 @@ class LocalBackend:
         self._physical_pending=0;self.max_pending=max_pending;self.model=None;self.processor=None
         self.scheduler=GPUScheduler(limit=max_pending)
         self.failed=False;self.metrics=[];self._choice_cache={};self.choice_cache=choice_cache
+        self.capabilities_verified=False
 
     @property
     def pending(self):return max(self.scheduler.pending,self._physical_pending)

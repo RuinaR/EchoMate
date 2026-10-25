@@ -1,5 +1,9 @@
 # LOCAL_CHAT·Direct 모드 분리와 실제 대화 QA
 
+## 모드별 준비 판정 — 현재 우선 계약
+
+모드별 안전/고위험 사실성 필수 게이트와 일반 품질을 분리한다. LOCAL_CHAT은 Discord 청자 검사를 요구하지 않고, DISCORD_DIRECT는 실제 구조적 호출만 처리해 자율 의미 판단을 호출하지 않는다. 일반 대화 품질과 자율 청자 실패로 두 모드의 독립 개발을 막지 않지만, 허위 완료·개인정보·권한 안내의 명백한 실패는 해당 모드 READY를 막는다. 장시간 DEFERRED는 local/direct의 한정 시험과 구분하고 최종 자율 RELEASE에서는 필수로 남긴다. 현재 실제 Discord 실행은 모든 오프라인 결과/로딩 smoke와 무관하게 잠겨 있다. [정확한 게이트·근거·구현 범위](MODE-GATES-QA.md). 아래 과거 단계의 단일 READY 표현보다 이 정책이 우선한다.
+
 후속 의도/요약 경계·실제36이벤트와 미해결 청자: [현재 QA](RUNTIME-LAYERS-QA.md). 아래 결과는 당시 소스 범위로 보존한다.
 
 후속 Runtime 원문 보호·명시 금지·native 예산 구현/제한: [최신 QA](LIME-GROUNDED-RUNTIME-QA.md). 기존 결과는 해당 당시 범위로 보존한다.

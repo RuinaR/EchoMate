@@ -63,12 +63,23 @@ class LimeController(LocalController):
         latest = samples[-1] if samples else self.lime_diagnostics.get('last_sample')
         reason=getattr(engine,'last_error',None)
         if reason not in ('ram','commit','vram','temperature','gpu_query'):reason=None
+        reports=self.mode_reports()
         return dict(lime=dict(self.lime, resident=self.lime_backend is not None, resources=latest,
                              safety_stop_reason=reason, diagnostics=dict(self.lime_diagnostics)),
                     local_chat=self.local_chat.snapshot() if self.local_chat else None,
-                    execution_modes=dict(LOCAL_CHAT='READY' if self.lime_backend and self.lime.get('stage') in ('ready','local_ready') else 'NOT_READY',
-                        DISCORD_DIRECT='OFFLINE_ONLY_NOT_VERIFIED',
-                        DISCORD_AUTONOMOUS='READY' if self.lime_backend and self.lime_backend.capabilities_verified else 'BLOCKED'))
+                    execution_modes={mode:row['readiness'] for mode,row in reports.items()},
+                    execution_readiness=reports)
+
+    def mode_reports(self):
+        from .execution_modes import current_mode_reports
+        backend=self.lime_backend
+        technical=bool(backend and self.lime.get('stage') in ('ready','local_ready') and
+            not backend.failed and not getattr(backend.engine,'failed',False) and
+            self.lime.get('identity_verified',False))
+        return current_mode_reports(technical)
+
+    def live_start_allowed(self):
+        return self.mode_reports()['DISCORD_AUTONOMOUS']['live_allowed']
 
     async def _local_clock(self):
         while True:
@@ -92,6 +103,9 @@ class LimeController(LocalController):
                 self.lime_backend = None
 
     async def _run_bot(self):
+        if not self.live_start_allowed():
+            self.error='실서버 실행 차단: 모드별 고위험 사실성·실제 Discord 검증과 별도 승인이 필요해요.'
+            self._publish();return
         try:
             await super()._run_bot()
         finally:
@@ -104,7 +118,7 @@ class LimeController(LocalController):
 
     async def create_backend(self, cfg):
         backend = self.lime_backend
-        if not backend or not backend.capabilities_verified or self.lime['stage'] != 'ready':
+        if not self.live_start_allowed() or not backend or not backend.capabilities_verified or self.lime['stage'] != 'ready':
             raise RuntimeError('Lime 모델 검증을 먼저 완료해 주세요')
         return backend
 
@@ -117,6 +131,8 @@ class LimeController(LocalController):
         self.lime_task = None
 
     async def command(self, operation, **kwargs):
+        if operation=='start' and not self.live_start_allowed():
+            return dict(ok=False,error='실서버 실행 차단 · 실행 모드에서 고위험 사실성·검증·승인 조건을 확인해 주세요.')
         if operation=='local_ack':
             if not self.lease:return dict(ok=False,error='다른 앱이 실행 자원을 소유하고 있어요')
             if not self.local_chat:return dict(ok=False,error='로컬 받은 알림이 없어요')
@@ -205,15 +221,20 @@ class LimeController(LocalController):
                     await backend.ready()
                     await backend.probe_identity()
                     self.lime['identity_verified'] = True
-                    # Local technical readiness is independent of Discord social quality.
-                    try:
-                        await backend.probe()
-                        social_error=None
-                    except (ValueError,RuntimeError) as exc:
-                        from .processes import ResourceLimitError
-                        if (isinstance(exc,ResourceLimitError) or backend.failed or backend.engine.failed or
-                            isinstance(exc,RuntimeError) and str(exc)!='Model recipient classification validation failed'):raise
-                        social_error='Discord 자율 참여: 청자 검증 실패 · BLOCKED'
+                    # Default loading verifies local technical/identity safety only.
+                    # Autonomous research is explicit and cannot grant live authority.
+                    from .execution_modes import ExecutionMode
+                    validation=ExecutionMode(values.get('validation_mode',ExecutionMode.LOCAL_CHAT))
+                    social_error='Discord 자율 참여: 별도 검증 필요 · BLOCKED'
+                    if validation==ExecutionMode.DISCORD_AUTONOMOUS:
+                        try:
+                            await backend.probe()
+                            social_error=None
+                        except (ValueError,RuntimeError) as exc:
+                            from .processes import ResourceLimitError
+                            if (isinstance(exc,ResourceLimitError) or backend.failed or backend.engine.failed or
+                                isinstance(exc,RuntimeError) and str(exc)!='Model recipient classification validation failed'):raise
+                            social_error='Discord 자율 참여: 청자 검증 실패 · BLOCKED'
                     self.lime_backend = backend
                     self.lime.update(stage='ready' if backend.capabilities_verified else 'local_ready',
                                      autonomous_error=social_error)
@@ -332,7 +353,7 @@ class LimeController(LocalController):
 STATES = dict(not_installed='설치 확인 전', present_unverified='설치 파일 발견 · 검증 필요',
     downloading='다운로드 중', importing='기존 파일 복사 중',
     verifying='파일 검증 중', extracting='실행 엔진 설치 중', installed='파일 검증 완료 · 모델 로딩 전',
-    loading='모델 로딩·품질 검증 중', ready='모델 준비 완료', local_ready='로컬 대화 준비 · Discord 자율 참여 차단', failed='검증 실패',
+    loading='모델 로딩·이름·자원 검사 중', ready='기술 검사 완료 · 모드 준비 상태 별도', local_ready='로컬 기술 검사 완료 · 시험 사용 가능', failed='검증 실패',
     cancelled='작업 취소됨 · 부분 다운로드 보존', recovery_required='자원 정리 확인 필요')
 
 
@@ -345,7 +366,7 @@ class LimeDesktopApp(LocalChatView, DesktopApp):
         self.page = 'lime'
 
     def navigation(self):
-        return [('lime', '라임 · 설치와 이름'), ('local','로컬 채팅'), ('setup', 'Discord 설정'), ('spaces', '대화할 곳'),
+        return [('lime', '라임 · 설치와 이름'), ('local','로컬 채팅'), ('modes','실행 모드·준비'), ('setup', 'Discord 설정'), ('spaces', '대화할 곳'),
                 ('outputs', '응답 방식'), *PAGES.items(), ('status', '진행 상황')]
 
     def model_label(self):
@@ -361,11 +382,38 @@ class LimeDesktopApp(LocalChatView, DesktopApp):
         return '/동의는 본인 데이터 동의·철회, /캐릭터는 현재 캐릭터를 본인만 보는 읽기 전용 응답이에요. 캐릭터 변경은 Windows 앱에서만 해요.'
 
     def page_title(self):
-        return '로컬 채팅 · 합성 테스트' if self.page=='local' else '라임과 시작하기' if self.page == 'lime' else super().page_title()
+        return '모드별 준비와 제한' if self.page=='modes' else '로컬 채팅 · 합성 테스트' if self.page=='local' else '라임과 시작하기' if self.page == 'lime' else super().page_title()
 
     def can_start(self):
-        value = (self.snapshot or {}).get('lime', {})
-        return value.get('stage') == 'ready' and not value.get('busy')
+        row=((self.snapshot or {}).get('execution_readiness') or {}).get('DISCORD_AUTONOMOUS',{})
+        return row.get('live_allowed') is True and not (self.snapshot or {}).get('lime',{}).get('busy',True)
+
+    def draw_modes(self,w,h,cfg):
+        from .execution_modes import current_mode_reports
+        reports=(self.snapshot or {}).get('execution_readiness') or current_mode_reports(False)
+        names={'LOCAL_CHAT':'로컬 대화 · 별도 합성 데이터',
+               'DISCORD_DIRECT':'명시 호출 베타 · 멘션/reply/명령',
+               'DISCORD_AUTONOMOUS':'자율 대화 · 최종 정식 출시'}
+        for i,(mode,row) in enumerate(reports.items()):
+            y=151+i*139
+            rounded(self.canvas,226,y,w-252,128,PANEL)
+            self.text(246,y+13,names[mode],11,bold=True,width=w-300)
+            self.text(246,y+40,row['readiness']+' · '+row['scope'],10,MUTED,width=w-300)
+            labels={g['key']:g['impact'] for g in row['gates']}
+            reason=' / '.join(labels[k] for k in row['blockers'])
+            self.text(246,y+65,self.ellipsize(reason,w-440,9),9,MUTED)
+            label='로컬 시험 가능 · READY 인증 아님' if row.get('local_testing_available') else '실행 조건 미충족'
+            self.text(246,y+90,label,9,MUTED)
+            self.button(w-390,y+88,136,28,'검증·다음 단계',lambda m=mode:self.mode_detail(m))
+        local=reports['LOCAL_CHAT'].get('local_testing_available',False)
+        self.button(250,h-142,170,34,'로컬 채팅 열기',lambda:self.set_page('local'),enabled=local)
+        self.text(440,h-139,'실제 Discord는 별도 승인 전 잠금 · 장시간 검증은 사용자 실사용으로 이관',9,MUTED,width=w-470)
+
+    def mode_detail(self,mode):
+        from .execution_modes import current_mode_reports
+        row=((self.snapshot or {}).get('execution_readiness') or current_mode_reports(False))[mode]
+        text='\n\n'.join(f"{g['key']} · {g['risk']} · {g['status']}\n영향: {g['impact']}\n검증: {g['verification']}\n실사용 확인: {g['user_check']}" for g in row['gates'])
+        self.form('모드 준비 · '+mode,[('info','적용 범위·근거·다음 단계',row['scope']+'\n'+text)],lambda v:None,read_only=True)
 
     def phase_caption(self, phase):
         if self.page=='local':

@@ -1,5 +1,11 @@
 # 작업 로그
 
+## 2026-10-26 모드별 위험 기반 게이트
+
+LOCAL_CHAT_READY / DISCORD_DIRECT_BETA_READY / DISCORD_AUTONOMOUS_RELEASE를 분리했다. 기본 Lime 로딩은 파일·자원·이름을 검증하고 자율 청자 probe를 실행하지 않는다. DIRECT는 입구/최종 라우팅에서 실제 선두 멘션/봇 reply를 재검사하며 자율 판별 없이 기존 SDK mock 송신·최신성·Receipt를 재사용한다. 현재 로컬 기술 시험은 가능하지만 새 실제18턴에서도 허위 공동 경험을 관측해 **세 모드의 정식 READY는 BLOCKED**다. DIRECT10상호작용은 기대6송신/4무송신·자율 판단0회로 일치했다. 실서버 실행은 Controller/UI에서 계속 잠겨 있고 자율 청자 FAIL은 local/direct 개발의 필수 게이트에서만 분리한다. 장시간은 **DEFERRED — USER REAL-WORLD TEST**이며 최종 정식 출시 필수 근거다. [위험/모드별 결과·실제 원문·재개](MODE-GATES-QA.md). 과거 FAIL/NOT VERIFIED와 기존8/8·0/4는 당시 범위로 보존한다.
+
+검증 마감: 전체 **1,096개 OK314.942초**, Portable 자체 Python/src **200개 OK28.535초**, 비활성 Desktop 18화면(DPI100/125/150·두 창 크기)·callback 오류0. 실제 로컬18턴(모델12/Runtime6)·DIRECT10상호작용/원본12개·기대6송신/4무송신 일치·자율 판단0회. 운영5파일/원본Lime6hash 일치·합성 활성 예약0·final316 소비0. RAM 안전 중단 원인과 재실행, 실제 모델의 남은 허위 경험/조회 설명 실패를 보존했다. **RELEASE BLOCKED**, 실제 Discord 승인 전 잠금·장시간 DEFERRED 유지. 다음은 고위험 자유 생성 사실성 경계와 정상 잡담 오차단의 독립 검증이다.
+
 ## 2026-10-26 생성 예산·로컬 실행 안내·요약 경계
 
 시작 `00cd301`. 새 책 보수 모임의 무이름 복귀는 양쪽 성공했지만, pending 설명 후보의 품질 향상은 없어 기각했다. 9108 실패·7108 근거 부족은 남는다. 새 세 조각 발언은 청자 판단 뒤 생성 예산에서 실패했으며, 실제 reply/결정 출처를 보호하면서 optional 추가 발췌2개를 제외해 1,483 native 토큰으로 실제 GPU→SDK mock 응답에 연결했다. 이전 성공 회귀13이벤트는 정상8/8·사람 오개입0/4·인용0/1 유지다.

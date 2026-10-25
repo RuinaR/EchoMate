@@ -26,8 +26,10 @@ class LocalChatView:
         snapshot=self.snapshot or {};chat=snapshot.get('local_chat') or {}
         lime=snapshot.get('lime') or {};busy=lime.get('busy',False)
         ready=lime.get('stage') in ('ready','local_ready')
+        qualification=(snapshot.get('execution_readiness') or {}).get('LOCAL_CHAT',{})
         self.local_state.configure(text=f"LOCAL_CHAT · {lime.get('name','라임')} · {chat.get('status','idle')}\n"
-            + (lime.get('autonomous_error') or 'Discord 연결 없음 · 합성 DB만 사용')
+            + ('LOCAL_CHAT_READY' if qualification.get('ready') else '로컬 시험 사용 · READY 인증 아님 · 고위험 사실성 검증 미완료')
+            + '\nDiscord 연결 없음 · 합성 DB만 사용'
             + ('\n로컬 알림 서비스 중단 · 새 예약 불가, 재시작 필요' if chat.get('notification_service')=='FAILED' else ''))
         self.local_send_button.configure(state='normal' if ready and not busy else 'disabled')
         self.local_load_button.configure(state='normal' if not lime.get('resident') and not busy else 'disabled')

@@ -1,5 +1,7 @@
 # EchoMate
 
+현재 준비 상태: [모드별 위험 기반 게이트](docs/MODE-GATES-QA.md). 로컬 합성 시험 대화는 가능하지만 **LOCAL_CHAT_READY·명시 호출 베타 OFFLINE READY·자율 RELEASE는 모두 BLOCKED**입니다. 새 실제 대화에서도 무근거 공동 경험 발언이 남았습니다. 명시 호출은 SDK mock에서 별도 검증하며, 실제 Discord 연결·명령 변경·송신은 승인 전 잠깁니다. 장시간 검증은 **DEFERRED — USER REAL-WORLD TEST**입니다.
+
 최근 개발: [생성 예산·실행 안내·요약 의미 QA](docs/SEMANTIC-FOCUS-QA.md). 긴 조각 응답과 로컬 기능 안내를 보완했지만 일반 청자·자유 생성 사실성·요약 의미 한계가 남아 **RELEASE BLOCKED**입니다.
 
 최신 개발: [사람 대화 보호·봇 복귀 GPU QA](docs/BOT-RETURN-QA.md). 새 다자 시나리오의 복귀 누락을 줄였지만 일반 자율 참여·자유 생성 사실성은 미완료로 **RELEASE BLOCKED**입니다. 장시간 검증은 사용자 실사용으로 이관했습니다.

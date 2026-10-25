@@ -398,6 +398,7 @@ class DesktopApp(CompanionViews):
         self.server_list.place_forget();self.channel_list.place_forget()
         self.people_list.place_forget();self.record_list.place_forget();self.job_list.place_forget();self.model_list.place_forget()
         if self.page=='lime':self.draw_lime(w,h,cfg)
+        elif self.page=='modes' and hasattr(self,'draw_modes'):self.draw_modes(w,h,cfg)
         elif self.page=='setup':self.draw_setup(w,h,cfg)
         elif self.page=='models':self.draw_models(w,h,cfg)
         elif self.page=='spaces':self.draw_spaces(w,h,cfg)

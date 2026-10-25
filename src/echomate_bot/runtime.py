@@ -677,15 +677,14 @@ class Runtime:
         if self.execution_mode.value=='DISCORD_DIRECT':
             # A distinct restricted mode, not an autonomous quality workaround.
             # Evaluate only assembled messages; quoted mentions remain prose.
-            from .social import direct_signal
+            from .execution_modes import structural_direct_reason
             verified_reply=False
             if event.reply_to:
                 key=self.conversations.message_flow.get((event.guild,event.channel,str(event.reply_to)))
                 prior=self.states.get(key)
                 verified_reply=bool(prior and any(t.is_bot and t.message_id==str(event.reply_to)
                     for t in prior.snapshot(channel_id=event.channel,thread_id=None)[1]))
-            if not (direct_signal(event,self.transport.bot_id,'none') or
-                    event.reply_to is not None and event.reply_author==self.transport.bot_id or verified_reply):
+            if not structural_direct_reason(event,self.transport.bot_id,verified_reply=verified_reply):
                 self.note('direct_mode_requires_structural_target');return
         if self.stopped or scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':return
         if not self.utterances.valid(event):self.note("utterance_invalidated");return
@@ -1032,7 +1031,19 @@ class Runtime:
             self.note('social_candidate_capacity');return None
         actual_others=set(event.member_mentions)-{event.author,self.transport.bot_id}
         group_call=bool(direct and actual_others)
-        if roles and roles.addressee not in (None,self.transport.bot_id) and not roles.ambiguous and not direct:
+        if self.execution_mode.value=='DISCORD_DIRECT':
+            from .execution_modes import structural_direct_reason
+            retained_reply=next((str(i) for i,(f,v) in enumerate(frames) if f.key in self.states and event.reply_to is not None
+                and any(t.is_bot and t.message_id==str(event.reply_to) for t in
+                    self.states[f.key].snapshot(channel_id=event.channel,thread_id=None)[1])), 'none')
+            reason=structural_direct_reason(event,self.transport.bot_id,verified_reply=retained_reply!='none')
+            if not reason:
+                self.note('direct_mode_requires_structural_target');return None
+            if roles and roles.addressee not in (None,self.transport.bot_id) and not roles.ambiguous and not direct:
+                decision=SocialDecision('human','shift','none','other',False)
+            else:
+                decision=SocialDecision('bot','continue' if retained_reply!='none' else 'new',retained_reply,'request',True,plan='structural_'+reason)
+        elif roles and roles.addressee not in (None,self.transport.bot_id) and not roles.ambiguous and not direct:
             decision=SocialDecision('human','shift','none','other',False)
         elif direct and (not group_call or hasattr(self.backend,'link_direct')):
             anchor=next((str(i) for i,(f,v) in enumerate(frames) if f.conversation_id==flow.conversation_id), 'none')
