@@ -1,6 +1,11 @@
 # 릴리즈 요구사항 추적표
 
 
+## 2026-10-25 Runtime 원문·실행 금지·native 예산
+
+최종 전체1,059개 OK313.159초·Portable163개 OK17.207초. 운영5hash/원본Lime 동일·final316 소비0. 시작7ba8d28. 로컬에만 적용되던 이름/조회 보호를 원본 Event 기반으로 Runtime에 연결했다. 명시적 금지를 무시하고 합성 DB에 알림을 생성하던 실제 실행 결함을 차단했으며 정상 예약·취소는 유지한다. 명확한 복합 이름 요청, 기능 안내의 잡담 가로채기, Discord 텍스트의2048 native 예산도 보완했다. 권한 문구/프레임 축소 후보는 기각했다. 능동 대화와 scripted 회귀 재생을 구분하며 일반 자율 의미 판단·자유 생성·요약 한계는 남아 RELEASE BLOCKED다. 장시간은 DEFERRED — USER REAL-WORLD TEST. [실제 원인·A/B·실패·재개](LIME-GROUNDED-RUNTIME-QA.md).
+
+
 ## 2026-10-25 품질 우선 후속 작업
 
 장시간 GPU30분/Runtime2시간/8시간/누수 목적 반복 재시작은 **DEFERRED — USER REAL-WORLD TEST**다. 이번 차수에서는 실행하지 않는다. 짧은 취소·종료·재로딩·데이터 변경 경합은 유지한다. 다른 Windows와 실제 Discord의 별도 검증/승인 조건은 유지하며 장시간 미실행을 PASS로 바꾸지 않는다.

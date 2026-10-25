@@ -6,6 +6,30 @@ import test_bot_integration as base
 
 
 class OperationRaces(unittest.IsolatedAsyncioTestCase):
+    async def test_explicit_prohibition_never_creates_reminder_or_deletes_memory(self):
+        self.store.set_consent(2,4,'memory',True)
+        self.store.add_memory(2,4,3,'나는 바둑을 좋아한다')
+        for mid,text in [(111,'<@999> 만약 내일 오전 9시에 물 마시라고 알림을 부탁한다면 어떨지 얘기한 거야. 지금 예약하지 마.'),
+                         (112,'<@999> 내 기억 삭제하지 마. 목록과 삭제는 다른 거야.')]:
+            await self.runtime.ingest(self.event(id=mid,content=text));await self.settle()
+            self.assertIn('수행하지 않았어',self.transport.sent[-1][1].text)
+        self.assertFalse(self.store.reminders(2,4,active=True))
+        self.assertTrue(self.store.memories(2,4,3))
+        self.assertFalse(self.backend.calls)
+
+    async def test_normal_reservation_survives_and_quote_keeps_existing_storage_policy(self):
+        await self.runtime.ingest(self.event(content='<@999> 20분 뒤에 물 마시라고 알려줘'))
+        await self.settle()
+        self.assertEqual(len(self.store.reminders(2,4,active=True)),1)
+        self.assertIn('예약',self.transport.sent[-1][1].text)
+        await self.runtime.ingest(self.event(id=113,content='<@999> 30분 뒤에 "예약하지 마"라고 알려줘'))
+        await self.settle()
+        # Existing safe_subject_text rejects double-quoted persisted content.
+        # Preserve that separate policy, rather than weakening it for this test.
+        self.assertNotIn('실행 금지',self.transport.sent[-1][1].text)
+        self.assertIn('저장하지 않아',self.transport.sent[-1][1].text)
+        self.assertEqual(len(self.store.reminders(2,4,active=True)),1)
+
     event=base.BotIntegration.event
     settle=base.BotIntegration.settle
     asyncTearDown=base.BotIntegration.asyncTearDown

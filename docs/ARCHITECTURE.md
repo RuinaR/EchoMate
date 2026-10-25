@@ -1,5 +1,7 @@
 # 아키텍처
 
+후속 Runtime 원문 보호·명시 금지·native 예산 구현/제한: [최신 QA](LIME-GROUNDED-RUNTIME-QA.md). 기존 결과는 해당 당시 범위로 보존한다.
+
 ## 이름·조회 상태의 읽기 전용 사실 경로
 
 명확한 자기 이름 요청은 관리자 이름/NameVersion을, 명확한 과거 기억 확인은 Runtime 조회 상태를 사용한다. 일반 출력의 코드 제한·기억 최신성 검사는 유지한다. 한정 입력 문법이며 모든 자연어 주장 검증이나 모델 인격 개선을 보장하지 않는다. 장시간 운용은 DEFERRED — USER REAL-WORLD TEST다. [후속 QA](LIME-QUALITY-ITERATION-QA.md).

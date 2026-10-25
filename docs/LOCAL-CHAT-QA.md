@@ -1,5 +1,7 @@
 # LOCAL_CHAT·Direct 모드 분리와 실제 대화 QA
 
+후속 Runtime 원문 보호·명시 금지·native 예산 구현/제한: [최신 QA](LIME-GROUNDED-RUNTIME-QA.md). 기존 결과는 해당 당시 범위로 보존한다.
+
 후속 변경: [이름·조회 상태·청자 QA](LIME-QUALITY-ITERATION-QA.md). 이전 실행 결과는 역사적 증거로 보존합니다. 장시간 검증은 이제 DEFERRED — USER REAL-WORLD TEST이며 이번 차수에 실행하지 않습니다.
 
 시작 `3c78c94`, main/origin 일치·clean에서 시작. **RELEASE BLOCKED**. LOCAL_CHAT 사용 가능과 Discord 자율 참여 자격을 분리한다. 이 문서는 이전 Windows QA의 청자 실패→모든 로컬 생성 차단 계약을 최신 요청에 따라 대체한다.

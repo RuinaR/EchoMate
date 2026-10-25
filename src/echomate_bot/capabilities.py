@@ -19,7 +19,15 @@ STATES={'ready':'지금 사용할 수 있어','off':'지금 꺼져 있어','cons
 def visual_question(text):
     return bool(VISUAL.search(text) and re.search(r'너|넌|지금|이게|누군지|볼|보여|알겠|누구|첨부|내용|그려|생성해|할\s*수|(?:이|그|저)\s*(?:사진|이미지)|(?:사진|이미지)\s*속',text))
 
-def question(text):return bool(SELF.search(text) or visual_question(text) or re.search(r'스티커|(?:음성|영상)\s*통화|화면\s*공유|활동\s*설정|대화\s*참여',text) or
+def question(text):
+    from .routing import prose
+    explicit=re.findall(r'[^.!?\n]*\?',prose(text))
+    if len(explicit)==1 and not re.search(r'가능|지원|할\s*수|볼\s*수|확인',explicit[0]):
+        # Acknowledging an old capability result does not change the subject
+        # of the one actual question. Keep anaphoric capability predicates
+        # (e.g. "사진을 보냈어. 볼 수 있어?") on the existing path.
+        text=explicit[0]
+    return bool(SELF.search(text) or visual_question(text) or re.search(r'스티커|(?:음성|영상)\s*통화|화면\s*공유|활동\s*설정|대화\s*참여',text) or
     re.search(r'(?:알림|예약|이모지|반응|요약|검색).*(?:가능|할\s*수|지원|켜져|꺼져|상태)',text))
 
 async def public_state(runtime,event,permissions,*,visual='not_provided'):

@@ -1,6 +1,11 @@
 # 작업 로그
 
 
+## 2026-10-25 Runtime 원문·실행 금지·native 예산
+
+최종 전체1,059개 OK313.159초·Portable163개 OK17.207초. 운영5hash/원본Lime 동일·final316 소비0. Portable 전체21,600파일 감사 PASS·공개20파일 민감정보 검출0. 시작7ba8d28. 로컬에만 적용되던 이름/조회 보호를 원본 Event 기반으로 Runtime에 연결했다. 명시적 금지를 무시하고 합성 DB에 알림을 생성하던 실제 실행 결함을 차단했으며 정상 예약·취소는 유지한다. 명확한 복합 이름 요청, 기능 안내의 잡담 가로채기, Discord 텍스트의2048 native 예산도 보완했다. 권한 문구/프레임 축소 후보는 기각했다. 능동 대화와 scripted 회귀 재생을 구분하며 일반 자율 의미 판단·자유 생성·요약 한계는 남아 RELEASE BLOCKED다. 장시간은 DEFERRED — USER REAL-WORLD TEST. [실제 원인·A/B·실패·재개](LIME-GROUNDED-RUNTIME-QA.md).
+
+
 ## 2026-10-25 청자 구문·이름 권한·조회 상태
 
 최종 전체1,052개 OK297.497초·Portable138개 OK12.895초, 운영5hash/원본Lime 동일·final316 소비0. 시작4a9033a. 실제 멘션 뒤 무공백 사람 호출의 청자 누락을 수정했다. 같은 Lime·새7이벤트 A/B에서 오개입1→0, 정상4reply 유지·Runtime오류0. 역할 별칭 classifier 후보는 전달/타인 오류가 남아 기각했다. 이름은 명확한 읽기 전용 요청에 검증된 EffectiveName/NameVersion을 적용하고, 과거 기억 확인은 실제 조회 상태로 답한다. 혼합 이름/평서 기억 유도/일반 기능 약속은 미해결이며 자율 참여·RELEASE BLOCKED 유지. 능동14턴(실제 모델10/Runtime 사실4)을 구분했고 원문은 비공개 폴더에 보존했다. 장시간 검증은 DEFERRED — USER REAL-WORLD TEST. [실제 변경·실패·검증·재개](LIME-QUALITY-ITERATION-QA.md).

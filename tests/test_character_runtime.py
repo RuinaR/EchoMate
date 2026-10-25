@@ -37,6 +37,22 @@ class Backend(base.FakeBackend):
 
 
 class Transitions(unittest.IsolatedAsyncioTestCase):
+    async def test_grounded_reply_uses_event_not_appended_context_metadata(self):
+        from types import MethodType
+        from echomate_bot.gguf_backend import GGUFLocalBackend
+        self.old.grounded_reply=MethodType(GGUFLocalBackend.grounded_reply,self.old)
+        calls=[];original=self.old.grounded_reply
+        def recorded(text,lookup):
+            calls.append((text,lookup));return original(text,lookup)
+        self.old.grounded_reply=recorded
+        for mid,text,expected in [(101,'<@999> 너 이름이 뭐야?','유나'),
+                                  (102,'<@999> 우리 전에 산책했던 거 기억나?','동의')]:
+            await self.runtime.ingest(replace(self.event(id=mid,content=text),member_mentions=(999,)))
+            await self.settle()
+            self.assertIn(expected,self.transport.sent[-1][1].text)
+            self.assertEqual(calls[-1][0],text)
+        self.assertFalse(self.old.calls,'Known facts must not fall through to free generation')
+
     event=base.BotIntegration.event
     settle=base.BotIntegration.settle
     async def asyncTearDown(self):

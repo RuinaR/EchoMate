@@ -7,6 +7,12 @@ from echomate_bot.gguf_backend import GGUFLocalBackend
 
 
 class LookupInquiry(unittest.TestCase):
+    def test_capability_acknowledgement_does_not_steal_new_ordinary_question(self):
+        from echomate_bot.capabilities import question
+        self.assertFalse(question('미동의와 기록 부재를 구분했네. 비 오는 날 퍼즐을 하는 건 어때?'))
+        self.assertFalse(question('동의 상태는 이해했어. 오늘 점심은 뭐가 좋을까?'))
+        self.assertTrue(question('사진을 보냈어. 볼 수 있어?'))
+        self.assertTrue(question('내 동의 상태가 뭐야?'))
     def test_state_is_not_promoted_to_event_absence_or_fake_lookup(self):
         text='우리 지난주 같이 바다에 간 기억이 있어?'
         for state,fragment in [('not_requested','조회하지'),('not_authorized','동의'),('failed','실패'),('empty','결과가 비어'),('invalidated','근거가 바뀌어')]:

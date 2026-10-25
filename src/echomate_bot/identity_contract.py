@@ -9,6 +9,26 @@ from .routing import prose
 
 def answer_identity(text, current, default):
     text=prose(text).strip()
+    text=re.sub(r'^<@!?\d+>\s*','',text)
+    if not text or len(text)>320:return None
+    single=_single_identity(text,current,default)
+    if single is not None:return single
+    clauses=[part.strip() for part in re.split(r'[?!。.!\n]+',text) if part.strip()]
+    if not clauses or len(clauses)>4:return None
+    answers=[]
+    for clause in clauses:
+        clause=re.sub(r'^(?:그리고|그런데|하지만|그러면)\s+','',clause)
+        answer=_single_identity(clause,current,default)
+        # Do not discard a different question, an unparsed proposal or a quote.
+        if answer is None:return None
+        if any(previous.startswith(answer) for previous in answers):continue
+        answers=[previous for previous in answers if not answer.startswith(previous)]
+        answers.append(answer)
+    return ' '.join(answers)
+
+
+def _single_identity(text, current, default):
+    text=prose(text).strip()
     # An actual Discord leading mention is routing metadata, not the question.
     text=re.sub(r'^<@!?\d+>\s*','',text)
     # Keep this a single identity request. Mixed/quoted stories stay ordinary

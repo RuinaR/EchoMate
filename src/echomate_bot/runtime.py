@@ -1402,6 +1402,11 @@ class Runtime:
                             from .companion import OperationPlan
                             command_answer=operation_failure(OperationPlan('memory','read'))
             cfg['_memory_lookup_state']=memory_lookup_state
+            if (command_answer is None and speech_eligible and (direct or continuing)
+                and getattr(self.backend,'character_id',None)
+                and callable(getattr(self.backend,'grounded_reply',None))):
+                command_answer=self.backend.grounded_reply(event.content,memory_lookup_state)
+                if command_answer is not None:self.note('runtime_grounded_event_reply')
             visual=[]
             from .output_policy import explicit_code_request,FALLBACK
             if command_answer is None and speech_eligible and (direct or continuing) and explicit_code_request(event.content):
@@ -1510,6 +1515,10 @@ class Runtime:
                 adult_for_turn=profile['_adult_active']
                 character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
                 character['_current_utterance']=event.content
+                if getattr(self.backend,'supports_runtime_budget',False):
+                    character['_native_runtime_context']=True
+                    reply=next((t for t in known_turns if t.message_id==str(event.reply_to)),None) if event.reply_to else None
+                    if reply:character['_current_reply']=dict(source=reply.message_id,speaker=reply.author_id,text=reply.content)
                 character['_guild_name']=self.active_name(cfg,event.guild)
                 if self.companion:
                     try:character['_familiarity']=await asyncio.to_thread(self.companion.familiarity,event.guild,event.author) if await self.automatic_subject_allowed(event.guild,event.author) else None

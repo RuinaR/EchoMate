@@ -46,6 +46,16 @@ def handle_request(store,event,cfg,bot_id,*,recent=None,receipts=None):
     text=re.sub(r'<@!?'+str(bot_id)+r'>','',event.content).strip()
     kind=request_kind(text)
     if not kind:return None
+    from .routing import prose
+    # A recognized feature keyword is not authorization to mutate state.
+    # Inspect only unquoted request prose; a reminder's quoted payload may
+    # legitimately contain these words. Ambiguous mixed prohibitions never
+    # become a partial write. This is not a general Korean intent classifier.
+    request_prose=prose(text)
+    denied=re.search(r'(?:예약|등록|저장|생성|실행|기억|삭제|취소|정정|변경)\s*하지\s*(?:마|말)',request_prose)
+    denied=denied or re.search(r'(?:알림|예약|저장|기억)(?:으로|로)\s*바꾸지\s*(?:마|말)',request_prose)
+    if denied:
+        return '실행 금지 표현이 포함되어 이번 변경은 수행하지 않았어. 변경이 필요하면 대상과 요청을 따로 명확히 알려 줘.'
     tz=cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul')
     if kind=='summary':
         ids=[int(x) for x in re.findall(r'(?<!\d)\d{5,20}(?!\d)',text)]
