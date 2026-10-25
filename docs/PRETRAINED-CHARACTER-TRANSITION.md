@@ -1,5 +1,11 @@
 # 사전 학습 캐릭터 제품 전환 — 단계별 구현 및 QA
 
+## 2026-10-25 최종 출시 범위 — Lime 단일 모델
+
+**최초 정식 출시의 기본·필수 캐릭터는 Lime(`naksyu/lime_Q6_K`), 기본 이름은 라임이다.** 사용자 지정 이름을 유지하고 생성 문맥·여러 턴 자기 인식·이름 변경 epoch를 검증한다. 전역 활성 캐릭터와 상주 GPU 모델은 항상 하나다. Yaho와 여성 IT 기획자는 삭제하지 않는 **미지원·추후 추가 후보**이며, 라이선스/가중치 문제가 최초 출시를 차단하지 않는다. 실제 지원/READY로 표시하지 않는다. 향후 추가는 기존 카탈로그·manager·취소/drain/해제/재로딩을 재사용한다.
+
+현재 **RELEASE BLOCKED**의 이유는 Lime의 청자 판단/자유 생성 사실성 실패, Windows 설치·첫 활성화 UI·장기 운용·Portable 실환경·마지막 실제 Discord 검증 등이다. 두 미래 후보의 부재를 이유로 유지하는 것이 아니다. 운영 자료/기존 Gemma 선택/연구 기록을 자동 변경하지 않는다. [현재 출시 계약·게이트·순서](LIME-RELEASE-PLAN.md)가 아래 과거 다중 모델 출시 계획보다 우선한다.
+
 ## 2026-10-25 후속 구현 — 현재 상태
 
 후속 [Runtime 통합 QA](CHARACTER-RUNTIME-INTEGRATION-QA.md)가 아래 초기 구현의 미연결 항목 일부를 대체한다. concrete Lime GGUF/InstanceLease/fair queue/manager/Runtime epoch, 캐릭터별 임시 SQLite·legacy snapshot·원자 삭제, 새 모드의 로컬 `/캐릭터` 계약을 연결했다. 실제 Lime 취소/idle/해제/순차 reload·짧은 이름5턴은 확인했으나 semantic 청자 gate가 FAIL이다. 새 Windows selector/installer/첫 controller handoff와 운영 migration·장시간·다른 Windows는 여전히 미완료다. 세 모델 READY/정식 RELEASE를 선언하지 않는다.

@@ -1,5 +1,13 @@
 # 아키텍처
 
+## 2026-10-25 Lime 최초 출시와 확장 경계
+
+기본 CharacterId=`lime`, 기본 이름=`라임`, 최초 출시 필수 ID 집합은 Lime 하나다. `character_models.default_character()`와 `product_characters()`가 기본 설치/선택 정책을 제공한다. 전체 `discover()`는 Yaho/기획자를 포함한 확장/진단 카탈로그를 보존한다. **출시 범위·설치 여부·기술 로딩·품질 READY는 별개 상태**이며 출시 선택만으로 상태를 승격하지 않는다. 미지원 미래 모델은 기본 선택 목록에서 제외한다.
+
+CharacterModelManager·InstanceLease·fair queue·Runtime epoch/name version·캐릭터별 기억/관계·공통 동의/알림을 유지한다. 새 모델 추가 시 종료 확인 전에 중복 로딩하지 않는다. Lime 이름 변경도 진행 작업 취소/drain과 stale 송신 검사를 거친다. 기존 Settings/운영 DB의 자동 이관은 하지 않는다. 첫 UI/controller handoff는 아직 구현할 과제다.
+
+기능 요청은 Runtime 권한→실행→성공/실패/취소 영수증→응답→송신 직전 최신성으로 보호한다. 조회 미실행/실패/성공 빈 목록/성공 항목을 구분하고 모델 자유 발언을 저장·예약 성공 근거로 쓰지 않는다. Lime의 의미 청자 gate는 유지하고 우회하지 않는다. [출시 요구/현 상태](LIME-RELEASE-PLAN.md).
+
 ## 2026-10-25 opt-in 캐릭터 실행 경로
 
 `GGUFLocalBackend` → 기존 GPUScheduler/InstanceLease → 자체 인증 loopback `GGUFEngine` → 검증된 Lime/b11721/2048이다. Runtime은 기존 CharacterModelManager에 상주 backend를 adopt하고 전환/이름 epoch로 intake·조립·자동 추출·생성·송신을 무효화/drain한다. native slot idle 또는 자체 프로세스 종료 확인 전 새 작업/GPU 모델을 허용하지 않는다. 재검증 실패는 RecoveryRequired이며 이전 모델 자동 복구를 가정하지 않는다.

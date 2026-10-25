@@ -1,5 +1,27 @@
 # 릴리즈 요구사항 추적표
 
+## 2026-10-25 현재 RELEASE 필수 집합 — Lime 한 모델
+
+이 표가 아래 과거 다중 모델 게이트보다 우선한다. **Yaho/IT 기획자는 최초 출시 필수 조건에서 제외**한다. 후보 자체의 라이선스/가중치 BLOCKED는 보존하되 이 RELEASE의 차단으로 합산하지 않는다. 필수 실패/미검증이 남으므로 RELEASE BLOCKED다. [제품 범위·증거·실행 계획](LIME-RELEASE-PLAN.md).
+
+| 최초 출시 필수 조건 | 상태 | 실제 근거/남은 조건 |
+|---|---|---|
+| Lime 단일 출시·라임 기본 이름·확장 보존 | PASS | catalog 제품 범위 API·기존 사용자 이름 보존 단위 검사. 기존 운영 선택은 자동 변경 안 함. |
+| Lime 고정 출처/파일·라이선스·재배포 고지 | NOT VERIFIED | 파일 SHA/제공 Apache-2.0 확인 기록 유지. 실제 installer의 조건 안내·고지/배포 감사 필요. 모델 번들 미포함. |
+| 단일 GPU 로딩/취소/해제/재로딩 | PASS | 같은 호스트·고정2048의 실제 기술 검사. 첫 UI 연결/장기 운용은 별도. |
+| 사용자 이름의 여러 턴 자기 인식 | NOT VERIFIED | 이전 짧은 5턴·4개 이름 요청 통과. UI 저장→실행/재시작/확장 다중 턴 확인 필요. |
+| 청자·후속·다자 대화 판단 | FAIL | Lime strict semantic startup gate 실패 유지. 예문 특례/일괄 침묵/우회로 해결 선언 금지. |
+| 허위 기억·알림 완료/기능 상태 | FAIL | 명시 명령은 Runtime 영수증/실패 구분으로 보호. 자유 생성 허위 주장은 미해결. |
+| 기억/동의/친밀도/예약·원본 reply·취소 경계 | PASS | 합성 namespace/영수증·동의·수정/삭제·공정 큐·조각 회귀. 실제 운영 migration은 미실행. |
+| Windows Lime 설치·선택·이름·로딩·오류 복구 | NOT VERIFIED | 첫 activation controller handoff/다운로드·취소 재개/학습 편집 주요 흐름 제외 필요. |
+| `/캐릭터`·`/동의`와 기존 명령 호환 | NOT VERIFIED | 로컬 모드별 mock 계약 PASS, 실제 등록 집합/사용 접근은 미검증. |
+| 병렬 대화/새 구조 GPU 장기 안정성 | NOT VERIFIED | 기존 합성 공정큐/분할/epoch는 통과, 30분GPU·2/8시간 새 구조 검증 필요. |
+| Portable 첫 설치·업데이트/다른 Windows | NOT VERIFIED | 기존 번들64·전체21,585파일 감사 범위 보존. 실제 첫 사용자 GPU/다른 Windows 미검증. |
+| 실제 Discord 최종 통합 | BLOCKED | 마지막 별도 승인: 인증/REST/Gateway·명령 변경·송신 구분. 현재 미실행. |
+| Yaho / IT 기획자 출시 제공 | NOT APPLICABLE | 추후 미지원 후보. 삭제/READY 승격 없음; 미확보 자체는 Lime 출시 차단 아님. |
+
+이하 기록은 각 날짜 당시 범위의 이력이다. 과거 '세 모델 필수' 행을 현재 gate로 적용하지 않는다.
+
 ## 2026-10-25 후속 Runtime 통합 게이트 — 현재 우선
 
 **RELEASE BLOCKED**. 구현 `ff3de52`, 전체988/번들64 통과·운영/장부5hash·원본12shard 동일·Portable21,585파일 전체 감사 PASS. 아래 제품 품질/미검증 차단은 해제하지 않는다. [최신 코드·실제 GPU·회귀·실패 기록](CHARACTER-RUNTIME-INTEGRATION-QA.md). 아래 이전 날짜의 PASS/미연결 목록은 당시 범위로 보존한다.

@@ -1,5 +1,13 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-25 최종 출시 범위 — Lime 단일 모델
+
+정책 변경 기준 `2464243`, 표적57개/번들66개 통과·운영/장부5hash 보존. 새 GPU/전체 회귀/실제 UI 검증은 미실행이며 기존988개 기록은 과거 범위다.
+
+**최초 정식 출시의 기본·필수 캐릭터는 Lime(`naksyu/lime_Q6_K`), 기본 이름은 라임이다.** 사용자 지정 이름을 유지하고 생성 문맥·여러 턴 자기 인식·이름 변경 epoch를 검증한다. 전역 활성 캐릭터와 상주 GPU 모델은 항상 하나다. Yaho와 여성 IT 기획자는 삭제하지 않는 **미지원·추후 추가 후보**이며, 라이선스/가중치 문제가 최초 출시를 차단하지 않는다. 실제 지원/READY로 표시하지 않는다. 향후 추가는 기존 카탈로그·manager·취소/drain/해제/재로딩을 재사용한다.
+
+현재 **RELEASE BLOCKED**의 이유는 Lime의 청자 판단/자유 생성 사실성 실패, Windows 설치·첫 활성화 UI·장기 운용·Portable 실환경·마지막 실제 Discord 검증 등이다. 두 미래 후보의 부재를 이유로 유지하는 것이 아니다. 운영 자료/기존 Gemma 선택/연구 기록을 자동 변경하지 않는다. [현재 출시 계약·게이트·순서](LIME-RELEASE-PLAN.md)가 아래 과거 다중 모델 출시 계획보다 우선한다.
+
 ## 2026-10-25 캐릭터 Runtime·GGUF·기억 경계 통합 — RELEASE BLOCKED
 
 시작 `ba84c52`, 구현 `ff3de52`. Portable 전체21,585파일 hash 감사 PASS(최종 문서 동기화 후 재검사). 최종 전체988개 OK279.346초, 번들64개 OK5.799초; 운영/장부5hash·원본12shard 동일. 실제 Lime backend를 기존 InstanceLease/fair queue/CharacterModelManager에 연결하고 Runtime epoch·이름 변경·drain/회수·CharacterId별 SQLite 기억/관계와 공통 동의/알림을 합성 검증했다. 새 모드 로컬 명령은 `/동의`·읽기 전용 `/캐릭터`, legacy 명령은 그대로다. 운영 DB/설정/모델 자동 전환과 실제 Discord는 실행하지 않았다.

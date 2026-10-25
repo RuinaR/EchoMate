@@ -1,5 +1,11 @@
 # 로컬 모델 레지스트리
 
+## 2026-10-25 최종 출시 범위 — Lime 단일 모델
+
+**최초 정식 출시의 기본·필수 캐릭터는 Lime(`naksyu/lime_Q6_K`), 기본 이름은 라임이다.** 사용자 지정 이름을 유지하고 생성 문맥·여러 턴 자기 인식·이름 변경 epoch를 검증한다. 전역 활성 캐릭터와 상주 GPU 모델은 항상 하나다. Yaho와 여성 IT 기획자는 삭제하지 않는 **미지원·추후 추가 후보**이며, 라이선스/가중치 문제가 최초 출시를 차단하지 않는다. 실제 지원/READY로 표시하지 않는다. 향후 추가는 기존 카탈로그·manager·취소/drain/해제/재로딩을 재사용한다.
+
+현재 **RELEASE BLOCKED**의 이유는 Lime의 청자 판단/자유 생성 사실성 실패, Windows 설치·첫 활성화 UI·장기 운용·Portable 실환경·마지막 실제 Discord 검증 등이다. 두 미래 후보의 부재를 이유로 유지하는 것이 아니다. 운영 자료/기존 Gemma 선택/연구 기록을 자동 변경하지 않는다. [현재 출시 계약·게이트·순서](LIME-RELEASE-PLAN.md)가 아래 과거 다중 모델 출시 계획보다 우선한다.
+
 ## 2026-10-25 사전 학습 캐릭터 카탈로그 — 제품 전환 중
 
 현재 제품 목표는 Yaho/Lime/여성 IT 기획자의 단일 활성 선택이다. 기존 Gemma 레지스트리/운영 선택은 자동 교체하지 않으며 레거시 호환·연구용으로 보존한다. `character_models.py`의 별도 schema1 카탈로그는 모델 ID·이름·고정 revision/hash·라이선스와 실행 상태를 구분한다. Yaho는 연구 목적 사용 제한으로 제품 검토 필요, 기획자는 adapter weights 부재로 BLOCKED다. Lime Q6_K는 전체 hash와 실제 GPU 이름3턴을 확인했으나 조회 실패/허위 알림 완료 오류로 Ready가 아니다. 실제 upstream tokenizer revision·새 backend/개인 기억 namespace/UI 통합은 미완료다. [모델별 출처·실측·정확한 지원 범위](PRETRAINED-CHARACTER-TRANSITION.md). 이하 학습 성공 기록은 새 제품 모델의 PASS가 아니다.

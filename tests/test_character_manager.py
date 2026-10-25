@@ -8,11 +8,35 @@ from unittest.mock import patch
 
 from echomate_bot.character_models import (
     CHARACTERS, CharacterNames, character, valid_name, identity_message, with_identity,
+    default_character, product_characters, RELEASE_CHARACTER_IDS,
 )
 from echomate_bot.character_manager import CharacterModelManager, State
 
 
 class Catalog(unittest.TestCase):
+    def test_lime_only_launch_preserves_future_catalog_and_blockers(self):
+        self.assertEqual(RELEASE_CHARACTER_IDS, ('lime',))
+        self.assertEqual(default_character().repository, 'naksyu/lime_Q6_K')
+        self.assertEqual(default_character().default_name, '라임')
+        self.assertEqual(product_characters(), (character('lime'),))
+        self.assertEqual(product_characters(include_future=True), CHARACTERS)
+        self.assertTrue(character('yaho').blocker)
+        self.assertTrue(character('it-planner').blocker)
+        # Product selection is not a fabricated runtime/quality status.
+        self.assertEqual(default_character().resource_profile, 'NOT VERIFIED')
+
+    def test_product_default_never_overwrites_persisted_custom_name(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / 'names.json'
+            names = CharacterNames(path)
+            self.assertEqual(names.effective(default_character().character_id), '라임')
+            self.assertFalse(path.exists())
+            names.save('lime', '유나')
+            before = path.read_bytes()
+            product_characters(); default_character()
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(CharacterNames(path).effective('lime'), '유나')
+
     def test_pinned_distinct_entries_and_missing_adapter(self):
         self.assertEqual(len({x.character_id for x in CHARACTERS}), 3)
         for entry in CHARACTERS:

@@ -15,6 +15,11 @@ from .settings import atomic_private_json
 
 CATALOG_VERSION = 1
 BACKEND_API_VERSION = 1
+PRODUCT_SCOPE_VERSION = 1
+DEFAULT_CHARACTER_ID = 'lime'
+# Release scope is distinct from technical readiness/license validation. Adding
+# catalog metadata must never silently add a launch requirement or UI choice.
+RELEASE_CHARACTER_IDS = ('lime',)
 
 
 @dataclass(frozen=True)
@@ -91,6 +96,20 @@ def character(character_id: str) -> CharacterModel:
         if entry.character_id == character_id:
             return entry
     raise ValueError('Unknown character ID')
+
+
+def default_character() -> CharacterModel:
+    """Product default only; never changes existing settings or loads a model."""
+    return character(DEFAULT_CHARACTER_ID)
+
+
+def product_characters(*, include_future: bool = False) -> tuple[CharacterModel, ...]:
+    """Default installer/selector entries; membership does not imply READY.
+
+    Full discovery remains available for diagnostics and future catalog work.
+    Future entries keep their actual blockers and cannot be offered as usable.
+    """
+    return discover() if include_future else tuple(character(cid) for cid in RELEASE_CHARACTER_IDS)
 
 
 def valid_name(value: str) -> str:
