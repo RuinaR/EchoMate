@@ -1,5 +1,9 @@
 # 아키텍처
 
+## Router·의도·생성·문맥 계약
+
+기존 Conversation Router의 SocialDecision/validate_social, Response Generator의 GGUF.text/선택적 response_pipeline은 재사용한다. 새로운 intent_router.IntentPlan은 읽기 전용 실행 계획이며 청자·reply·권한을 변경하지 않는다. Context/Summary는 native 입력 예산과 출처/동의 유효성을 관리한다. 실제 DB 변경은 기존 companion+Receipt만 확정하며 송신 최신성 검사는 그대로다. 네 책임의 실제 호출 순서와 남은 간섭은 [계층 QA](RUNTIME-LAYERS-QA.md)를 따른다.
+
 후속 Runtime 원문 보호·명시 금지·native 예산 구현/제한: [최신 QA](LIME-GROUNDED-RUNTIME-QA.md). 기존 결과는 해당 당시 범위로 보존한다.
 
 ## 이름·조회 상태의 읽기 전용 사실 경로

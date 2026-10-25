@@ -1006,6 +1006,8 @@ class Runtime:
         roles=event.member_roles
         packet,frames=self.social.packet(event,self.conversations,self.states,self.transport.bot_id)
         cfg=self.settings.get()
+        packet['current']['bot_identity']=dict(id=str(self.transport.bot_id),effective_name=self.active_name(cfg,event.guild),
+            name_version=getattr(self.backend,'name_version',None),character_epoch=event.character_epoch)
         packet['reaction_available']=bool(cfg['reactions'] and scope(cfg,event.guild,event.channel,event.parent,action='reaction')!='silent' and (await self.transport.permissions(event)).get('react',False))
         packet['explicit_call']=direct;packet['bot_reply']=bot_reply
         if packet['candidates_truncated'] and not direct:
@@ -1323,6 +1325,13 @@ class Runtime:
             if (since<reply_cooldown and not(direct or continuing)) or not await self.fresh(event,state,version,revision):return
             flow=self.conversations.flows.get(self.key(event))
             if flow and (speech_eligible or reaction_only):flow.engaged=True;self.activity_changed()
+            from .companion import request_kind
+            from .intent_router import plan_intent,IntentMode,clarification,needs_memory_read,readonly_fragments,history_review
+            intent=plan_intent(event.content,request_kind(event.content))
+            trace=active_trace.get()
+            if trace:
+                if getattr(trace,'decision',None) is None:trace.decision={}
+                trace.decision['intent']=dict(version=intent.version,mode=intent.mode.value,kind=intent.kind,reason=intent.reason)
             command_answer=None;summary_guard=None;summary_id=None;memory_guard=None;generation_guard=None
             operation_receipts=[];subject_guard=None;subject_snapshot=None;dependency_stale=False;memory_selection=None;selection_guard=None
             memory_lookup_state='not_requested'
@@ -1340,12 +1349,18 @@ class Runtime:
             capability_view=await public_state(self,event,await self.transport.permissions(event),visual=observation)
             capability_answer=describe(event.content,capability_view,event,self.transport.bot_id)
             if event.assets and cfg['vision'] and VISUAL.search(event.content):capability_answer=None
-            if capability_answer is not None:command_answer=capability_answer;self.note('capability_readonly_answer')
+            if intent.mode in (IntentMode.PROHIBITED,IntentMode.CLARIFY):command_answer=clarification(intent)
+            elif capability_answer is not None and intent.mode!=IntentMode.REQUEST:command_answer=capability_answer;self.note('capability_readonly_answer')
+            else:capability_answer=None
             from .summarization import history_candidate,Summarizer
-            history=bool(command_answer is None and self.companion and speech_eligible and (direct or continuing) and history_candidate(event.content) and hasattr(self.backend,'is_history_request'))
+            history=bool(command_answer is None and self.companion and speech_eligible and (direct or continuing) and intent.mode not in (IntentMode.MENTION,IntentMode.PROHIBITED,IntentMode.CLARIFY) and history_review(event.content) and history_candidate(event.content) and hasattr(self.backend,'is_history_request'))
             if history:
                 self.stage(event,'summary',started)
-                if await self.backend.is_history_request(event.content):
+                try:review=await self.backend.is_history_request(event.content)
+                except (ValueError,RuntimeError):
+                    review=False;self.note('summary_intent_unavailable')
+                    command_answer='요약 요청을 안전하게 확인하지 못했어. 조회 결과가 비었다는 뜻은 아니야. 요약할 대화 범위를 좁혀서 다시 부탁해 줘.'
+                if review:
                     _,recent=state.snapshot(channel_id=event.channel,thread_id=None)
                     try:
                         engine=Summarizer(self.companion,self.backend)
@@ -1357,7 +1372,7 @@ class Runtime:
             if command_answer is None and self.companion and speech_eligible and (direct or continuing):
                 from .companion import handle_request,request_kind,request_plan,operation_failure
                 self.stage(event,'private_request' if request_kind(event.content) else 'memory_lookup',started)
-                if request_kind(event.content):
+                if intent.mode==IntentMode.REQUEST:
                     try:
                         _,recent=state.snapshot(channel_id=event.channel,thread_id=None)
                         command_answer=await asyncio.to_thread(handle_request,self.companion,event,cfg,self.transport.bot_id,recent=recent,receipts=operation_receipts)
@@ -1366,7 +1381,7 @@ class Runtime:
                     except (OSError,RuntimeError,ValueError,sqlite3.Error):
                         operation_receipts.clear()
                         command_answer=operation_failure(request_plan(event.content))
-                else:
+                if command_answer is None or needs_memory_read(event.content):
                     try:
                         pretrained=bool(getattr(self.backend,'character_id',None))
                         permitted=await self.automatic_subject_allowed(event.guild,event.author,'memory')
@@ -1400,7 +1415,13 @@ class Runtime:
                         # of asking free generation to guess unavailable facts.
                         if getattr(self.backend,'character_id',None):
                             from .companion import OperationPlan
-                            command_answer=operation_failure(OperationPlan('memory','read'))
+                            failed_read=operation_failure(OperationPlan('memory','read'))
+                            command_answer=(command_answer+'\n'+failed_read) if command_answer else failed_read
+            if command_answer is not None and intent.mode==IntentMode.REQUEST:
+                # Execution and read-only name/memory questions are independent.
+                # Preserve the committed receipt response; never re-author it.
+                parts=readonly_fragments(self.backend,event.content,memory_lookup_state)
+                command_answer='\n'.join((*parts,command_answer)) if parts else command_answer
             cfg['_memory_lookup_state']=memory_lookup_state
             if (command_answer is None and speech_eligible and (direct or continuing)
                 and getattr(self.backend,'character_id',None)
@@ -1515,6 +1536,9 @@ class Runtime:
                 adult_for_turn=profile['_adult_active']
                 character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
                 character['_current_utterance']=event.content
+                character['_operation_evidence']=dict(status='SUCCESS' if operation_receipts else 'NOT_EXECUTED',
+                    receipt_kinds=[r.kind for r in operation_receipts],
+                    meaning='Current request only; not a query of all existing memories or reminders')
                 if getattr(self.backend,'supports_runtime_budget',False):
                     character['_native_runtime_context']=True
                     reply=next((t for t in known_turns if t.message_id==str(event.reply_to)),None) if event.reply_to else None

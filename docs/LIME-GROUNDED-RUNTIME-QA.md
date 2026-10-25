@@ -1,5 +1,7 @@
 # Lime Runtime 원문·실행 금지·토큰 예산 QA
 
+후속 의도/요약 경계·실제36이벤트와 미해결 청자: [현재 QA](RUNTIME-LAYERS-QA.md). 아래 결과는 당시 소스 범위로 보존한다.
+
 시작 main/origin `7ba8d28`, clean. Lime 단일 모델, LOCAL_CHAT 유지, 실제 Discord 미실행. 장시간 GPU/Runtime/누수 반복 재시작은 계속 **DEFERRED — USER REAL-WORLD TEST**다.
 
 ## 재현과 채택한 수정

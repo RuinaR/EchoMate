@@ -12,6 +12,7 @@ def request_kind(text):
     if explicit_code_request(text):return None
     if re.search(r'대화.*요약|요약.*대화',text):return 'summary'
     timed=bool(re.search(r'(?:\d+|한|두|세|네|반)\s*(?:분|시간|일)\s*(?:후|뒤|있다가|더|전)|\d+\s*시(?!간)',text))
+    if re.search(r'(?:오늘|내일|모레|나중에|다음에)\s*(?:알려|불러|깨워)\s*(?:줘|주세요|줄래)',text):return 'reminder'
     if re.search(r'알림|불러\s*줘|깨워\s*줘',text) or timed and re.search(r'알려\s*줘|라고\s*해\s*줘|늦춰|미뤄|취소',text):return 'reminder'
     if re.search(r'(?:내|나의).*(?:기억|정보).*(?:삭제|지워|잊어|목록|보여)|기억해\s*줘',text):return 'memory'
     return None
@@ -46,16 +47,11 @@ def handle_request(store,event,cfg,bot_id,*,recent=None,receipts=None):
     text=re.sub(r'<@!?'+str(bot_id)+r'>','',event.content).strip()
     kind=request_kind(text)
     if not kind:return None
-    from .routing import prose
-    # A recognized feature keyword is not authorization to mutate state.
-    # Inspect only unquoted request prose; a reminder's quoted payload may
-    # legitimately contain these words. Ambiguous mixed prohibitions never
-    # become a partial write. This is not a general Korean intent classifier.
-    request_prose=prose(text)
-    denied=re.search(r'(?:예약|등록|저장|생성|실행|기억|삭제|취소|정정|변경)\s*하지\s*(?:마|말)',request_prose)
-    denied=denied or re.search(r'(?:알림|예약|저장|기억)(?:으로|로)\s*바꾸지\s*(?:마|말)',request_prose)
-    if denied:
-        return '실행 금지 표현이 포함되어 이번 변경은 수행하지 않았어. 변경이 필요하면 대상과 요청을 따로 명확히 알려 줘.'
+    from .intent_router import plan_intent,IntentMode,clarification,execution_text
+    intent=plan_intent(text,kind)
+    if intent.mode==IntentMode.MENTION:return None
+    if intent.mode in (IntentMode.PROHIBITED,IntentMode.CLARIFY):return clarification(intent)
+    text=execution_text(text,kind)
     tz=cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul')
     if kind=='summary':
         ids=[int(x) for x in re.findall(r'(?<!\d)\d{5,20}(?!\d)',text)]

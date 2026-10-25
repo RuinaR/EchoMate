@@ -1,5 +1,7 @@
 # Lime 이름·조회 상태·청자 후속 QA
 
+후속 의도/요약 경계·실제36이벤트와 미해결 청자: [현재 QA](RUNTIME-LAYERS-QA.md). 아래 결과는 당시 소스 범위로 보존한다.
+
 후속 Runtime 원문 보호·명시 금지·native 예산 구현/제한: [최신 QA](LIME-GROUNDED-RUNTIME-QA.md). 기존 결과는 해당 당시 범위로 보존한다.
 
 시작 main/origin `4a9033a`, clean. Lime 단일 출시·RELEASE BLOCKED 유지. 장시간 검증은 DEFERRED — USER REAL-WORLD TEST이며 이번에는 실행하지 않았다. 짧은 GPU 대화/SDK 진단과 CPU 회귀를 구분한다.

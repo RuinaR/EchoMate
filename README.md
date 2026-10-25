@@ -1,5 +1,7 @@
 # EchoMate
 
+최신 개발: [Runtime 의도·요약 경계와 실제 Lime 대화 QA](docs/RUNTIME-LAYERS-QA.md). 일반 의미 청자·자유 생성 사실성은 아직 출시 차단 사항이며 RELEASE BLOCKED입니다.
+
 최근 Runtime 보호·실행 금지·문맥 예산 검증: [QA](docs/LIME-GROUNDED-RUNTIME-QA.md). 일반 의미 판단은 아직 RELEASE BLOCKED입니다.
 
 청자 무공백 멘션·이름 권한·조회 상태의 후속 구현과 실제 GPU 검증: [최신 QA](docs/LIME-QUALITY-ITERATION-QA.md). 장시간 운용은 사용자 실사용으로 연기했으며 RELEASE BLOCKED는 유지합니다.

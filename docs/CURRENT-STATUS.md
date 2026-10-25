@@ -1,5 +1,10 @@
 # 현재 상태
 
+## 2026-10-25 Runtime 책임·의도·요약 경계
+
+최종 전체1,068개 OK280.928초·Portable172개 OK15.685초·전체21,603파일 감사 PASS·운영5hash/원본Lime 동일·final316 소비0. 시작c2e6ced. 기존 social/SocialDecision·권한·queue·Receipt를 유지하고 intent_router와 native context 선택을 분리했다. 현재 감정→과거 요약의 가로채기, 전달된 부탁의 실제 예약, 이름/기억 질문과 예약 응답의 선점을 수정했다. 세 능동 세션 각12이벤트에서 사람 대상 오개입은 양쪽0/6, 봇 복귀 누락은 양쪽3건으로 청자 의미 품질은 미달이다. 이름 관리자 경계/정상 예약·취소를 확인했고 자유 생성의 무근거 약속은 남았다. 요약은 검증 실패와 자료 부재를 구분하며 안전한 원문 선택으로 복귀한다. LOCAL_CHAT 명령 어댑터 회귀1건을 발견·수정했다. RELEASE BLOCKED·장시간 DEFERRED — USER REAL-WORLD TEST 유지. [실제 호출 흐름·A/B 한계·원문·재개](RUNTIME-LAYERS-QA.md).
+
+
 
 ## 2026-10-25 Runtime 원문·실행 금지·native 예산
 

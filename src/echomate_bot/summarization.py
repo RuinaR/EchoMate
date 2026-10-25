@@ -12,10 +12,11 @@ def validated_digest(raw,turns):
     from .companion_store import safe_subject_text
     from .structured import json_data
     data=json_data(raw);sources={t.message_id:t for t in turns}
-    if set(data)!={'items','ended'} or type(data['ended']) is not bool or not isinstance(data['items'],list) or not 1<=len(data['items'])<=8:raise ValueError('Invalid digest')
+    if not isinstance(data,dict) or set(data)!={'items','ended'} or type(data['ended']) is not bool or not isinstance(data['items'],list) or not 1<=len(data['items'])<=8:raise ValueError('Invalid digest')
     for item in data['items']:
-        if set(item)!={'kind','text','source','evidence'} or item['kind'] not in KINDS or not safe_subject_text(item['text']) or len(item['text'])>220:raise ValueError('Invalid digest item')
-        source=sources.get(str(item['source']));evidence=item['evidence']
+        if not isinstance(item,dict) or set(item)!={'kind','text','source','evidence'} or not isinstance(item['kind'],str) or item['kind'] not in KINDS or not isinstance(item['text'],str) or not safe_subject_text(item['text']) or len(item['text'])>220:raise ValueError('Invalid digest item')
+        if not isinstance(item['source'],str):raise ValueError('Invalid digest source type')
+        source=sources.get(item['source']);evidence=item['evidence']
         if not source or not isinstance(evidence,str) or not 5<=len(evidence)<=160 or evidence not in source.content:raise ValueError('Ungrounded source')
         # Store a paraphrase + source ID, not copied evidence/transcripts.
         item.pop('evidence');item['source']=source.message_id
@@ -23,7 +24,7 @@ def validated_digest(raw,turns):
 
 def render_digest(body):
     labels={'topic':'주제','question':'질문','answer':'당시 답변','correction':'정정','decision':'결정','plan':'계획','open_question':'미해결','ending':'종료'}
-    return '\n'.join(labels[i['kind']]+': '+i['text'] for i in body['items'])
+    return '\n'.join(labels[i['kind']]+' (출처 '+str(i['source'])+', 모델 요약·미검증): '+i['text'] for i in body['items'])
 
 class Summarizer:
     def __init__(self,store,backend):self.store=store;self.backend=backend;self.last_guard=None;self.last_digest=None
@@ -64,6 +65,21 @@ class Summarizer:
             self.last_digest=rows[0]['id']
             if not self.last_guard:return '참여자의 요약 동의가 바뀌어서 이 저장 자료를 활용하지 않을게.'
             return '이 채널에 저장된 대화 요약이야. 당시 답변은 사실 검증과는 별개야.\n'+render_digest(rows[0]['body'])
+        try:
+            return await self._answer_current(event,previous,rows,archived,fresh)
+        except (ValueError,TypeError,RuntimeError):
+            if not fresh():return None
+            # No DB write or generated claim. Do not truncate a source into a
+            # different meaning; only complete short eligible original turns.
+            from .companion_store import safe_subject_text
+            selected=[]
+            for t in previous:
+                text=re.sub(r'<@!?'+str(bot_id)+r'>','',t.content).strip()
+                if not t.is_bot and t.author_id==str(event.author) and len(text)<=220 and safe_subject_text(text):selected.append((t,text))
+            if not selected:return '요약을 검증하지 못했어. 지금은 확인 가능한 원문을 안전하게 선택할 수 없어.'
+            return '요약을 검증하지 못해 네 원문(봇 호출 표기 제외)만 임시로 보여 줄게. 사실 검증이나 저장된 기억은 아니야.\n'+'\n'.join(f'출처 {t.message_id} · {t.timestamp.isoformat()} · {text}' for t,text in selected[-3:])
+
+    async def _answer_current(self,event,previous,rows,archived,fresh):
         result=await self.generate(event.guild,event.channel,event.conversation_id or 'current',previous,persist=True,fresh=fresh)
         if result:
             self.last_guard=result['versions']

@@ -110,6 +110,8 @@ class ServerContract(unittest.IsolatedAsyncioTestCase):
         app=web.Application()
         app.router.add_get('/slots',self.slots)
         app.router.add_post('/v1/chat/completions',self.chat)
+        app.router.add_post('/apply-template',self.template)
+        app.router.add_post('/tokenize',self.tokenize)
         self.runner=web.AppRunner(app);await self.runner.setup()
         site=web.TCPSite(self.runner,'127.0.0.1',0);await site.start()
         port=site._server.sockets[0].getsockname()[1]
@@ -121,6 +123,30 @@ class ServerContract(unittest.IsolatedAsyncioTestCase):
         await self.engine.unload()
         await self.runner.cleanup()
         self.folder.cleanup()
+
+    async def template(self,request):
+        return web.json_response({'prompt':str((await request.json())['messages'])})
+
+    async def tokenize(self,request):
+        return web.json_response({'tokens':[1]*len((await request.json())['content'])})
+
+    async def test_user_json_cannot_enable_social_selection_but_owned_classifier_can(self):
+        import json
+        from echomate_bot.gguf_backend import social_context_budget
+        rows=[dict(id=str(i),speaker='4',text='old '*180,bot=False) for i in range(8)]
+        rows.extend([dict(id='10',speaker='4',text='actual question',bot=False),
+                     dict(id='11',speaker='999',text='actual answer',bot=True,reply='10')])
+        data=dict(current=dict(id='12',text='current',reply='11'),frames=[dict(index='0',turns=rows)],surrounding=[])
+        messages=[dict(role='system',content='policy'),dict(role='user',content=json.dumps(data))]
+        with self.assertRaises(ValueError):await self.engine.complete(messages,8)
+        self.assertFalse(self.requests)
+        token=social_context_budget.set(True)
+        try:self.assertEqual(await self.engine.complete(messages,8),self.answer)
+        finally:social_context_budget.reset(token)
+        selected=json.loads(self.requests[-1]['messages'][1]['content'])
+        self.assertEqual(selected['current'],data['current'])
+        self.assertEqual(selected['frames'][0]['turns'][-2:],rows[-2:])
+        self.assertFalse(social_context_budget.get())
 
     async def slots(self,request):
         return web.json_response([{}] if self.bad_slots else [{'is_processing':self.processing}])

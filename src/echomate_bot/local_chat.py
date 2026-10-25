@@ -184,7 +184,7 @@ class LocalChat:
         if text.startswith('/기억 저장 '):body='기억해 줘 '+text[len('/기억 저장 '):]
         elif text=='/기억 목록':body='내 기억 목록 보여줘'
         elif text=='/기억 삭제':body='내 기억 삭제해 줘'
-        elif text.startswith('/알림 '):body=text[len('/알림 '):]+' 알림'
+        elif text.startswith('/알림 '):body='알림 '+text[len('/알림 '):]
         if body is None:
             return ('로컬 명령: /동의 기억|관계 켜기|끄기, /기억 저장 내용, /기억 목록, /기억 정정 앞8자리 내용, /기억 삭제, '
                     '/친밀도 0~100, /알림 10분 후 물 마시라고 알려줘, /알림 목록, /알림 취소 번호'), [], 'NOT_EXECUTED'

@@ -1,5 +1,22 @@
 # 릴리즈 요구사항 추적표
 
+## 2026-10-25 Runtime 책임·의도·요약 경계
+
+최종 전체1,068개 OK280.928초·Portable172개 OK15.685초·전체21,603파일 감사 PASS·운영5hash/원본Lime 동일·final316 소비0. 시작c2e6ced. 기존 social/SocialDecision·권한·queue·Receipt를 유지하고 intent_router와 native context 선택을 분리했다. 현재 감정→과거 요약의 가로채기, 전달된 부탁의 실제 예약, 이름/기억 질문과 예약 응답의 선점을 수정했다. 세 능동 세션 각12이벤트에서 사람 대상 오개입은 양쪽0/6, 봇 복귀 누락은 양쪽3건으로 청자 의미 품질은 미달이다. 이름 관리자 경계/정상 예약·취소를 확인했고 자유 생성의 무근거 약속은 남았다. 요약은 검증 실패와 자료 부재를 구분하며 안전한 원문 선택으로 복귀한다. LOCAL_CHAT 명령 어댑터 회귀1건을 발견·수정했다. RELEASE BLOCKED·장시간 DEFERRED — USER REAL-WORLD TEST 유지. [실제 호출 흐름·A/B 한계·원문·재개](RUNTIME-LAYERS-QA.md).
+
+
+
+| 이번 계층 게이트 | 상태 | 실제 근거 / 미완료 조건 |
+|---|---|---|
+| 명시적 기능/전달·가정의 실행 경계 | PASS (한정) | 합성 DB·실제 Lime 국소 A/B. 일반 한국어 의도 전체 인증 아님 |
+| 읽기 질문+예약 영수증 | PASS (한정) | 실제 이름/미동의 기억 안내와 정상 예약·취소 |
+| 요약 자료형·생성 실패 회복 | PASS (한정) | 타입 거절/무저장/본인 원문 fallback·classifier 실패 구분 회귀 |
+| 요약 paraphrase 의미 보존 | NOT VERIFIED | 출처 evidence 포함이 조건/부정/화자 의미의 동치 보증은 아님 |
+| 일반 청자·사람 대화에서 봇 복귀 | FAIL | 세 세션 응답 누락3→3, 사람 대상 오개입0→0; pending 관계/긴 입력 차단 미해결 |
+| 자유 생성의 기존 알림·미래 기억 발언 | FAIL | 실제 DB와 불일치한 발언 보존; 실행 성공으로 기록하지 않음 |
+| 장시간 GPU/Runtime 운용 | NOT VERIFIED | DEFERRED — USER REAL-WORLD TEST |
+| 실제 Discord·다른 Windows | BLOCKED / NOT VERIFIED | Discord 별도 승인 전; 다른 호스트 미실행 |
+
 
 ## 2026-10-25 Runtime 원문·실행 금지·native 예산
 

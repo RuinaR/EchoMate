@@ -1,5 +1,7 @@
 # LOCAL_CHAT·Direct 모드 분리와 실제 대화 QA
 
+후속 의도/요약 경계·실제36이벤트와 미해결 청자: [현재 QA](RUNTIME-LAYERS-QA.md). 아래 결과는 당시 소스 범위로 보존한다.
+
 후속 Runtime 원문 보호·명시 금지·native 예산 구현/제한: [최신 QA](LIME-GROUNDED-RUNTIME-QA.md). 기존 결과는 해당 당시 범위로 보존한다.
 
 후속 변경: [이름·조회 상태·청자 QA](LIME-QUALITY-ITERATION-QA.md). 이전 실행 결과는 역사적 증거로 보존합니다. 장시간 검증은 이제 DEFERRED — USER REAL-WORLD TEST이며 이번 차수에 실행하지 않습니다.

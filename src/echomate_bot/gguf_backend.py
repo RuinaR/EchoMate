@@ -30,6 +30,7 @@ from .telemetry import active_trace
 
 ENGINE_SHA256 = 'a3f027944366d2b9d5154df43c31483c2bc8c9f9fa3c878d0b07115acc7e6624'
 runtime_text_budget = ContextVar('lime_runtime_text_budget', default=False)
+social_context_budget = ContextVar('lime_social_context_budget', default=False)
 
 
 def choice_grammar(choices):
@@ -233,6 +234,17 @@ class GGUFEngine:
             messages = await self.fit_runtime_context(messages,budget)
         elif local_token_budget.get():
             messages = await self.fit_local_context(messages, budget)
+        else:
+            # Classifiers and summaries have different evidence contracts.
+            # Never silently trim their JSON or reuse text-history selection.
+            if social_context_budget.get():
+                from .context_budget import fit_social
+                messages,tokens,removed=await fit_social(messages,self.context-budget-64,self.count_messages)
+            else:
+                tokens=await self.count_messages(messages);removed=0
+                if tokens+budget+64>self.context:raise ValueError('필수 입력이 native 문맥 예산을 초과했어요')
+            self.last_semantic_context=dict(input_tokens=tokens,removed_turns=removed,
+                output_reserve=budget,context_limit=self.context,margin=64)
         task = asyncio.current_task()
         self.generations.add(task)
         started = time.monotonic()
@@ -337,6 +349,14 @@ class GGUFEngine:
             preflight_counts=calls,preflight_seconds=time.monotonic()-started)
         return selected
 
+    async def count_messages(self,messages):
+        async with self.session.post(self.url+'/apply-template',json={'messages':messages,'add_generation_prompt':True}) as response:
+            response.raise_for_status();prompt=(await response.json())['prompt']
+        async with self.session.post(self.url+'/tokenize',json={'content':prompt,'add_special':False,'parse_special':True}) as response:
+            response.raise_for_status();tokens=(await response.json())['tokens']
+        if not isinstance(tokens,list):raise ValueError('Invalid native tokenization')
+        return len(tokens)
+
     async def fit_runtime_context(self,messages,budget):
         """Exact counts; remove complete old exchanges, never current facts.
 
@@ -364,12 +384,7 @@ class GGUFEngine:
         async def count(items):
             nonlocal calls
             calls+=1
-            async with self.session.post(self.url+'/apply-template',json={'messages':items,'add_generation_prompt':True}) as response:
-                response.raise_for_status();prompt=(await response.json())['prompt']
-            async with self.session.post(self.url+'/tokenize',json={'content':prompt,'add_special':False,'parse_special':True}) as response:
-                response.raise_for_status();tokens=(await response.json())['tokens']
-            if not isinstance(tokens,list):raise ValueError('Invalid native tokenization')
-            return len(tokens)
+            return await self.count_messages(items)
         limit=self.context-budget-64;result=values;keep=len(units);tokens=await count(result)
         if tokens>limit:
             result=selected(0);keep=0;tokens=await count(result)
@@ -489,7 +504,14 @@ class GGUFLocalBackend(LocalBackend):
         await self.ready()
 
     async def _assess_social_semantic(self,packet):
-        return await super()._assess_social_semantic(packet,grounded_choices=True)
+        token=social_context_budget.set(True)
+        try:return await super()._assess_social_semantic(packet,grounded_choices=True)
+        finally:social_context_budget.reset(token)
+
+    async def link_direct(self,packet):
+        token=social_context_budget.set(True)
+        try:return await super().link_direct(packet)
+        finally:social_context_budget.reset(token)
 
     async def validate(self,entry):
         return await self.engine.validate(entry)
@@ -594,6 +616,8 @@ class GGUFLocalBackend(LocalBackend):
         if lookup not in ('not_requested','not_authorized','found','empty','invalidated','failed'):
             raise ValueError('Invalid Runtime memory lookup state')
         state['memory_lookup']=lookup
+        state['current_operation']=cfg.get('_operation_evidence',dict(status='NOT_EXECUTED',receipt_kinds=[],
+            meaning='No operation executed by this generation; existing reservations not queried'))
         if type(familiarity) in (int,float) and math.isfinite(familiarity) and 0<=familiarity<=100:
             state['consented_familiarity']=familiarity
         policy+=' Runtime이 확인한 표현 상태: '+json.dumps(state,ensure_ascii=False)+'. '
