@@ -1,5 +1,7 @@
 # EchoMate
 
+최근 개발: [Lime 사실성·조회 상태 QA](docs/LIME-FACTUALITY-QA.md). 기능 요청과 일반 대화의 간섭을 줄였지만 자유 생성의 무근거 조회 발언은 남아 있습니다. **RELEASE BLOCKED**, LOCAL 합성 시험과 DIRECT 오프라인 검증을 구분합니다.
+
 현재 준비 상태: [모드별 위험 기반 게이트](docs/MODE-GATES-QA.md). 로컬 합성 시험 대화는 가능하지만 **LOCAL_CHAT_READY·명시 호출 베타 OFFLINE READY·자율 RELEASE는 모두 BLOCKED**입니다. 새 실제 대화에서도 무근거 공동 경험 발언이 남았습니다. 명시 호출은 SDK mock에서 별도 검증하며, 실제 Discord 연결·명령 변경·송신은 승인 전 잠깁니다. 장시간 검증은 **DEFERRED — USER REAL-WORLD TEST**입니다.
 
 최근 개발: [생성 예산·실행 안내·요약 의미 QA](docs/SEMANTIC-FOCUS-QA.md). 긴 조각 응답과 로컬 기능 안내를 보완했지만 일반 청자·자유 생성 사실성·요약 의미 한계가 남아 **RELEASE BLOCKED**입니다.

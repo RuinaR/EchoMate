@@ -96,6 +96,11 @@ def plan_intent(text,kind):
     outer=clauses[-1] if clauses else current
     imperative=r'(?:알려|불러|깨워|보여|기억해|요약해|저장해|삭제해|지워|취소해|변경해|정정해|늦춰|미뤄|잊어)\s*(?:줘|주세요|줄래|줄래요|해줘)|(?:부탁해|부탁할게)'
     separate=outer!=current and bool(re.search(imperative,outer))
+    # Discussing what the bot should claim is not an operation request.
+    # Keep a separate actual imperative eligible for the existing executor.
+    claim_discussion=bool(re.search(r'(?:저장|예약|등록|조회|실행|삭제|변경)(?:했다고|했다는|할\s*거라고)\s*(?:말|답|안내|주장)',current))
+    if claim_discussion and not separate and not re.search(imperative,outer):
+        return IntentPlan(IntentMode.MENTION,kind,'execution_claim_discussion')
     if (reported or hypothetical) and not separate:
         return IntentPlan(IntentMode.MENTION,kind,'reported_or_hypothetical')
     from .companion import request_kind
@@ -104,7 +109,11 @@ def plan_intent(text,kind):
     if len(kinds)>1 or len(requests)>1:
         return IntentPlan(IntentMode.CLARIFY,kind,'multiple_private_kinds')
     if kind=='summary':return IntentPlan(IntentMode.REQUEST,kind,'summary_candidate')
-    read=bool(re.search(r'(?:기억|정보|알림|예약).*(?:목록|조회|보여|뭐\s*있)',current))
+    # Mentioning a past/absent lookup is not a new read request. Explicit
+    # imperatives are handled below; retain the short list/query grammar.
+    read=any(re.search(r'(?:기억|정보|알림|예약).*(?:목록|조회|보여|뭐\s*있)',p) and
+             re.search(r'(?:목록|조회|조회해\s*(?:줘|주세요|줄래)|뭐\s*있(?:어|니|지|나요)?|목록(?:은|이)?\s*뭐(?:야|니|지))$',p.rstrip('.!?。 '))
+             for p in request_clauses(text))
     request=read or bool(re.search(imperative,current))
     # Legacy short controls are explicit commands even without a final 줘.
     request=request or bool(re.search(r'(?:알림|예약).*(?:취소|늦춰|미뤄|연기|변경)',current))

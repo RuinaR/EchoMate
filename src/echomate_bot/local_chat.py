@@ -21,6 +21,7 @@ from .companion import handle_request, operation_failure, request_plan
 from .operation_receipts import read_receipt, MemorySelection, read_values
 from .runtime import Event
 from .settings import DEFAULTS, atomic_private_json, private_path
+from .lookup_inquiries import lookup_state_answer
 
 # Task-local, never shared across requests/users or enabled by Discord traffic.
 stream_observer = ContextVar('local_chat_stream_observer', default=None)
@@ -293,6 +294,8 @@ class LocalChat:
                     if self.history_signatures.get(tuple(scope))!=signature:history=[]
                     if state=='failed':
                         answer='기억 조회에 실패했어. 자료가 없다는 뜻은 아니야. 지금은 확인할 수 없어.'
+                    elif (status_answer:=lookup_state_answer(text,state)) is not None:
+                        answer=status_answer
                     elif (help_answer:=self.operation_help(text)) is not None:
                         from .intent_router import readonly_fragments
                         answer='\n'.join((*readonly_fragments(backend,text,state),help_answer))

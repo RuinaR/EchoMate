@@ -1,5 +1,11 @@
 # 작업 로그
 
+## 2026-10-26 자유 생성 출처·조회·대화 의도 경계
+
+이전 실패 원문/동일 문맥 A/B와 도예·합창·책방·화분의 실제 Lime 능동 대화를 검증했다. 출처·조회 상태 계약과 명확한 상태 질문의 읽기 전용 응답을 추가하고, 실행 주장 논의/과거 조회를 실제 기능 요청으로 오인하던 라우터를 수정했다. 두 개발 오차단은2→0이지만 새 허위 목록 조회와 모호한 조회 설명·정정 누락은 남아 **고위험 사실성 FAIL·모든 모드 정식 READY BLOCKED**다. LOCAL 합성 시험/ DIRECT OFFLINE ONLY를 유지하며 최종 DIRECT 회귀는6송신·4무송신·자율 판단0회였다. [실제 변경·A/B·원문·문맥 비용·남은 한계](LIME-FACTUALITY-QA.md). 실제 Discord는 별도 승인 전 미실행, 장시간은 **DEFERRED — USER REAL-WORLD TEST**다.
+
+검증 마감: 전체 **1,104개 OK293.247초**, Portable 자체 Python/src **208개 OK20.553초**, 최종 DIRECT10건은6송신/4무송신·자율 판단0회. 원본 참석 회상 긍정은 같은 이력/입력 A/B에서 재현되지 않았지만 조회 없는 기록 부재 표현·새 허위 목록 조회·정정 누락은 남는다. 운영5파일/원본Lime6hash 일치·합성16DB 활성 예약0·final316 소비0. 최종 공개 파일/원문/재개는 [사실성 QA](LIME-FACTUALITY-QA.md)와 비공개 `local_data/factuality-20261026/final-checkpoint.json`을 따른다. **LOCAL 정식 READY·DIRECT OFFLINE READY·자율 RELEASE는 BLOCKED**이며 LOCAL 합성 시험만 가능하다. 실제 Discord와 장시간 검증은 실행하지 않았다.
+
 ## 2026-10-26 모드별 위험 기반 게이트
 
 LOCAL_CHAT_READY / DISCORD_DIRECT_BETA_READY / DISCORD_AUTONOMOUS_RELEASE를 분리했다. 기본 Lime 로딩은 파일·자원·이름을 검증하고 자율 청자 probe를 실행하지 않는다. DIRECT는 입구/최종 라우팅에서 실제 선두 멘션/봇 reply를 재검사하며 자율 판별 없이 기존 SDK mock 송신·최신성·Receipt를 재사용한다. 현재 로컬 기술 시험은 가능하지만 새 실제18턴에서도 허위 공동 경험을 관측해 **세 모드의 정식 READY는 BLOCKED**다. DIRECT10상호작용은 기대6송신/4무송신·자율 판단0회로 일치했다. 실서버 실행은 Controller/UI에서 계속 잠겨 있고 자율 청자 FAIL은 local/direct 개발의 필수 게이트에서만 분리한다. 장시간은 **DEFERRED — USER REAL-WORLD TEST**이며 최종 정식 출시 필수 근거다. [위험/모드별 결과·실제 원문·재개](MODE-GATES-QA.md). 과거 FAIL/NOT VERIFIED와 기존8/8·0/4는 당시 범위로 보존한다.
