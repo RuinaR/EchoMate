@@ -1,5 +1,12 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-10-25 Lime Windows 설치·이름·GPU 준비 연결 — RELEASE BLOCKED
+
+시작 `32cf372`. 기본 실행을 Lime 앱으로 연결하고 고정 출처 다운로드/가져오기·전체 파일 검증·취소/복구·이름 저장/rollback·별도v8 저장소와 기존 InstanceLease를 통합했다. 과거 앱은 명시적 legacy 실행으로 보존한다. 실제 기존 모델 설치28.219초·GPU 준비3.672초/유나 이름 확인 후 **strict 청자 검증 FAIL→안전 해제·Discord 시작 차단**을 확인했다. 최소freeVRAM7,132MiB/RAM5.49GiB/commit20.185GiB, 최고48°C. 운영 자료/실제 Discord는 건드리지 않았다.
+
+전체1,018개 OK301.405초·번들94개 OK8.705초·격리 UI100/125/150%·표적58개 통과. Portable21,592파일 전체 감사/공개 문서 delta 검증, 새 합성10턴·마지막 하루 이름 확인/회수 완료(청자 FAIL 유지). 운영/장부5hash·원본 Lime hash 동일. 새 앱의 정상 실사용·청자/일반 자유 생성 사실성·장시간/다른 Windows는 미완료다. **실사용 테스트 준비 완료가 아니다.** [구현·실측·검증 한계·재개](LIME-WINDOWS-APP-QA.md).
+
+
 ## 2026-10-25 Lime 조회 실패·저장소 downgrade 보호 — RELEASE BLOCKED
 
 기준 `0c2c14b`, 구현 `9e869ee`, Portable21,587파일 전체 감사 PASS. 최종 전체996개 OK279.804초·번들72개 OK6.921초. 자동 기억 검색 실패의 자유 생성 fallthrough를 Runtime 실패 응답으로 막고, 미동의 자동 조회를 생략하며 실패/빈 결과/실제 항목 상태를 분리했다. 캐릭터 DB는v8, legacy는v7로 유지해 marker를 모르는 과거 구현의 접근을 거부한다. 임시 사본/읽기 전용 복구·실제 과거 코드 거부를 확인했고 운영 DB는 변경하지 않았다.

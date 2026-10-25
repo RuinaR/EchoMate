@@ -1,6 +1,6 @@
 Option Explicit
 ' Windowless entry point. Paths and working directory are resolved at runtime.
-Dim fs, sh, root, python, env
+Dim fs, sh, root, python, env, entry
 Set fs = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 root = fs.GetParentFolderName(WScript.ScriptFullName)
@@ -17,4 +17,6 @@ Set env = sh.Environment("Process")
 env("PYTHONPATH") = fs.BuildPath(root, "src")
 env("HF_HUB_OFFLINE") = "1"
 env("TRANSFORMERS_OFFLINE") = "1"
-sh.Run Chr(34) & python & Chr(34) & " -m echomate_bot.desktop", 0, False
+entry = "echomate_bot.lime_desktop"
+If WScript.Arguments.Named.Exists("legacy") Then entry = "echomate_bot.desktop"
+sh.Run Chr(34) & python & Chr(34) & " -m " & entry, 0, False

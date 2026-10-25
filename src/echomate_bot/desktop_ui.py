@@ -330,18 +330,45 @@ class DesktopApp(CompanionViews):
         self.form('이 서버의 봇 이름',[('name','이 서버에서 사용할 이름 · 2~32자',guild_name(self.snapshot['cfg'],gid))],
             lambda values:self.controller.submit('name',guild=gid,name=validate_name(values['name'])),
             '호격·접미사를 줄인 호출도 문맥을 확인해요. 실제 Discord 이름 변경에는 권한이 필요할 수 있어요.',guard_context=True)
+    def navigation(self):
+        return [('setup','처음 사용 안내'),('models','AI 모델'),('spaces','대화할 곳'),('outputs','응답 방식'),('character','성격과 기분'),*PAGES.items(),('status','진행 상황'),('labs','실험 기능')]
+
+    def page_title(self):
+        return {'setup':'처음 사용 안내','models':'내 PC의 AI 모델','spaces':'대화할 곳','outputs':'응답 방식','character':'성격과 기분','status':'지금 무엇을 하고 있나요?','labs':'실험 기능',**PAGES}[self.page]
+
+    def model_label(self):
+        return 'Gemma 4 12B'
+
+    def can_start(self):
+        return True
+
+    def initial_setup_page(self):
+        return 'setup'
+
+    def command_set_label(self):
+        return '/동의, /성격'
+
+    def command_privacy_description(self):
+        return '/동의는 본인 데이터, /성격은 실제 소유자 ID 검사 후 본인만 보는 응답이에요. 기본 권한 제한은 없지만 일반 사용자는 /성격 내용을 볼 수 없어요.'
+
+    def phase_caption(self, phase):
+        return phase
+
+    def footer_message(self, footer):
+        return footer
+
     def render(self):
         self.canvas.delete('all');self.hits=[];self.feedback.clear();w=max(1040,self.canvas.winfo_width());h=max(740,self.canvas.winfo_height())
         self.canvas.create_rectangle(0,0,196,h,fill='#0e1521',outline='')
         self.canvas.create_oval(24,27,44,47,fill=ACCENT,outline='');self.canvas.create_oval(30,33,38,41,fill=BG,outline='')
         self.text(56,25,'EchoMate',16,bold=True);self.text(26,63,'내 PC에서 동작하는 봇',8,MUTED)
-        nav=[('setup','처음 사용 안내'),('models','AI 모델'),('spaces','대화할 곳'),('outputs','응답 방식'),('character','성격과 기분'),*PAGES.items(),('status','진행 상황'),('labs','실험 기능')]
+        nav=self.navigation()
         spacing=min(48,(h-220)//len(nav))
         for index,(page,label) in enumerate(nav):
             self.button(16,108+index*spacing,164,spacing-5,label,lambda p=page:self.set_page(p),self.page==page,navigation=True)
-        self.text(24,h-90,'모델은 내 PC에서 실행',9,MUTED);self.text(24,h-65,'Gemma 4 12B',10)
+        self.text(24,h-90,'모델은 내 PC에서 실행',9,MUTED);self.text(24,h-65,self.model_label(),10)
         s=self.snapshot;cfg=s['cfg'] if s and s.get('cfg') else None
-        title={'setup':'처음 사용 안내','models':'내 PC의 AI 모델','spaces':'대화할 곳','outputs':'응답 방식','character':'성격과 기분','status':'지금 무엇을 하고 있나요?','labs':'실험 기능',**PAGES}[self.page]
+        title=self.page_title()
         title_size=21
         while title_size>12 and self.button_font(title_size).measure(title)>w-610:title_size-=1
         title_item=self.text(226,28,title,title_size,bold=True)
@@ -353,7 +380,7 @@ class DesktopApp(CompanionViews):
         preview_busy=bool(s and s.get('preview_busy'))
         cleanup_failed=bool(s and s.get('preview_cleanup_failed'))
         label='다시 열기 필요' if cleanup_failed else '미리보기 중' if preview_busy else '응답 재개' if connected and cfg and not cfg['enabled'] else '실행 중' if connected else '준비 중' if running else '봇 켜기'
-        self.button(w-190,23,78,36,label,lambda:self.controller.submit('start'),primary=True,enabled=bool(cfg) and not preview_busy and not cleanup_failed and (not running or bool(connected and not cfg['enabled'])))
+        self.button(w-190,23,78,36,label,lambda:self.controller.submit('start'),primary=True,enabled=self.can_start() and bool(cfg) and not preview_busy and not cleanup_failed and (not running or bool(connected and not cfg['enabled'])))
         self.button(w-102,23,78,36,'봇 끄기',lambda:self.controller.submit('stop'),enabled=running)
         error=' · '+s['error'] if s and s['error'] else ''
         phase=s['phase'] if s else '저장된 설정을 읽고 있어요'
@@ -365,12 +392,13 @@ class DesktopApp(CompanionViews):
                    'relations':'본인 동의가 있는 관계 자료를 서버별로 관리해요',
                    'memories':'장기 기억과 요약의 동의·출처·만료를 확인해요',
                    'reminders':'예약 시간과 발송 상태를 확인해요'}.get(self.page,'허용 채널을 설정한 뒤 봇을 켜 주세요')
-        self.text(226,phase_y,self.ellipsize(phase+error,max(100,w-660)),10,MUTED)
+        self.text(226,phase_y,self.ellipsize(self.phase_caption(phase)+error,max(100,w-660)),10,MUTED)
         self.button(w-400,phase_y-4,130,28,'상태·오류',self.show_status_detail)
         if cfg and connected:self.toggle(w-200,78,'응답 허용',cfg['enabled'],lambda:self.set_value('enabled',not cfg['enabled']))
         self.server_list.place_forget();self.channel_list.place_forget()
         self.people_list.place_forget();self.record_list.place_forget();self.job_list.place_forget();self.model_list.place_forget()
-        if self.page=='setup':self.draw_setup(w,h,cfg)
+        if self.page=='lime':self.draw_lime(w,h,cfg)
+        elif self.page=='setup':self.draw_setup(w,h,cfg)
         elif self.page=='models':self.draw_models(w,h,cfg)
         elif self.page=='spaces':self.draw_spaces(w,h,cfg)
         elif self.page=='outputs':self.draw_outputs(w,h,cfg)
@@ -382,7 +410,7 @@ class DesktopApp(CompanionViews):
                 '변경을 적용하지 못했어요. 서버 목록과 설정을 확인해 주세요.' if s and s['error'] else
                 s['notice']+' · 재시작 없이 적용돼요' if s and s.get('notice') else
                 '허용한 채널에서만 대화해요 · 목록을 선택하는 것만으로는 말을 하지 않아요')
-        self.text(226,h-29,footer,9,MUTED)
+        self.text(226,h-29,self.footer_message(footer),9,MUTED)
         if self.canvas.focus_get() is self.canvas and 0<=self.focus_index<len(self.hits):
             x,y,bw,bh,_=self.hits[self.focus_index];self.canvas.create_rectangle(x-2,y-2,x+bw+2,y+bh+2,outline=MINT)
     def draw_spaces(self,w,h,cfg):
@@ -699,9 +727,9 @@ class DesktopApp(CompanionViews):
             self.controller.submit('command_apply',fingerprint=plan['fingerprint'])
         def command_label(c):
             return c['name']+' ('+{1:'슬래시',2:'사용자',3:'메시지'}.get(c.get('type',1),'기타')+')'+(' · 접근 범위 '+str(c.get('contexts'))+' · 설치 '+str(c.get('integration_types'))+' · 기본 권한 '+str(c.get('default_member_permissions')))
-        summary='Application '+plan['application']+'\n전역: '+', '.join(command_label(c) for c in plan['global_before'])+' → /동의, /성격\n'
+        summary='Application '+plan['application']+'\n전역: '+', '.join(command_label(c) for c in plan['global_before'])+' → '+self.command_set_label()+'\n'
         summary+='\n'.join('서버 '+g+': '+(', '.join(command_label(c) for c in rows) or '없음')+' → 서버별 명령 없음' for g,rows in plan['guilds'].items())
-        self.form('확인한 명령 변경 승인',[('confirm','명령 적용 이라고 입력','')],save,summary+'\n/동의는 본인 데이터, /성격은 실제 소유자 ID 검사 후 본인만 보는 응답이에요. 기본 권한 제한은 없지만 일반 사용자는 /성격 내용을 볼 수 없어요.\n범위 0=서버, None=응답에 정보 없음. 서버별 권한 덮어쓰기와 화면 표시는 별도 확인이에요.\n승인하면 이 애플리케이션만 변경해요. 전역 두 명령을 먼저 재조회하고 성공한 경우에만 서버별 구형 명령을 정리해요. 목록이 바뀌면 재승인이 필요해요. 사용자 자료는 삭제하지 않아요.')
+        self.form('확인한 명령 변경 승인',[('confirm','명령 적용 이라고 입력','')],save,summary+'\n'+self.command_privacy_description()+'\n범위 0=서버, None=응답에 정보 없음. 서버별 권한 덮어쓰기와 화면 표시는 별도 확인이에요.\n승인하면 이 애플리케이션만 변경해요. 전역 두 명령을 먼저 재조회하고 성공한 경우에만 서버별 구형 명령을 정리해요. 목록이 바뀌면 재승인이 필요해요. 사용자 자료는 삭제하지 않아요.')
     def draw_status(self,w,h,s):
         if not s:return
         width=(w-282)/3
@@ -793,7 +821,7 @@ class DesktopApp(CompanionViews):
             while True:self.snapshot=self.controller.updates.get_nowait();changed=True
         except queue.Empty:pass
         if self.snapshot and not self.snapshot.get('cfg') and not getattr(self,'_setup_shown',False):
-            self.page='setup';self._setup_shown=True
+            self.page=self.initial_setup_page();self._setup_shown=True
         if changed:self.refresh_lists()
         if self.page in PAGES:
             if time.monotonic()-getattr(self,'_records_refreshed_at',0)>5:self.refresh_records()

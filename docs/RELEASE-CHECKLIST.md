@@ -1,5 +1,12 @@
 # 릴리즈 요구사항 추적표
 
+## 2026-10-25 Lime Windows 설치·이름·GPU 준비 연결 — RELEASE BLOCKED
+
+시작 `32cf372`. 기본 실행을 Lime 앱으로 연결하고 고정 출처 다운로드/가져오기·전체 파일 검증·취소/복구·이름 저장/rollback·별도v8 저장소와 기존 InstanceLease를 통합했다. 과거 앱은 명시적 legacy 실행으로 보존한다. 실제 기존 모델 설치28.219초·GPU 준비3.672초/유나 이름 확인 후 **strict 청자 검증 FAIL→안전 해제·Discord 시작 차단**을 확인했다. 최소freeVRAM7,132MiB/RAM5.49GiB/commit20.185GiB, 최고48°C. 운영 자료/실제 Discord는 건드리지 않았다.
+
+전체1,018개 OK301.405초·번들94개 OK8.705초·격리 UI100/125/150%·표적58개 통과. 운영/장부5hash·원본 Lime hash 동일. 새 앱의 정상 실사용·청자/일반 자유 생성 사실성·장시간/다른 Windows는 미완료다. **실사용 테스트 준비 완료가 아니다.** [구현·실측·검증 한계·재개](LIME-WINDOWS-APP-QA.md).
+
+
 ## 2026-10-25 실제 기능 보강 — Lime 필수 게이트 유지
 
 자동 기억 조회 실패는 Runtime 실패 안내로 닫고 미동의 조회를 생략한다. 실패/빈 결과/항목 상태와 캐릭터v8/legacyv7 downgrade 거부를 검증했다. **기억 실패 경로의 구성요소 PASS**이며 일반 자유 생성 기능 약속/청자 FAIL은 해제하지 않는다. 실제GPU→SDK mock6응답은 semantic gate FAIL 상태의 진단용 증거로만 사용한다. 새 UI·장기·다른 Windows·실제 Discord는 미검증이다. [구현/기각/실측](LIME-RUNTIME-SAFETY-QA.md). 아래 Lime 단일 출시 필수 집합은 그대로다.
@@ -17,10 +24,10 @@
 | 청자·후속·다자 대화 판단 | FAIL | Lime strict semantic startup gate 실패 유지. 예문 특례/일괄 침묵/우회로 해결 선언 금지. |
 | 허위 기억·알림 완료/기능 상태 | FAIL | 명시 명령은 Runtime 영수증/실패 구분으로 보호. 자유 생성 허위 주장은 미해결. |
 | 기억/동의/친밀도/예약·원본 reply·취소 경계 | PASS | 합성 namespace/영수증·동의·수정/삭제·공정 큐·조각 회귀. 실제 운영 migration은 미실행. |
-| Windows Lime 설치·선택·이름·로딩·오류 복구 | NOT VERIFIED | 첫 activation controller handoff/다운로드·취소 재개/학습 편집 주요 흐름 제외 필요. |
+| Windows Lime 설치·선택·이름·로딩·오류 복구 | NOT VERIFIED | 설치/가져오기·이름·로딩/실패 해제·격리 DPI/취소/복구 연결. strict semantic FAIL로 정상 활성화 전체 흐름·실제 전체 다운로드 재개는 미검증. |
 | `/캐릭터`·`/동의`와 기존 명령 호환 | NOT VERIFIED | 로컬 모드별 mock 계약 PASS, 실제 등록 집합/사용 접근은 미검증. |
 | 병렬 대화/새 구조 GPU 장기 안정성 | NOT VERIFIED | 기존 합성 공정큐/분할/epoch는 통과, 30분GPU·2/8시간 새 구조 검증 필요. |
-| Portable 첫 설치·업데이트/다른 Windows | NOT VERIFIED | 기존 번들64·전체21,585파일 감사 범위 보존. 실제 첫 사용자 GPU/다른 Windows 미검증. |
+| Portable 첫 설치·업데이트/다른 Windows | NOT VERIFIED | 최신 번들94개 통과. 설치 fixture/시작 차단 확인. 실제 첫 사용자 GPU/다른 Windows 미검증. |
 | 실제 Discord 최종 통합 | BLOCKED | 마지막 별도 승인: 인증/REST/Gateway·명령 변경·송신 구분. 현재 미실행. |
 | Yaho / IT 기획자 출시 제공 | NOT APPLICABLE | 추후 미지원 후보. 삭제/READY 승격 없음; 미확보 자체는 Lime 출시 차단 아님. |
 

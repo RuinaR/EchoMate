@@ -1,5 +1,9 @@
 # 아키텍처
 
+## Lime 제품 진입점 연결
+
+`lime_desktop.LimeDesktopApp → LimeController → LimeInstall / GGUFLocalBackend → 기존 EchoClient/Runtime` 경로다. `desktop.LocalController`의 데이터 위치/store/backend/snapshot hook을 재사용한다. 새 저장소는 기존 ROOT의 `lime/`, serving lease는 기존 ROOT와 공유한다. 캐릭터 데이터는v8 namespace·공통 consent/reminder이며 legacy DB 자동 열기/변환은 하지 않는다. 실제 서버 호출은 준비 검증과 명시적 시작 이후에만 가능하며 현재 semantic FAIL로 차단한다. `OwnedChild` Job은 자체 Popen child만 관리한다. [구체 상태·실제 실행·미검증 경계](LIME-WINDOWS-APP-QA.md).
+
 ## 2026-10-25 조회 상태와 캐릭터 DB 버전 경계
 
 pretrained Runtime은 자동 기억 조회 전후 허용 범위·실제 조회 여부를 확인하고 실패는 Runtime 실패 안내로 닫는다. 미조회/접근 미허용/실패/빈 결과/항목/무효화는 GGUF 생성 문맥에 구분해 전달하며 실행 영수증으로 승격하지 않는다. 기존 MemorySelection/원본·동의·송신 최신성은 유지한다.

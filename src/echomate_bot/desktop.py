@@ -58,12 +58,33 @@ ACTIVITIES={'조용함':'quiet','보통':'normal','활발함':'active','매우 �
 
 class LocalController:
     """Every settings mutation and client access runs on the same event loop."""
-    def __init__(self):
+    def __init__(self, *, data_root=None):
+        from .settings import private_path
+        self._data_root=private_path(data_root) if data_root is not None else ROOT
         self.updates=queue.Queue(maxsize=8);self.loop=None;self.client=None;self.job=None
         self.phase='설정 읽는 중';self.error='';self.lease=None
         self.inventory=[];self.closed=threading.Event()
         self.thread=threading.Thread(target=self._thread,name='echomate-discord',daemon=True)
         self.thread.start()
+
+    @property
+    def data_root(self):
+        return getattr(self,'_data_root',ROOT)
+
+    def open_companion(self):
+        from .companion_store import CompanionStore
+        return CompanionStore(self.data_root/'companion.sqlite3')
+
+    def discover_models(self):
+        from .model_registry import ModelRegistry
+        return ModelRegistry(self.settings.get()['model_roots'] or None if self.settings else None).scan()
+
+    async def create_backend(self,cfg):
+        from .inference import LocalBackend
+        return LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None)
+
+    def extra_snapshot(self):
+        return {}
 
     def _thread(self):
         try:asyncio.run(self._main())
@@ -78,14 +99,14 @@ class LocalController:
             from .instance import InstanceLease
             self.lease=InstanceLease()
             from .onboarding import load_bootstrap
-            self.bootstrap=load_bootstrap(ROOT/'bootstrap.json')
-            self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'],ROOT/'settings.json')
+            self.bootstrap=load_bootstrap(self.data_root/'bootstrap.json')
+            self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'],self.data_root/'settings.json')
             from .character_profiles import ProfileStore
-            self.profiles_view=ProfileStore(ROOT/'characters.json',self.bootstrap['owner_id'],self.bootstrap['signing_key']).list()
+            self.profiles_view=ProfileStore(self.data_root/'characters.json',self.bootstrap['owner_id'],self.bootstrap['signing_key']).list()
             from .companion_store import CompanionStore
-            self.companion=CompanionStore(ROOT/'companion.sqlite3');self.companion_view={}
+            self.companion=self.open_companion();self.companion_view={}
             self.record_guilds=await asyncio.to_thread(self.companion.guild_ids) if not self.companion.error else []
-            cached=ROOT/'inventory.json'
+            cached=self.data_root/'inventory.json'
             if cached.exists():
                 try:self.inventory=json.loads(cached.read_text(encoding='utf-8'))
                 except (OSError,ValueError):self.error='저장된 서버 목록을 읽지 못했어요'
@@ -94,11 +115,13 @@ class LocalController:
             # Local records remain available without logging into Discord.
             if not self.job or self.job.done():self.phase='정지 — 시작 버튼으로 연결'
         except Exception as exc:
-            self.phase='다른 EchoMate 앱이 실행 중이야' if isinstance(exc,RuntimeError) else '처음 사용 안내에서 봇 정보를 등록해 주세요'
+            self.phase=('다른 EchoMate 앱이 실행 중이야' if isinstance(exc,RuntimeError) and not self.lease else
+                        '설정·저장소를 읽지 못했어요. 기존 파일을 보존하고 백업을 확인해 주세요' if (self.data_root/'bootstrap.json').exists() else
+                        '처음 사용 안내에서 봇 정보를 등록해 주세요')
             self.error=type(exc).__name__
             self.settings=None
         from .model_registry import ModelRegistry
-        self.models=await asyncio.to_thread(ModelRegistry(self.settings.get()['model_roots'] or None if self.settings else None).scan)
+        self.models=await asyncio.to_thread(self.discover_models)
         while True:
             self._publish()
             await asyncio.sleep(.4)
@@ -175,11 +198,12 @@ class LocalController:
             try:self.updates.get_nowait()
             except queue.Empty:pass
         if snapshot['preview_cleanup_failed']:snapshot['phase']='미리보기 정리 실패 · 앱을 닫고 다시 열어 주세요'
+        snapshot.update(self.extra_snapshot())
         self.updates.put_nowait(snapshot)
         if getattr(self,'lease',None) and time.monotonic()-getattr(self,'_published_at',0)>2:
             from .settings import atomic_private_json
             try:
-                atomic_private_json(ROOT/'desktop-status.json',dict(updated=time.time(),phase=self.phase,error=self.error,
+                atomic_private_json(self.data_root/'desktop-status.json',dict(updated=time.time(),phase=self.phase,error=self.error,
                     connected=snapshot['connected'],pending=snapshot['pending'],safe_stopped=snapshot['safe_stopped'],
                     stages=[dict(stage=p['stage'],seconds=p['seconds']) for p in progress],latencies=runtime.latencies if runtime else []))
             except OSError:self.error='StatusWriteError'
@@ -214,7 +238,7 @@ class LocalController:
                 inventory.append(dict(id=guild.id,label=guild.name,channels=entries))
             self.inventory=inventory
             from .settings import atomic_private_json
-            atomic_private_json(ROOT/'inventory.json',inventory)
+            atomic_private_json(self.data_root/'inventory.json',inventory)
         except Exception as exc:self.error='목록 갱신 실패 · '+type(exc).__name__
         finally:
             await reader.close();self.refreshing=False
@@ -256,13 +280,13 @@ class LocalController:
                     self.job.cancel();await asyncio.gather(self.job,return_exceptions=True)
                 self.main_task.cancel();return
             if operation=='setup':
-                if self.settings or (ROOT/'bootstrap.json').exists():raise PermissionError('Existing setup preserved')
+                if self.settings or (self.data_root/'bootstrap.json').exists():raise PermissionError('Existing setup preserved')
                 if not self.lease:raise PermissionError('Another app owns setup')
                 from .onboarding import create_installation
-                self.bootstrap=await asyncio.to_thread(create_installation,ROOT/'bootstrap.json',int(kwargs['owner']),kwargs['token'])
-                self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'],ROOT/'settings.json')
+                self.bootstrap=await asyncio.to_thread(create_installation,self.data_root/'bootstrap.json',int(kwargs['owner']),kwargs['token'])
+                self.settings=Settings(self.bootstrap['owner_id'],self.bootstrap['signing_key'],self.data_root/'settings.json')
                 from .companion_store import CompanionStore
-                self.companion=CompanionStore(ROOT/'companion.sqlite3');self.companion_view={};self.record_guilds=[]
+                self.companion=self.open_companion();self.companion_view={};self.record_guilds=[]
                 self.phase='등록 완료 · AI 모델과 허용 채널을 선택해 주세요';self._publish();return dict(ok=True,error='')
             if not self.settings:raise ValueError('Setup required')
             owner=self.bootstrap['owner_id'];self.settings.authorize(owner)
@@ -325,7 +349,7 @@ class LocalController:
                 for label,p in selected:
                     variant=deepcopy(cfg);variant.update(character_profile=deepcopy(p),**{k:p[k] for k in SHARED_FIELDS});variant['_familiarity']=None;variant['_current_utterance']=text
                     variants.append((label,p['name'],effective_character(variant,text)))
-                backend=self.client.backend if self.client else LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None)
+                backend=self.client.backend if self.client else await self.create_backend(cfg)
                 owns_backend=self.client is None
                 self.preview_session=kwargs.get('session');self.preview_backend=backend;self.preview_owned=owns_backend;self.preview_started=time.monotonic()
                 async def generate_preview():
@@ -487,7 +511,7 @@ class LocalController:
                 gid=int(kwargs['guild'])
                 if not self.known_guild(gid):raise PermissionError('Unknown guild')
                 from .vision import VisualCache,download
-                cache=self.client.cache if self.client else VisualCache(ROOT/'visual.sqlite3')
+                cache=self.client.cache if self.client else VisualCache(self.data_root/'visual.sqlite3')
                 if not kwargs.get('refresh'):
                     await asyncio.to_thread(cache.clear,gid);self.notice='선택한 서버의 시각 캐시를 비웠어요'
                 else:
@@ -509,7 +533,7 @@ class LocalController:
                 from .telemetry import summarize
                 from collections import Counter
                 runtime=self.client.runtime if self.client else None
-                atomic_private_json(ROOT/'diagnostic-report.json',dict(schema=1,
+                atomic_private_json(self.data_root/'diagnostic-report.json',dict(schema=1,
                     connected=bool(self.client and self.client.is_ready()),
                     queue_depth=self.client.backend.pending if self.client else 0,
                     gpu_scheduler=self.client.backend.scheduler.snapshot() if self.client and hasattr(self.client.backend,'scheduler') else {},
@@ -608,7 +632,7 @@ class LocalController:
             logging.getLogger('discord').setLevel(logging.CRITICAL)
             from .settings import DEFAULTS
             cfg=self.settings.get() if self.settings else dict(DEFAULTS)
-            self.client=EchoClient(self.settings,LocalBackend(model_id=cfg['model'],model_roots=cfg['model_roots'] or None),self.bootstrap['admin_guilds'],companion=self.companion)
+            self.client=EchoClient(self.settings,await self.create_backend(cfg),self.bootstrap['admin_guilds'],companion=self.companion)
             await self.client.backend.ready()
             if hasattr(self.client.backend,'probe'):await self.client.backend.probe()
             self.starting_model=False
@@ -639,7 +663,7 @@ class LocalController:
                     try:
                         self.last_jobs=client.runtime.monitor();self.last_statistics=client.runtime.ledger.statistics()
                     except (AttributeError,OSError,sqlite3.Error):pass
-                    try:atomic_private_json(ROOT/'desktop-performance.json',client.backend.metrics)
+                    try:atomic_private_json(self.data_root/'desktop-performance.json',client.backend.metrics)
                     except OSError:self.error='PerformanceWriteError'
             self.phase='정지'
             self._published_at=0;self._publish()

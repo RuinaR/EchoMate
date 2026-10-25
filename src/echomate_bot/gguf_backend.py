@@ -70,6 +70,7 @@ class GGUFEngine:
         self.root = private_path(root)
         self.context = context
         self.process = None
+        self.child_group = None
         self.session = None
         self.log = None
         self.watch = None
@@ -142,6 +143,8 @@ class GGUFEngine:
         self.log = (self.root/'engine.log').open('wb')
         try:
             self.process = subprocess.Popen(args, stdout=self.log, stderr=self.log, env=env, **background_options())
+            from .owned_child import OwnedChild
+            self.child_group = OwnedChild(self.process)
             self.session = aiohttp.ClientSession(trust_env=False,
                 connector=aiohttp.TCPConnector(force_close=True),
                 headers={'Authorization': 'Bearer '+key, 'Connection': 'close'},
@@ -307,13 +310,22 @@ class GGUFEngine:
         if self.watch and self.watch is not asyncio.current_task():
             self.watch.cancel()
             await asyncio.gather(self.watch, return_exceptions=True)
-        await self._stop_process()
-        if self.session:
-            await self.session.close()
-            self.session = None
-        if self.log:
-            self.log.close()
-            self.log = None
+        try:
+            await self._stop_process()
+        finally:
+            try:
+                if self.child_group is not None:
+                    self.child_group.close()
+                    self.child_group = None
+            finally:
+                try:
+                    if self.session:
+                        await self.session.close()
+                        self.session = None
+                finally:
+                    if self.log:
+                        self.log.close()
+                        self.log = None
         # Retain process reference for exit/reclamation evidence.
 
     async def reclaimed(self):

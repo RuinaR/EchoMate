@@ -36,7 +36,7 @@ def build(destination):
     (dest/'profiles').mkdir()
     if (root/'configs/character-default.json').exists():shutil.copy2(root/'configs/character-default.json',dest/'profiles/default.json')
     launcher='''Option Explicit
-Dim fs, sh, home, env
+Dim fs, sh, home, env, entry
 Set fs=CreateObject("Scripting.FileSystemObject")
 Set sh=CreateObject("WScript.Shell")
 home=fs.GetParentFolderName(WScript.ScriptFullName)
@@ -49,7 +49,9 @@ env("PYTHONPATH")=fs.BuildPath(home,"src")
 env("ECHOMATE_DISTRIBUTED")="1"
 env("HF_HUB_OFFLINE")="1"
 env("TRANSFORMERS_OFFLINE")="1"
-sh.Run Chr(34) & fs.BuildPath(home,"runtime\\pythonw.exe") & Chr(34) & " -m echomate_bot.desktop", 0, False
+entry="echomate_bot.lime_desktop"
+If WScript.Arguments.Named.Exists("legacy") Then entry="echomate_bot.desktop"
+sh.Run Chr(34) & fs.BuildPath(home,"runtime\\pythonw.exe") & Chr(34) & " -m " & entry, 0, False
 '''
     (dest/'EchoMate.vbs').write_text(launcher,encoding='ascii')
     shutil.copy2(root/'EchoMate-Check.vbs',dest/'EchoMate-Check.vbs')
@@ -80,6 +82,11 @@ def refresh(destination):
     launcher=dest/'EchoMate.vbs';text=launcher.read_text(encoding='ascii')
     if 'Arguments.Named.Exists' not in text:
         text=text.replace('sh.CurrentDirectory=home','If Not fs.FileExists(fs.BuildPath(home,"runtime\\pythonw.exe")) Then WScript.Quit 1\nIf WScript.Arguments.Named.Exists("check") Then WScript.Quit 0\nsh.CurrentDirectory=home')
+        launcher.write_text(text,encoding='ascii')
+    if 'echomate_bot.lime_desktop' not in text:
+        text=text.replace('Dim fs, sh, home, env','Dim fs, sh, home, env, entry')
+        text=text.replace('sh.Run Chr(34) & fs.BuildPath(home,"runtime\\pythonw.exe") & Chr(34) & " -m echomate_bot.desktop", 0, False',
+            'entry="echomate_bot.lime_desktop"\nIf WScript.Arguments.Named.Exists("legacy") Then entry="echomate_bot.desktop"\nsh.Run Chr(34) & fs.BuildPath(home,"runtime\\pythonw.exe") & Chr(34) & " -m " & entry, 0, False')
         launcher.write_text(text,encoding='ascii')
     if (root/'LICENSE').exists():shutil.copy2(root/'LICENSE',dest/'LICENSE')
     shutil.copy2(root/'EchoMate-Check.vbs',dest/'EchoMate-Check.vbs')
