@@ -1,5 +1,11 @@
 # 릴리즈 요구사항 추적표
 
+## 2026-10-26 읽기 실행 증거·정정·복합 결과
+
+검증 마감: 전체 **1,116개 OK329.956초**, Portable 자체 Python/src **220개 OK23.768초**, manifest21,613파일. 최종 DIRECT6송신/4무송신·자율 판단0. 운영6hash 일치·합성12DB 활성 예약0·final316 소비0. 자유 생성 고위험 실패 때문에 모든 모드 정식 READY/RELEASE는 BLOCKED, LOCAL 합성 시험만 가능하다. 장시간은 DEFERRED, 실제 Discord·다른 Windows·새 UI 시각 검증은 미실행이다. [상세 결과와 재개](READ-CORRECTION-QA.md).
+
+요청별 기억/알림 읽기의9상태·현재 Receipt를 LOCAL/Runtime에 연결했다. 사용자 정정은 생성용 출처 뷰와 저장 변경을 구분하며, 제한된 읽기+알림 복합 요청은 개별 결과/PARTIAL을 기록한다. 과거 취소 설명의 도움말 오차단 A/B1→0, 컵 정정 사례는 개선했지만 **자유 생성의 허위 목록 조회와 농담 속 공동 경험은 A/B 양쪽 실패**다. 세 모드 정식 READY와 RELEASE는 계속 BLOCKED다. 최종 실제 GPU DIRECT는6송신·4무송신·자율 판단0회. [구현·실제 대화27턴·한계·원문·재개](READ-CORRECTION-QA.md). 장시간은 **DEFERRED — USER REAL-WORLD TEST**, 실제 Discord는 승인 전 미실행이다.
+
 ## 2026-10-26 자유 생성 출처·조회·대화 의도 경계
 
 이전 실패 원문/동일 문맥 A/B와 도예·합창·책방·화분의 실제 Lime 능동 대화를 검증했다. 출처·조회 상태 계약과 명확한 상태 질문의 읽기 전용 응답을 추가하고, 실행 주장 논의/과거 조회를 실제 기능 요청으로 오인하던 라우터를 수정했다. 두 개발 오차단은2→0이지만 새 허위 목록 조회와 모호한 조회 설명·정정 누락은 남아 **고위험 사실성 FAIL·모든 모드 정식 READY BLOCKED**다. LOCAL 합성 시험/ DIRECT OFFLINE ONLY를 유지하며 최종 DIRECT 회귀는6송신·4무송신·자율 판단0회였다. [실제 변경·A/B·원문·문맥 비용·남은 한계](LIME-FACTUALITY-QA.md). 실제 Discord는 별도 승인 전 미실행, 장시간은 **DEFERRED — USER REAL-WORLD TEST**다.

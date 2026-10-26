@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 요청별 읽기·정정·결과 계약
+
+`read_evidence`는 기존 ReadReceipt/MemorySelection을 요청별 memory/reminders9상태로 관찰한다. LOCAL/Runtime의 제한된 명시 본인 읽기만 실제 조회하며 이전 모델/요약은 영수증이 아니다. `correction_context`는 DB가 아닌 생성용 원문 보존 뷰이며 저장 정정은 기존 권한 있는 명시 명령을 사용한다. 제한된 복합 읽기+알림은 작업별 결과와 PARTIAL을 기록하고 UNKNOWN 쓰기를 rollback 성공으로 말하지 않는다. 요약의 source_role/execution_verified는 서버 파생 출처다. 기존 네 계층·동의·최신성·단일 Worker를 재사용한다. [검증과 남은 의미 한계](READ-CORRECTION-QA.md).
+
 최신 사실성 경계: [출처·조회 상태·의도 및 실제 GPU QA](LIME-FACTUALITY-QA.md). 일반 자유 생성과 명확한 상태 응답을 구분하며 기존 고위험 FAIL/모드 차단은 유지한다.
 
 ## 모드별 준비 판정 — 현재 우선 계약

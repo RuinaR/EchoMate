@@ -61,14 +61,8 @@ def readonly_fragments(backend,text,lookup):
     return tuple(values)
 
 
-def execution_text(text,kind):
-    """Select one explicit reminder clause, preserving quoted payload bytes.
-
-    Memories still need the preceding factual statement. Multiple operation
-    clauses are kept whole for the existing validation, never partially run.
-    """
-    if kind!='reminder':return text
-    from .companion import request_kind
+def execution_clauses(text):
+    """Source views only; keep quoted payloads and the original event intact."""
     pattern=r'"[^"\n]*"|“[^”\n]*”|`[^`\n]*`|(?P<boundary>[?!]\s*|\.\s+|\s+(?:그리고|근데|그런데)\s+)'
     start=0;parts=[]
     for match in re.finditer(pattern,text):
@@ -76,6 +70,41 @@ def execution_text(text,kind):
         parts.append(text[start:match.start()].strip());start=match.end()
     parts.append(text[start:].strip())
     parts=[re.sub(r'^(?:그리고|근데|그런데)\s+','',p) for p in parts]
+    return tuple(parts)
+
+
+def composite_parts(text):
+    """Bounded read + one reminder composition, never multiple writes."""
+    from .read_evidence import read_question
+    from .companion import request_kind,request_plan
+    from .correction_context import correction_requested
+    clauses=execution_clauses(text)
+    if len(clauses)<2 or len(clauses)>6:return None
+    reads=[];writes=[];corrections=[]
+    for p in clauses:
+        question=read_question(p)
+        if question:
+            if question[0] is None:return None
+            reads.append((p,*question));continue
+        kind=request_kind(p)
+        if kind is not None:
+            intent=plan_intent(p,kind)
+            if intent.mode in (IntentMode.REQUEST,IntentMode.CLARIFY,IntentMode.PROHIBITED):
+                if kind!='reminder' or request_plan(p).action=='read':return None
+                writes.append(p)
+        if correction_requested(p):corrections.append(p)
+    if correction_requested(text) and not corrections:corrections=[text]
+    if len(writes)>1 or len({r[1] for r in reads})!=len(reads):return None
+    if writes and any(r[1]=='reminders' for r in reads):return None
+    if len(reads)+len(writes)<2 and not (corrections and writes):return None
+    return clauses,reads,writes,corrections
+
+
+def execution_text(text,kind):
+    """Select one explicit reminder clause, preserving quoted payload bytes."""
+    if kind!='reminder':return text
+    from .companion import request_kind
+    parts=execution_clauses(text)
     candidates=[p for p in parts if request_kind(p) is not None and plan_intent(p,request_kind(p)).mode==IntentMode.REQUEST]
     if len(candidates)==1:return candidates[0]
     return text
@@ -103,6 +132,8 @@ def plan_intent(text,kind):
         return IntentPlan(IntentMode.MENTION,kind,'execution_claim_discussion')
     if (reported or hypothetical) and not separate:
         return IntentPlan(IntentMode.MENTION,kind,'reported_or_hypothetical')
+    if composite_parts(text) is not None:
+        return IntentPlan(IntentMode.REQUEST,kind,'bounded_read_reminder_composition')
     from .companion import request_kind
     kinds={request_kind(part) for part in request_clauses(text)}-{None}
     requests=[part for part in request_clauses(text) if request_kind(part) is not None and re.search(imperative,part)]
@@ -116,10 +147,11 @@ def plan_intent(text,kind):
              for p in request_clauses(text))
     request=read or bool(re.search(imperative,current))
     # Legacy short controls are explicit commands even without a final 줘.
-    request=request or bool(re.search(r'(?:알림|예약).*(?:취소|늦춰|미뤄|연기|변경)',current))
+    request=request or any(re.search(r'(?:알림|예약).*(?:취소|늦춰|미뤄|연기|변경)(?:\s+[a-f0-9]{8,24})?$',p.rstrip('.!?。 '))
+                           for p in execution_clauses(current))
     if request:return IntentPlan(IntentMode.REQUEST,kind,'explicit_private_request')
     # An incomplete request is not permission to invent a time or payload.
-    if re.search(r'(?:알려|기억|예약|알림).*(?:줘|부탁|좋겠)',current):
+    if re.search(r'(?:알림|예약)(?:을|를|도|좀)?\s*(?:부탁|해\s*줘)[.!? ]*$',current):
         return IntentPlan(IntentMode.CLARIFY,kind,'incomplete_private_request')
     return IntentPlan(IntentMode.MENTION,kind,'feature_mention_only')
 

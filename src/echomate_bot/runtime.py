@@ -1372,7 +1372,7 @@ class Runtime:
                 if getattr(trace,'decision',None) is None:trace.decision={}
                 trace.decision['intent']=dict(version=intent.version,mode=intent.mode.value,kind=intent.kind,reason=intent.reason)
             command_answer=None;summary_guard=None;summary_id=None;memory_guard=None;generation_guard=None
-            operation_receipts=[];subject_guard=None;subject_snapshot=None;dependency_stale=False;memory_selection=None;selection_guard=None
+            operation_receipts=[];operation_outcomes=[];subject_guard=None;subject_snapshot=None;dependency_stale=False;memory_selection=None;selection_guard=None
             memory_lookup_state='not_requested'
             if self.companion:
                 try:
@@ -1414,7 +1414,7 @@ class Runtime:
                 if intent.mode==IntentMode.REQUEST:
                     try:
                         _,recent=state.snapshot(channel_id=event.channel,thread_id=None)
-                        command_answer=await asyncio.to_thread(handle_request,self.companion,event,cfg,self.transport.bot_id,recent=recent,receipts=operation_receipts)
+                        command_answer=await asyncio.to_thread(handle_request,self.companion,event,cfg,self.transport.bot_id,recent=recent,receipts=operation_receipts,outcomes=operation_outcomes)
                     except asyncio.CancelledError:
                         await asyncio.shield(asyncio.to_thread(self.companion.delete_source,event.guild,event.id));raise
                     except (OSError,RuntimeError,ValueError,sqlite3.Error):
@@ -1456,6 +1456,34 @@ class Runtime:
                             from .companion import OperationPlan
                             failed_read=operation_failure(OperationPlan('memory','read'))
                             command_answer=(command_answer+'\n'+failed_read) if command_answer else failed_read
+            from .read_evidence import ReadEvidence,ReadState,memory_evidence,receipt_reads,read_question,execute_read,read_answer
+            reads={kind:ReadEvidence(kind) for kind in ('memory','reminders')}
+            reads['memory']=memory_evidence(memory_lookup_state,memory_selection)
+            reads.update(receipt_reads(operation_receipts))
+            from .read_evidence import apply_read_outcomes
+            reads=apply_read_outcomes(reads,operation_outcomes)
+            inquiry=read_question(event.content)
+            if command_answer is None and inquiry is not None and self.companion and speech_eligible and (direct or continuing):
+                family,mode=inquiry
+                if mode=='history':
+                    from .read_evidence import unverified_read_reference
+                    command_answer=unverified_read_reference()
+                if mode=='read':
+                    reads[family]=ReadEvidence(family,ReadState.PENDING)
+                    if str(event.id) in self.job_records:self.job_records[str(event.id)]['reads']={k:r.public() for k,r in reads.items()}
+                    try:
+                        reads[family]=await asyncio.to_thread(execute_read,self.companion,event,family,cfg)
+                        if reads[family].receipt is not None:operation_receipts.append(reads[family].receipt)
+                    except asyncio.CancelledError:
+                        reads[family]=ReadEvidence(family,ReadState.CANCELLED)
+                        if str(event.id) in self.job_records:self.job_records[str(event.id)]['reads']={k:r.public() for k,r in reads.items()}
+                        raise
+                    except (OSError,RuntimeError,sqlite3.Error):reads[family]=ReadEvidence(family,ReadState.FAILED)
+                    operation_outcomes.append(dict(operation=family+'_read',state=reads[family].state.value,source=str(event.id)))
+                if family is not None:command_answer=read_answer(reads[family])
+            cfg['_read_evidence']={k:r.public() for k,r in reads.items()}
+            if str(event.id) in self.job_records:self.job_records[str(event.id)]['reads']=cfg['_read_evidence']
+            if str(event.id) in self.job_records:self.job_records[str(event.id)]['outcomes']=operation_outcomes
             if command_answer is not None and intent.mode==IntentMode.REQUEST:
                 # Execution and read-only name/memory questions are independent.
                 # Preserve the committed receipt response; never re-author it.
@@ -1575,6 +1603,7 @@ class Runtime:
                 adult_for_turn=profile['_adult_active']
                 character=effective_character(profile,event.content);character['_selected_action']=action.kind.value
                 character['_current_utterance']=event.content
+                character['_read_evidence']=cfg['_read_evidence']
                 character['_operation_evidence']=dict(status='SUCCESS' if operation_receipts else 'NOT_EXECUTED',
                     receipt_kinds=[r.kind for r in operation_receipts],
                     meaning='Current request only; not a query of all existing memories or reminders')

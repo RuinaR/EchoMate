@@ -43,6 +43,7 @@ class LocalChat:
         self.epoch = 0
         self.lock = asyncio.Lock()
         self.last = {}
+        self.active_reads = {}
         self.operations = []
         self.scope = (2, 3, 4)
         self.notification_service_failed=False
@@ -61,7 +62,7 @@ class LocalChat:
     def snapshot(self):
         return dict(rows=[dict(r) for r in self.rows[-200:]], partial=self.partial,
                     status=self.status, last=dict(self.last), scope=self.scope,
-                    mode='LOCAL_CHAT', synthetic=True,notification_service='FAILED' if self.notification_service_failed else 'RUNNING')
+                    mode='LOCAL_CHAT', synthetic=True,read_execution={k:r.public() for k,r in self.active_reads.items()} if self.status=='generating' else self.last.get('reads',{}),notification_service='FAILED' if self.notification_service_failed else 'RUNNING')
 
     def reset(self):
         self.epoch += 1
@@ -177,7 +178,7 @@ class LocalChat:
             return '로컬 테스트의 기억 조회·저장·수정·삭제는 /기억 명령을 사용해. 저장에는 본인의 /동의 기억 켜기가 먼저 필요해. 이번 응답으로 기억을 변경하지 않았어.'
         return None
 
-    def command(self,text,scope):
+    def command(self,text,scope,outcomes=None):
         """Explicit local-only grammar; quotes/proposals are not tool calls."""
         g,ch,u=scope
         self.touch()
@@ -208,18 +209,20 @@ class LocalChat:
             if not receipt.current(self.store):raise RuntimeError('Memory changed')
             self.epoch+=1;self.clear_subject_context(scope)
             return '테스트 기억을 정정했어.',[receipt],'SUCCESS'
-        if text.startswith('/기억 저장 '):body='기억해 줘 '+text[len('/기억 저장 '):]
+        if text.startswith('/작업 '):body=text[len('/작업 '):]
+        elif text.startswith('/기억 저장 '):body='기억해 줘 '+text[len('/기억 저장 '):]
         elif text=='/기억 목록':body='내 기억 목록 보여줘'
         elif text=='/기억 삭제':body='내 기억 삭제해 줘'
         elif text.startswith('/알림 '):body='알림 '+text[len('/알림 '):]
         if body is None:
             return ('로컬 명령: /동의 기억|관계 켜기|끄기, /기억 저장 내용, /기억 목록, /기억 정정 앞8자리 내용, /기억 삭제, '
-                    '/친밀도 0~100, /알림 10분 후 물 마시라고 알려줘, /알림 목록, /알림 취소 번호'), [], 'NOT_EXECUTED'
+                    '/친밀도 0~100, /알림 10분 후 물 마시라고 알려줘, /알림 목록, /알림 취소 번호, '
+                    '/작업 명확한 조회와 알림 요청'), [], 'NOT_EXECUTED'
         receipts=[]
         event=Event(int(time.time_ns()),g,ch,u,body,datetime.now(timezone.utc),conversation_id='local')
         cfg=deepcopy(DEFAULTS);cfg['guilds']={str(g):dict(timezone='Asia/Seoul')}
         try:
-            result=handle_request(self.store,event,cfg,999,receipts=receipts)
+            result=handle_request(self.store,event,cfg,999,receipts=receipts,outcomes=outcomes)
         except (OSError,RuntimeError,ValueError,sqlite3.Error):
             return operation_failure(request_plan(body)), [], 'FAILED'
         if not all(r.current(self.store) for r in receipts):
@@ -230,7 +233,8 @@ class LocalChat:
         self.epoch+=1
         # No stale facts from a pre-delete/correction prompt are re-used.
         self.clear_subject_context(scope)
-        return result or '실행할 기능을 확인하지 못했어.', receipts, 'SUCCESS' if receipts else 'NOT_EXECUTED'
+        from .companion import outcome_state
+        return result or '실행할 기능을 확인하지 못했어.', receipts, outcome_state(outcomes) if outcomes else 'SUCCESS' if receipts else 'NOT_EXECUTED'
 
     async def send(self,text,backend,*,scope=(2,3,4)):
         self.validate_scope(scope)
@@ -243,14 +247,22 @@ class LocalChat:
             started=time.monotonic();self.rows.append(dict(role='user',text=text,scope=list(scope)))
             self.rows=self.rows[-200:]
             state='not_requested';operation='NOT_REQUESTED'
+            from .read_evidence import ReadEvidence,ReadState,memory_evidence,receipt_reads,read_question,execute_read,read_answer
+            reads={kind:ReadEvidence(kind) for kind in ('memory','reminders')}
+            self.active_reads=reads
             backend_invoked=False
             metrics=getattr(backend,'metrics',())
             previous_metric=metrics[-1] if metrics else None
             a=stream_observer.set(self.stream);b=local_token_budget.set(True)
             try:
                 receipts=[]
+                outcomes=[]
                 if text.startswith('/'):
-                    worker=asyncio.create_task(asyncio.to_thread(self.command,text,scope))
+                    from .intent_router import composite_parts
+                    planned=composite_parts(text[len('/작업 '):]) if text.startswith('/작업 ') else None
+                    families=[p[1] for p in planned[1] if p[2]=='read'] if planned else ['memory'] if text=='/기억 목록' else ['reminders'] if text=='/알림 목록' else []
+                    for family in families:reads[family]=ReadEvidence(family,ReadState.PENDING)
+                    worker=asyncio.create_task(asyncio.to_thread(self.command,text,scope,outcomes))
                     try:answer,receipts,operation=await asyncio.shield(worker)
                     except asyncio.CancelledError:
                         # A cancelled Future is not a rolled-back transaction.
@@ -263,6 +275,10 @@ class LocalChat:
                     self.operations.append(dict(scope=tuple(scope),command=text.split()[0],state=operation,receipts=receipts))
                     self.operations=self.operations[-20:]
                     state='not_requested'
+                    reads.update(receipt_reads(receipts))
+                    from .read_evidence import apply_read_outcomes
+                    reads=apply_read_outcomes(reads,outcomes)
+                    self.active_reads=reads
                     if text in ('/기억 목록','/알림 목록'):
                         state=('failed' if operation=='FAILED' else
                                'found' if receipts and any(r.values for r in receipts) else
@@ -270,12 +286,16 @@ class LocalChat:
                     try:before=await asyncio.to_thread(self.store.subject_snapshot,g,u,relationship=True)
                     except (OSError,RuntimeError,sqlite3.Error):before={'memory':(None,0),'relationships':(None,0)}
                     read=None;epoch=self.epoch
+                    if text.startswith('/작업 '):
+                        self.histories[tuple(scope)]=[dict(role='user',content=text),dict(role='assistant',content=answer)]
+                        self.history_signatures[tuple(scope)]=await asyncio.to_thread(self.state_signature,scope)
                 else:
                     operation='NOT_REQUESTED'
                     g,ch,u=scope
                     before=await asyncio.to_thread(self.store.subject_snapshot,g,u,relationship=True)
                     state='not_authorized';memories=[];read=None
                     if before['memory'][0]:
+                        reads['memory']=ReadEvidence('memory',ReadState.PENDING)
                         try:
                             memories=await asyncio.to_thread(self.store.memories,g,u,ch,"",conversation_id="local",allow_user_archive=True)
                             memories=memories[:3];state='found' if memories else 'empty'
@@ -283,6 +303,7 @@ class LocalChat:
                             read=MemorySelection(g,u,ch,'','local',True,read_values('memory',memories),before['memory'][1],'lime')
                         except (OSError,RuntimeError,sqlite3.Error):
                             state='failed'
+                    reads['memory']=memory_evidence(state,read)
                     epoch=self.epoch
                     confirmed=[]
                     for item in self.operations:
@@ -292,7 +313,25 @@ class LocalChat:
                     signature=await asyncio.to_thread(self.state_signature,scope)
                     history=self.histories.get(tuple(scope),[])
                     if self.history_signatures.get(tuple(scope))!=signature:history=[]
-                    if state=='failed':
+                    inquiry=read_question(text)
+                    if inquiry is not None:
+                        family,mode=inquiry
+                        if mode=='history':
+                            from .read_evidence import unverified_read_reference
+                            answer=unverified_read_reference()
+                        if mode=='read':
+                            reads[family]=ReadEvidence(family,ReadState.PENDING)
+                            try:
+                                event=Event(1,g,ch,u,text,datetime.now(timezone.utc))
+                                reads[family]=await asyncio.to_thread(execute_read,self.store,event,family,DEFAULTS)
+                                if reads[family].receipt is not None:receipts.append(reads[family].receipt)
+                            except (OSError,RuntimeError,sqlite3.Error):reads[family]=ReadEvidence(family,ReadState.FAILED)
+                            outcomes.append(dict(operation=family+'_read',state=reads[family].state.value))
+                            operation=('SUCCESS' if reads[family].state.value.startswith('SUCCESS') else
+                                       'FAILED' if reads[family].state==ReadState.FAILED else
+                                       'UNKNOWN' if reads[family].state==ReadState.STALE else 'NOT_EXECUTED')
+                        if family is not None:answer=read_answer(reads[family])
+                    elif state=='failed':
                         answer='기억 조회에 실패했어. 자료가 없다는 뜻은 아니야. 지금은 확인할 수 없어.'
                     elif (status_answer:=lookup_state_answer(text,state)) is not None:
                         answer=status_answer
@@ -301,6 +340,7 @@ class LocalChat:
                         answer='\n'.join((*readonly_fragments(backend,text,state),help_answer))
                     else:
                         cfg=deepcopy(DEFAULTS);cfg['_memory_lookup_state']=state
+                        cfg['_read_evidence']={k:r.public() for k,r in reads.items()}
                         cfg['_familiarity']=before.get('familiarity')
                         facts=dict(mode='LOCAL_CHAT',user='A' if u==4 else 'B',channel=ch,
                                    memory_lookup=state,verified_memories=[m['summary'] for m in memories],
@@ -325,11 +365,16 @@ class LocalChat:
                 if not all(r['current'] for r in checks):
                     answer='실행 상태를 다시 확인하지 못했어. 완료되었다고 확정할 수 없어.'
                     operation='UNKNOWN'
+                    for check in checks:
+                        if not check['current'] and check.get('kind') in reads:
+                            family=check['kind'];reads[family]=ReadEvidence(family,ReadState.STALE)
                 self.rows.append(dict(role='assistant',text=answer,scope=list(scope)))
                 self.rows=self.rows[-200:]
                 metrics=getattr(backend,'metrics',())
                 generated=bool(metrics and metrics[-1] is not previous_metric)
                 self.last=dict(seconds=time.monotonic()-started,lookup=state,
+                    outcomes=list(outcomes),
+                    reads={k:r.public() for k,r in reads.items()},
                     response_origin='model' if generated else 'backend' if backend_invoked else 'runtime',
                     receipts=checks,
                     operation_state=operation,
@@ -339,8 +384,9 @@ class LocalChat:
                 self.status='idle'
                 return answer
             except asyncio.CancelledError:
+                reads={k:ReadEvidence(k,ReadState.CANCELLED) if r.state==ReadState.PENDING else r for k,r in reads.items()}
                 self.status='cancelled';self.last={'operation_state':'UNKNOWN' if text.startswith('/') else 'NOT_REQUESTED',
-                                                 'response_state':'CANCELLED','lookup':state};raise
+                                                 'response_state':'CANCELLED','lookup':state,'reads':{k:r.public() for k,r in reads.items()}};raise
             except BaseException:
                 self.histories.pop(tuple(scope),None)
                 self.status='failed';self.last={'operation_state':'UNKNOWN' if text.startswith('/') else 'NOT_REQUESTED',

@@ -1,5 +1,11 @@
 # Lime 자유 생성 사실성 QA — 2026-10-26
 
+## 2026-10-26 읽기 실행 증거·정정·복합 결과
+
+검증 마감: 전체 **1,116개 OK329.956초**, Portable 자체 Python/src **220개 OK23.768초**, manifest21,613파일. 최종 DIRECT6송신/4무송신·자율 판단0. 운영6hash 일치·합성12DB 활성 예약0·final316 소비0. 자유 생성 고위험 실패 때문에 모든 모드 정식 READY/RELEASE는 BLOCKED, LOCAL 합성 시험만 가능하다. 장시간은 DEFERRED, 실제 Discord·다른 Windows·새 UI 시각 검증은 미실행이다. [상세 결과와 재개](READ-CORRECTION-QA.md).
+
+요청별 기억/알림 읽기의9상태·현재 Receipt를 LOCAL/Runtime에 연결했다. 사용자 정정은 생성용 출처 뷰와 저장 변경을 구분하며, 제한된 읽기+알림 복합 요청은 개별 결과/PARTIAL을 기록한다. 과거 취소 설명의 도움말 오차단 A/B1→0, 컵 정정 사례는 개선했지만 **자유 생성의 허위 목록 조회와 농담 속 공동 경험은 A/B 양쪽 실패**다. 세 모드 정식 READY와 RELEASE는 계속 BLOCKED다. 최종 실제 GPU DIRECT는6송신·4무송신·자율 판단0회. [구현·실제 대화27턴·한계·원문·재개](READ-CORRECTION-QA.md). 장시간은 **DEFERRED — USER REAL-WORLD TEST**, 실제 Discord는 승인 전 미실행이다.
+
 시작 HEAD `72cad88`의 로컬/원격 main 일치·clean을 확인했다. 범위는 근거 구분·조회 상태·기능 의도와 일반 대화의 간섭이며 학습/새 모델/운영 설정 변경은 없다. **세 모드의 기존 READY 차단과 고위험 사실성 FAIL을 유지한다.**
 
 ## 실제 실패 원인과 수정

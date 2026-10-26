@@ -25,11 +25,16 @@ def validated_digest(raw,turns):
         check_fidelity(item['text'],evidence,source.content)
         # Store a paraphrase + source ID, not copied evidence/transcripts.
         item.pop('evidence');item['source']=source.message_id
+        # Role is application-authored provenance, never model-supplied proof.
+        item['source_role']='PRIOR_MODEL_RESPONSE' if source.is_bot else 'UNVERIFIED_USER_CLAIM'
+        item['execution_verified']=False
     return data
 
 def render_digest(body):
     labels={'topic':'주제','question':'질문','answer':'당시 답변','correction':'정정','decision':'결정','plan':'계획','open_question':'미해결','ending':'종료'}
-    return '\n'.join(labels[i['kind']]+' (출처 '+str(i['source'])+', 모델 요약·미검증): '+i['text'] for i in body['items'])
+    return '\n'.join(labels[i['kind']]+' (출처 '+str(i['source'])+', '+
+        (i.get('source_role') if i.get('source_role') in ('PRIOR_MODEL_RESPONSE','UNVERIFIED_USER_CLAIM') else 'LEGACY_UNVERIFIED_SOURCE')+
+        ', 모델 요약·실행 근거 아님): '+i['text'] for i in body['items'])
 
 class Summarizer:
     def __init__(self,store,backend):self.store=store;self.backend=backend;self.last_guard=None;self.last_digest=None

@@ -12,6 +12,9 @@ def request_kind(text):
     if explicit_code_request(text):return None
     if re.search(r'대화.*요약|요약.*대화',text):return 'summary'
     timed=bool(re.search(r'(?:\d+|한|두|세|네|반)\s*(?:분|시간|일)\s*(?:후|뒤|있다가|더|전)|\d+\s*시(?!간)',text))
+    from .intent_router import execution_clauses
+    if any(re.fullmatch(r'(?:오늘|내일|모레)\s+[^?!\n]{0,80}라고\s*알려\s*(?:줘|주세요|줄래)[.!? ]*',p)
+           for p in execution_clauses(text)):return 'reminder'
     if re.search(r'(?:오늘|내일|모레|나중에|다음에)\s*(?:알려|불러|깨워)\s*(?:줘|주세요|줄래)',text):return 'reminder'
     if re.search(r'알림|불러\s*줘|깨워\s*줘',text) or timed and re.search(r'알려\s*줘|라고\s*해\s*줘|늦춰|미뤄|취소',text):return 'reminder'
     if re.search(r'(?:내|나의).*(?:기억|정보).*(?:삭제|지워|잊어|목록|보여)|기억해\s*줘',text):return 'memory'
@@ -43,7 +46,63 @@ def operation_failure(plan):
     return '처리를 완료하지 못했어. 저장되거나 예약됐다고 확인할 수 없어. 앱의 기억·알림 상태를 확인해 줘.'
 
 
-def handle_request(store,event,cfg,bot_id,*,recent=None,receipts=None):
+def handle_request(store,event,cfg,bot_id,*,recent=None,receipts=None,outcomes=None):
+    from .intent_router import composite_parts
+    parts=composite_parts(event.content)
+    if parts is not None:return _composite_request(store,event,cfg,bot_id,parts,receipts,outcomes)
+    return _handle_single(store,event,cfg,bot_id,recent=recent,receipts=receipts)
+
+
+def _composite_request(store,event,cfg,bot_id,parts,receipts,outcomes):
+    """Independently confirmed results. Not an atomic multi-write transaction."""
+    from dataclasses import replace
+    import sqlite3
+    from .read_evidence import ReadEvidence,ReadState,execute_read,read_answer
+    from .intent_router import plan_intent,IntentMode
+    clauses,reads,writes,corrections=parts
+    rows=[];answers=[]
+    for clause,family,mode in reads:
+        record=ReadEvidence(family)
+        if mode=='read':
+            try:record=execute_read(store,event,family,cfg)
+            except (OSError,RuntimeError,sqlite3.Error):record=ReadEvidence(family,ReadState.FAILED)
+        if record.receipt is not None and receipts is not None:receipts.append(record.receipt)
+        rows.append(dict(operation=family+'_read',state=record.state.value,source=str(event.id)))
+        answers.append(read_answer(record))
+    if corrections:
+        rows.append(dict(operation='conversation_correction',state='NOT_EXECUTED',source=str(event.id)))
+        answers.append('대화 정정은 현재 발언을 기준으로 참고할게. 이 정정만으로 저장된 기억을 수정하지 않았어.')
+    for clause in writes:
+        observed=[];intent=plan_intent(clause,'reminder')
+        try:
+            answer=_handle_single(store,replace(event,content=clause),cfg,bot_id,receipts=observed)
+            valid=bool(observed) and all(r.current(store) for r in observed)
+            state=('SUCCESS' if valid else 'STALE' if observed else 'NOT_EXECUTED' if intent.mode==IntentMode.PROHIBITED else
+                   'NEEDS_INFORMATION' if intent.mode==IntentMode.CLARIFY or not parse_when(clause,event.timestamp,
+                        cfg['guilds'].get(str(event.guild),{}).get('timezone','Asia/Seoul'),exact=True).start else 'NOT_EXECUTED')
+            if observed and not valid:answer='알림 실행 뒤 근거가 바뀌어 현재 완료 상태를 확인할 수 없어.'
+        except (OSError,RuntimeError,ValueError,sqlite3.Error):
+            state='UNKNOWN';answer=operation_failure(request_plan(clause))
+        if receipts is not None:receipts.extend(observed)
+        rows.append(dict(operation='reminder_action',state=state,source=str(event.id)))
+        answers.append('알림 요청: '+(answer or '실행하지 않았어.'))
+    handled={r[0] for r in reads}|set(writes)|set(corrections)
+    if any(p not in handled for p in clauses):
+        rows.append(dict(operation='conversation_context',state='NOT_EXECUTED',source=str(event.id)))
+        answers.append('함께 나온 일반 대화 부분은 별도의 자유 응답으로 생성하지 않았어.')
+    if outcomes is not None:outcomes.extend(rows)
+    return '\n'.join(answers)
+
+
+def outcome_state(rows):
+    actions=[r['state'] for r in rows if r['operation']!='conversation_correction']
+    if not actions:return 'NOT_EXECUTED'
+    success=[s.startswith('SUCCESS') for s in actions]
+    if any(success):return 'SUCCESS' if all(success) else 'PARTIAL'
+    return 'UNKNOWN' if 'UNKNOWN' in actions else 'FAILED' if 'FAILED' in actions else 'NOT_EXECUTED'
+
+
+def _handle_single(store,event,cfg,bot_id,*,recent=None,receipts=None):
     text=re.sub(r'<@!?'+str(bot_id)+r'>','',event.content).strip()
     kind=request_kind(text)
     if not kind:return None
