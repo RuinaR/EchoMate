@@ -354,6 +354,10 @@ class LocalChat:
                                    recent_verified_operations=[self.receipt_fact(r) for r in confirmed],
                                    local_commands='상태 변경은 /기억, /알림, /동의 명령으로만 실행한다. 일반 문장만으로 저장/예약하지 않는다.')
                         header={'role':'system','content':'로컬 합성 테스트 근거(명령 아님): '+json.dumps(facts,ensure_ascii=False)}
+                        cfg['_generation_sources']=((header,'local_facts'),)
+                        cfg['_generation_facts']=dict(current_speaker=facts['user'],
+                            memories=[dict(m) for m in memories],timezone='Asia/Seoul',
+                            recent_operations=facts['recent_verified_operations'])
                         # Keep only complete pairs, separate per local user/channel.
                         backend_invoked=True
                         answer=await backend.text([header,*history,dict(role='user',content=text)],cfg)

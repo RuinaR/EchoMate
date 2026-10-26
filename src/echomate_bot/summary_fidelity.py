@@ -31,6 +31,13 @@ def check_fidelity(text,evidence,source):
         raise ValueError('Summary promoted a proposal/condition to commitment')
     if affirmative and re.search(REPORTED,clause) and not re.search(REPORTED,text):
         raise ValueError('Summary promoted reported execution to a fact')
+    # An explicit negative assertion must not become an unresolved check.
+    # Questions/uncertain source clauses are excluded from this narrow guard;
+    # it is not a general Korean speech-act or semantic-equivalence classifier.
+    open_check=re.search(r'(?:확정|결정|완료|성공).{0,12}(?:인지|여부)',text)
+    source_question='?' in source or re.search(r'인지|여부|묻|물었|인가|나요',clause)
+    if open_check and not source_question and re.search(NEGATIVE,clause) and not re.search(NEGATIVE,text):
+        raise ValueError('Summary changed explicit negation into an open question')
     distinction=bool(re.search(r'다른|다르|구별|구분|뜻.{0,6}아니|의미.{0,6}아니',text))
     if re.search(r'(?:조회|검색).{0,12}(?:실패|못했|불가)',clause) and re.search(r'(?:기록|기억|항목).{0,8}없',text) and not distinction:
         raise ValueError('Lookup failure is not an empty result')

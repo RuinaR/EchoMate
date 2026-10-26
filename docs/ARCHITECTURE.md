@@ -1,5 +1,10 @@
 # 아키텍처
 
+## 생성용 문맥의 읽기 전용 컴파일
+
+`generation_context.compile_context`는 GGUF 자유 생성 직전에 현재 이름/발화자·허용된 기억/읽기/영수증을 선택 투영한다. Router/Intent/권한·DB·송신 guard는 기존 경로를 재사용한다. caller가 소유한 carrier 객체만 대체하며 모델/요약/인용은 실행 증거가 아니다. LOCAL 긴 회상은 짧은 사용자 원문 전체만 보존하고 native 토큰 예산을 유지한다. 요약 의미 검사 실패는 기존 원문 fallback을 따른다. [실제 GPU/한계/구성 비용](CONTEXT-COMPILER-QA.md).
+
+
 ## 검증된 예약 문맥의 정보 보존
 
 LOCAL 최근 작업은 기존 scope/current 검사를 통과한 Receipt의 요청 text 최대120자·잘림 표시·due_at/timezone을 보존한다. 성공 라벨만으로 내용을 대체하지 않으며 취소 시 저장소의 text 삭제를 되돌리지 않는다. 권한/Router/DB/송신 guard는 변경하지 않았다. 일반 검증 설명의 전역 추가는 채택하지 않았다. [실제 원인 A/B와 한계](LIME-CONTEXT-DIAGNOSIS-QA.md).

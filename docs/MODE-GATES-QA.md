@@ -1,5 +1,12 @@
 # 모드별 위험 기반 릴리즈 QA — 2026-10-26
 
+## 2026-10-26 선택적 Context Compiler·실제 Lime 검증
+
+2026-10-27 마감: 최종 전체 **1,136개 OK327.930초**, Portable 자체 Python/src **240개 OK23.994초**. 운영6hash 동일·final316 소비0. manifest21,616파일의 최종 전체 감사/공개 diff는 비공개 체크포인트에 연결한다.
+
+시작 `a52aea6`. 생성용 문맥에서 caller 소유 carrier만 대체하고 VERIFIED/REPORTED/GENERATED를 분리했다. 관련 없는 조회/기능 묶음은 수다에서 제외하고 실제 성공 도메인에만 성공 설명을 붙인다. 초기 두 후보는 긍정 조회 회귀/허위 조회 재발로 기각했다. 최종10사례에서 미조회·실패 설명 개선과 정상 수다 보존을 확인했으나, 새 능동26턴(모델19/Runtime7)의 없는 취향·인용 발화자 오류가 남아 **모든 모드 정식 READY/RELEASE BLOCKED**다. 요약의 부정→열린 확인 변형은 실제 GPU 출력 replay에서 거절·원문 복귀하도록 보완했다. DIRECT 실제 GPU→SDK mock6송신/4무송신·자율0을 유지한다. 장시간 **DEFERRED — USER REAL-WORLD TEST**, 실제 Discord 승인 전 미실행. [토큰 비용·기각/채택·원문 위치·한계·재개](CONTEXT-COMPILER-QA.md).
+
+
 ## 2026-10-26 문맥 원인 진단·모델 유지 판단
 
 검증 마감: 전체 **1,120개 OK321.005초**, Portable 자체 Python/src **224개 OK23.037초**, manifest21,614파일. Lime13턴 능동 대화/14사례3조건+추가 사실 확인2개, Qwen14응답 제한 비교 완료. 최종 DIRECT6송신·4무송신·자율0, 운영6hash/원본Lime 동일·합성25DB 활성 예약0·final316 소비0. 원문/판정 한계/재개는 [문맥 진단 QA](LIME-CONTEXT-DIAGNOSIS-QA.md)와 비공개 `local_data/model-causality-20261026/final-checkpoint.json`을 따른다. RELEASE BLOCKED·실제 Discord 승인 전 미실행·장시간 DEFERRED 유지.
