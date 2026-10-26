@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 검증된 예약 문맥의 정보 보존
+
+LOCAL 최근 작업은 기존 scope/current 검사를 통과한 Receipt의 요청 text 최대120자·잘림 표시·due_at/timezone을 보존한다. 성공 라벨만으로 내용을 대체하지 않으며 취소 시 저장소의 text 삭제를 되돌리지 않는다. 권한/Router/DB/송신 guard는 변경하지 않았다. 일반 검증 설명의 전역 추가는 채택하지 않았다. [실제 원인 A/B와 한계](LIME-CONTEXT-DIAGNOSIS-QA.md).
+
 ## 요청별 읽기·정정·결과 계약
 
 `read_evidence`는 기존 ReadReceipt/MemorySelection을 요청별 memory/reminders9상태로 관찰한다. LOCAL/Runtime의 제한된 명시 본인 읽기만 실제 조회하며 이전 모델/요약은 영수증이 아니다. `correction_context`는 DB가 아닌 생성용 원문 보존 뷰이며 저장 정정은 기존 권한 있는 명시 명령을 사용한다. 제한된 복합 읽기+알림은 작업별 결과와 PARTIAL을 기록하고 UNKNOWN 쓰기를 rollback 성공으로 말하지 않는다. 요약의 source_role/execution_verified는 서버 파생 출처다. 기존 네 계층·동의·최신성·단일 Worker를 재사용한다. [검증과 남은 의미 한계](READ-CORRECTION-QA.md).

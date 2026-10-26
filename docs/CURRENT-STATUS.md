@@ -1,5 +1,11 @@
 # 현재 상태
 
+## 2026-10-26 문맥 원인 진단·모델 유지 판단
+
+검증 마감: 전체 **1,120개 OK321.005초**, Portable 자체 Python/src **224개 OK23.037초**, manifest21,614파일. Lime13턴 능동 대화/14사례3조건+추가 사실 확인2개, Qwen14응답 제한 비교 완료. 최종 DIRECT6송신·4무송신·자율0, 운영6hash/원본Lime 동일·합성25DB 활성 예약0·final316 소비0. 원문/판정 한계/재개는 [문맥 진단 QA](LIME-CONTEXT-DIAGNOSIS-QA.md)와 비공개 `local_data/model-causality-20261026/final-checkpoint.json`을 따른다. RELEASE BLOCKED·실제 Discord 승인 전 미실행·장시간 DEFERRED 유지.
+
+동일 Lime의 최소 문맥/현재 생성 문맥/명시 검증 결과를14개 개발 사례에서 비교하고 제한 기능 D4개·실제 제품 경로를 분리했다. 미조회·실패를 잘못 설명하는 문맥 효과가 있었지만 C도 새 추가 확인에서 기록 부재를 잘못 단정했다. **일반 C 덧붙이기는 채택하지 않았다.** 실제 예약 영수증의 내용/시각 손실만 좁게 수정해 기존/새 사례2개 A/B와 실제 최종 소스에서 확인했다. 능동13턴·DIRECT6송신/4무송신·자율0 유지. 초기 Qwen 비교는 commit 부족으로 보류했으나 이후 집계 여유 증가·동일 기준 통과 뒤7사례 A/C·14응답을 비교했다. Qwen도 허위 조회/꽃 선택·조회 실패 원인 혼동을 보여 교체하지 않았다. 결론은 **현재 구성에서 Lime 기본유지 합리적·Runtime 문맥 개선 필요·전체 모델 순위는 판단 유보**, 모든 모드 정식 READY/RELEASE BLOCKED다. [프로토콜·해석 교란·실제 수정·원문·재개](LIME-CONTEXT-DIAGNOSIS-QA.md). 장시간 DEFERRED·실제 Discord 승인 전 미실행 유지.
+
 ## 2026-10-26 읽기 실행 증거·정정·복합 결과
 
 검증 마감: 전체 **1,116개 OK329.956초**, Portable 자체 Python/src **220개 OK23.768초**, manifest21,613파일. 최종 DIRECT6송신/4무송신·자율 판단0. 운영6hash 일치·합성12DB 활성 예약0·final316 소비0. 자유 생성 고위험 실패 때문에 모든 모드 정식 READY/RELEASE는 BLOCKED, LOCAL 합성 시험만 가능하다. 장시간은 DEFERRED, 실제 Discord·다른 Windows·새 UI 시각 검증은 미실행이다. [상세 결과와 재개](READ-CORRECTION-QA.md).

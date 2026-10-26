@@ -1,5 +1,7 @@
 # EchoMate
 
+최근 진단: [Lime 문맥·모델 유지 판단 QA](docs/LIME-CONTEXT-DIAGNOSIS-QA.md). 문맥 조건에 따른 사실성 차이를 검증하고 실제 예약 영수증의 내용 손실을 수정했습니다. 기존 Qwen 제한 비교에서도 교체 근거가 없어 Lime 기본값을 유지하며, **RELEASE BLOCKED**는 유지합니다.
+
 최근 구현: [읽기 실행 증거·정정·복합 요청 QA](docs/READ-CORRECTION-QA.md). 실제 읽기 영수증·부분 결과를 구분하고 정상 취소 설명의 오차단을 줄였습니다. 자유 생성의 허위 조회·공동 경험이 남아 **RELEASE BLOCKED**입니다.
 
 최근 개발: [Lime 사실성·조회 상태 QA](docs/LIME-FACTUALITY-QA.md). 기능 요청과 일반 대화의 간섭을 줄였지만 자유 생성의 무근거 조회 발언은 남아 있습니다. **RELEASE BLOCKED**, LOCAL 합성 시험과 DIRECT 오프라인 검증을 구분합니다.

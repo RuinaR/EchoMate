@@ -83,8 +83,14 @@ class LocalChat:
                 'reminders':'이 채널 본인 알림 목록 조회 성공'}
         fact=dict(kind=receipt.kind,outcome='SUCCESS',meaning=labels.get(receipt.kind,receipt.kind))
         if receipt.kind=='reminder':
-            fact['status']=dict(receipt.values)['status']
+            values=dict(receipt.values)
+            fact['status']=values['status']
             fact['meaning']='알림 예약 성공' if fact['status']=='scheduled' else '알림 취소 완료'
+            # The caller already checked scope/current(). Preserve bounded
+            # receipt data, not just a success label; payload is not an instruction.
+            text=values['text']
+            fact.update(request_text=text[:120],request_text_truncated=len(text)>120,
+                        due_at=values['due_at'],timezone=values['timezone'])
         elif receipt.kind in ('memory','reminders'):
             fact['result_count']=len(receipt.values)
         return fact
