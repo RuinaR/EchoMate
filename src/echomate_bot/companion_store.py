@@ -204,8 +204,11 @@ COMMIT;
             consent_at=db.execute("SELECT at FROM consent_choices WHERE guild=? AND user=? AND category='memory'",(str(event.guild),str(event.author))).fetchone()
             if consent_at and any(p.timestamp.timestamp()<consent_at[0] for p in (getattr(event,'raw_parts',()) or (event,))):return None
         text=(event.content if text is None else text).strip()
-        if not safe_subject_text(text) or not re.search(r'나는|난\s|저는|내\s|기억해\s*줘',text):return None
-        if re.search(r'친구|걔|그 사람|누가|농담|인용|아마|일지도|할까|하자|좋아한다고|선호한다고|라고\s*했|들었',text):return None
+        # Keep a complete self report: cutting its tail can remove a negation,
+        # hypothetical framing or attribution. This is eligibility, not NLP.
+        if len(text)>300 or not safe_subject_text(text) or not re.search(r'나는|난\s|저는|내\s|기억해\s*줘',text):return None
+        if re.search(r'만약|다면|가정(?:이|으|한|하|[.!?,\s]|$)|역할극|반어|비꼬',text):return None
+        if re.search(r"['‘’`]|친구|걔|그 사람|누가|농담|인용|아마|일지도|할까|하자|좋아한다고|선호한다고|라고\s*했|라\s*했|다며|들었",text):return None
         kind=('preference' if re.search(r'좋아해|선호해|불러\s*줘',text) else 'state' if re.search(r'오늘|이번\s*주|지금',text) and re.search(r'피곤|휴가|게임\s*중|기분',text) else 'goal' if re.search(r'개발\s*중|육성\s*중|연습\s*중|목표',text) else 'plan' if re.search(r'약속|모임|만나|게임하',text) else 'explicit' if re.search(r'기억해\s*줘',text) else None)
         if not kind:return None
         if kind in ('plan','goal') and re.search(r'취소|완료|끝났|변경|옮겼',text):

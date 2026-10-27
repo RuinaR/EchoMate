@@ -1,5 +1,12 @@
 # Context Compiler 선택적 근거·실제 Lime QA — 2026-10-26
 
+## 2026-10-27 발화자·취향 저장·요약 경계
+
+검증 마감: 전체 **1,147개 OK312.890초**, Portable **251개 OK25.498초**, 운영6hash 일치·final316 미사용. 마감 RAM6.27GiB<준비7GiB여서 새 실제 GPU 대화/후보 A/B는 BLOCKED·0턴이다.
+
+자동 추출이 가정/역할극을 저장하고 긴 원문의 뒤쪽 부정을 잘라내던 결함을 재현·수정했다. 전달 취향에서 보고 틀이 사라진 요약은 거절·원문 복귀하며 실제 발신자/시각/reply 출처를 보존한다. Context Compiler 생성 prompt는 그대로다. 새 GPU 비교는 RAM 준비7GiB 미달로 차단·해제되어 새 능동 대화0턴이며 후보 프롬프트는 채택하지 않았다. CPU Runtime→SDK mock은6송신/4무송신·자율0, 실제 모델 검증과 구분한다. **모든 모드 정식 READY/RELEASE BLOCKED**, 실제 Discord 미실행·장시간 DEFERRED 유지. [원인·구현·미검증·재개](SOURCE-ATTRIBUTION-QA.md).
+
+
 시작 main/원격 `a52aea6` 일치·clean. Lime 단일 모델/운영 설정을 유지하고 신규 모델·학습은 수행하지 않았다. **조회 설명은 제한적으로 개선됐지만 자유 생성 고위험 사실성 FAIL·모든 모드 정식 READY/RELEASE BLOCKED**다. 원문은 공개하지 않고 `local_data/context-compiler-20261026/`에 보존했다.
 
 ## 구현과 실제 호출 경로

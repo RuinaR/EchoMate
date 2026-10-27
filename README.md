@@ -1,5 +1,7 @@
 # EchoMate
 
+최근 수정: [취향 저장·요약 출처 QA](docs/SOURCE-ATTRIBUTION-QA.md). 가정·잘린 원문의 자동 저장과 전달 취향의 요약 손실을 보완했습니다. 새 GPU 대화는 자원 준비 기준으로 차단되어 **RELEASE BLOCKED**를 유지합니다.
+
 최근 개선: [선택적 Context Compiler·실제 Lime QA](docs/CONTEXT-COMPILER-QA.md). 미조회/실패 설명을 개선하고 불필요한 기능 문맥을 줄였습니다. 실제26턴 대화에서 없는 취향·발화자 오류는 남아 **RELEASE BLOCKED**입니다. LOCAL 합성 기술 시험과 DIRECT 오프라인 라우팅 검증을 정식 READY와 구분합니다.
 
 최근 진단: [Lime 문맥·모델 유지 판단 QA](docs/LIME-CONTEXT-DIAGNOSIS-QA.md). 문맥 조건에 따른 사실성 차이를 검증하고 실제 예약 영수증의 내용 손실을 수정했습니다. 기존 Qwen 제한 비교에서도 교체 근거가 없어 Lime 기본값을 유지하며, **RELEASE BLOCKED**는 유지합니다.

@@ -28,12 +28,21 @@ def validated_digest(raw,turns):
         # Role is application-authored provenance, never model-supplied proof.
         item['source_role']='PRIOR_MODEL_RESPONSE' if source.is_bot else 'UNVERIFIED_USER_CLAIM'
         item['execution_verified']=False
+        # The reporter is known from the event. The quoted speaker/subject
+        # remains part of the unverified source, never an inferred User ID.
+        reporter=getattr(source,'author_id',None)
+        observed=getattr(source,'timestamp',None)
+        if reporter is not None:item['reporter']=reporter
+        if observed is not None:item['observed_at']=observed.isoformat()
+        item['reply_to']=getattr(source,'reply_to',None)
     return data
 
 def render_digest(body):
     labels={'topic':'주제','question':'질문','answer':'당시 답변','correction':'정정','decision':'결정','plan':'계획','open_question':'미해결','ending':'종료'}
     return '\n'.join(labels[i['kind']]+' (출처 '+str(i['source'])+', '+
         (i.get('source_role') if i.get('source_role') in ('PRIOR_MODEL_RESPONSE','UNVERIFIED_USER_CLAIM') else 'LEGACY_UNVERIFIED_SOURCE')+
+        ', 전달자 '+str(i.get('reporter','LEGACY_UNKNOWN'))+
+        ', 시각 '+str(i.get('observed_at','LEGACY_UNKNOWN'))+
         ', 모델 요약·실행 근거 아님): '+i['text'] for i in body['items'])
 
 class Summarizer:

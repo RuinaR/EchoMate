@@ -10,6 +10,7 @@ NEGATIVE=ACTION+r'.{0,10}(?:않|못|실패|취소|아니)|미(?:등록|조회|�
 COMMIT=ACTION+r'.{0,4}(?:완료|성공|했다|했음|해뒀)|(?:하|가|오)기로|확정(?:했|되)|결정(?:했|되)'
 TENTATIVE=r'만약|경우|수\s*도|된다면|시간이\s*되면|원하면|싶|희망|제안|하자|부탁|요청|가정'
 REPORTED=r'라고|라며|전해|들었|인용|전달|말했|말하'
+PREFERENCE_REPORT=r'라고|다고|라\s*했|다며|전했|전해|들었|인용|전달'
 
 
 def check_fidelity(text,evidence,source):
@@ -23,6 +24,12 @@ def check_fidelity(text,evidence,source):
         spans.append(source[left:right].strip())
     if not spans or len(set(spans))!=1:raise ValueError('Ambiguous summary evidence')
     clause=spans[0]
+    # Do not strip the reporting frame from a preference paraphrase. No
+    # inferred subject is manufactured here; ambiguous cases use raw sources.
+    if (re.search(r'좋아|싫|선호|취향',clause) and
+        re.search(PREFERENCE_REPORT+r"|[\"“”‘’']",clause) and
+        not re.search(PREFERENCE_REPORT,text)):
+        raise ValueError('Summary removed reported preference attribution')
     # "하기로 제안했다" describes a proposal, not an executed commitment.
     projected=re.search(r'(?:기로|완료|성공|확정|결정).{0,6}(?:제안|희망|요청|부탁|검토)',text)
     affirmative=bool(re.search(COMMIT,text) and not re.search(NEGATIVE,text) and not projected)

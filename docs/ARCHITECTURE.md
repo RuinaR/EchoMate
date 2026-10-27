@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 자동 저장·요약의 전달 출처
+
+자동 기억 추출은 완전한 짧은 자기 보고만 후보로 삼고 명시 가정/역할극·긴 원문은 저장 보류한다. 요약은 source ID/역할에 실제 Turn의 전달자/관측 시각/reply를 덧붙이며 인용 화자나 사실 대상을 User ID로 추론하지 않는다. 전달 취향의 보고 틀이 사라진 변형은 기존 원문 fallback으로 복귀한다. 기존 SQLite schema/동의·source tombstone·최신성 검사와 Context Compiler 생성 계약은 유지한다. [범위·한계](SOURCE-ATTRIBUTION-QA.md).
+
 ## 생성용 문맥의 읽기 전용 컴파일
 
 `generation_context.compile_context`는 GGUF 자유 생성 직전에 현재 이름/발화자·허용된 기억/읽기/영수증을 선택 투영한다. Router/Intent/권한·DB·송신 guard는 기존 경로를 재사용한다. caller가 소유한 carrier 객체만 대체하며 모델/요약/인용은 실행 증거가 아니다. LOCAL 긴 회상은 짧은 사용자 원문 전체만 보존하고 native 토큰 예산을 유지한다. 요약 의미 검사 실패는 기존 원문 fallback을 따른다. [실제 GPU/한계/구성 비용](CONTEXT-COMPILER-QA.md).
