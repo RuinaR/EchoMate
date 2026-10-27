@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 의미 제안과 결정적 근거 검증
+
+기존 DialogueIntent·Korean claim 연구 계약을 재사용한다. 운영의 정정 인용 격리는 공통 prose, 요약/연구 추출의 위치는 source_span/source_spans로 검증한다. 실제 구간 일치는 의미 정확성이나 권한 증명이 아니다. 연구 parse_reading은 앱 제공 source ID/원문/hash/version과 모델 제안을 구분하고 전체 문맥을 유지하되 storage_eligible/runtime_enabled를 false로 고정한다. 기존 Action/Receipt·동의/삭제/epoch·청자/송신 보호는 그대로이며 이 연구 계약을 호출하지 않는다. [규칙 감사·채택/기각](GENERALIZATION-QA.md).
+
 ## 자동 저장·요약의 전달 출처
 
 자동 기억 추출은 완전한 짧은 자기 보고만 후보로 삼고 명시 가정/역할극·긴 원문은 저장 보류한다. 요약은 source ID/역할에 실제 Turn의 전달자/관측 시각/reply를 덧붙이며 인용 화자나 사실 대상을 User ID로 추론하지 않는다. 전달 취향의 보고 틀이 사라진 변형은 기존 원문 fallback으로 복귀한다. 기존 SQLite schema/동의·source tombstone·최신성 검사와 Context Compiler 생성 계약은 유지한다. [범위·한계](SOURCE-ATTRIBUTION-QA.md).

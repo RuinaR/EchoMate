@@ -1,10 +1,11 @@
 """A provenance view, not a fact extractor or a DB correction operation."""
 import re
+from .routing import prose
 
 
 def correction_requested(text):
     # Quoted/conditional corrections are not current user corrections.
-    value=re.sub(r'"[^"\n]*"|“[^”\n]*”|`[^`\n]*`','',text)
+    value=prose(text)
     if re.search(r'만약|라면|다면',value):return False
     return bool(re.search(r'정정할게(?:요)?(?:[.!?\s]|$)|바로잡을게|말한\s*적(?:이)?\s*없|말하지\s*않았|'
                           r'(?:방금|아까|네가|그거|그건).{0,50}(?:틀렸|사실|아니라)|'

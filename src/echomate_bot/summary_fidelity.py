@@ -17,10 +17,11 @@ def check_fidelity(text,evidence,source):
     # Expand to the source sentence, so quoting only the object cannot hide
     # a negation/condition just outside the model-selected substring.
     spans=[]
-    for match in re.finditer(re.escape(evidence),source):
-        left=max(source.rfind(c,0,match.start()) for c in '.!?\n')+1
-        ends=[source.find(c,match.end()) for c in '.!?\n']
-        right=match.end() if evidence[-1] in '.!?\n' else min((n for n in ends if n>=0),default=len(source))
+    from .structured import source_spans
+    for start,end in source_spans(source,evidence):
+        left=max(source.rfind(c,0,start) for c in '.!?\n')+1
+        ends=[source.find(c,end) for c in '.!?\n']
+        right=end if evidence[-1] in '.!?\n' else min((n for n in ends if n>=0),default=len(source))
         spans.append(source[left:right].strip())
     if not spans or len(set(spans))!=1:raise ValueError('Ambiguous summary evidence')
     clause=spans[0]

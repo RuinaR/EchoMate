@@ -1,5 +1,7 @@
 # EchoMate
 
+최근 감사: [자연어 규칙·일반화 QA](docs/GENERALIZATION-QA.md). 정정의 인용 처리와 근거 위치 검증을 통합했습니다. 의미 필터의 무조건 제거는 기각했으며, 제한 GPU 비교 뒤에도 일반 의미 오류·짧은 backend health 실패와 기존 기억/사실성 위험이 남아 **RELEASE BLOCKED**입니다.
+
 최근 수정: [취향 저장·요약 출처 QA](docs/SOURCE-ATTRIBUTION-QA.md). 가정·잘린 원문의 자동 저장과 전달 취향의 요약 손실을 보완했습니다. 새 GPU 대화는 자원 준비 기준으로 차단되어 **RELEASE BLOCKED**를 유지합니다.
 
 최근 개선: [선택적 Context Compiler·실제 Lime QA](docs/CONTEXT-COMPILER-QA.md). 미조회/실패 설명을 개선하고 불필요한 기능 문맥을 줄였습니다. 실제26턴 대화에서 없는 취향·발화자 오류는 남아 **RELEASE BLOCKED**입니다. LOCAL 합성 기술 시험과 DIRECT 오프라인 라우팅 검증을 정식 READY와 구분합니다.

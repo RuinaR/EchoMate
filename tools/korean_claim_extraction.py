@@ -7,6 +7,7 @@ from copy import deepcopy
 import json
 import re
 from korean_claim_contract import ACTS,PROPERTIES,corpus,validate,verdict
+from echomate_bot.structured import source_span
 
 
 def messages(text):
@@ -23,7 +24,7 @@ def messages(text):
     return [dict(role='system',content=prompt),dict(role='user',content=json.dumps(dict(response=text),ensure_ascii=False))]
 
 
-def parse(raw,text):
+def _decode(raw):
     if not isinstance(raw,str) or len(raw)>12000:raise ValueError('Bounded extraction')
     # Transport formatting only: never search arbitrary prose for a JSON island.
     fence=re.fullmatch(r'```json\s*\n([\s\S]+)\n```',raw.strip())
@@ -34,15 +35,19 @@ def parse(raw,text):
             if k in result:raise ValueError('Duplicate key')
             result[k]=v
         return result
-    data=json.loads(raw,object_pairs_hook=unique)
+    return json.loads(raw,object_pairs_hook=unique)
+
+
+def parse(raw,text):
+    data=_decode(raw)
     if not isinstance(data,dict) or set(data)!={'version','atoms'} or type(data['version']) is not int or data['version']!=1:raise ValueError('Extraction schema')
     if not isinstance(data['atoms'],list) or len(data['atoms'])>8:raise ValueError('Atom bounds')
     result=[];seen=set()
     for atom in data['atoms']:
         if not isinstance(atom,dict) or set(atom)!={'quote','actor','act','feature','property','value','time'}:raise ValueError('Atom schema')
         quote=atom['quote']
-        if not isinstance(quote,str) or not quote or text.count(quote)!=1:raise ValueError('Unique exact source anchor required')
-        start=text.index(quote);item={k:v for k,v in atom.items() if k!='quote'};item['span']=[start,start+len(quote)]
+        start,end=source_span(text,quote)
+        item={k:v for k,v in atom.items() if k!='quote'};item['span']=[start,end]
         case=dict(id='validate',group='contract',text=text,evidence={},atoms=[item],gold='uncertain',tags=[])
         validate(case)
         marker=json.dumps(item,sort_keys=True)
@@ -90,3 +95,44 @@ def aggregate(rows):
         verdict_agreement=sum(r['observed']==r['expected'] for r in scored),
         unsafe_misses=sum(r['case']['gold']=='violation' and (not r.get('score') or r['score']['observed']!='violation') for r in rows),
         eligible=bool(rows) and valid==len(rows) and all(r['exact'] for r in scored),runtime_enabled=False)
+
+
+def parse_reading(raw,sources):
+    """Research-only semantic proposals. Exact anchors do NOT prove meaning.
+
+    Reuses the existing claim extractor's transport/JSON and shared anchors.
+    No caller can enable Runtime, persistence, consent or an action here.
+    Full source context remains attached; a local span cannot hide a denial.
+    """
+    import hashlib
+    if not isinstance(sources,dict):raise ValueError('Source mapping required')
+    data=_decode(raw)
+    if (not isinstance(data,dict) or set(data)!={'version','items'} or
+        type(data['version']) is not int or data['version']!=1 or
+        not isinstance(data['items'],list) or len(data['items'])>8):raise ValueError('Reading schema')
+    fields={'source','span','quote','subject','quoted_speaker','predicate','polarity','mode','time','uncertainty'}
+    result=[];seen=set()
+    for item in data['items']:
+        if not isinstance(item,dict) or set(item)!=fields:raise ValueError('Reading item schema')
+        if not isinstance(item['source'],str) or item['source'] not in sources:raise ValueError('Unknown reading source')
+        source=sources[item['source']]
+        if not isinstance(source,dict):raise ValueError('Source record required')
+        text=source.get('text')
+        if not isinstance(text,str) or not 0<len(text)<=6000:raise ValueError('Bounded full source required')
+        span=source_span(text,item['quote'],item['span'])
+        if item['subject'] not in ('reporter','other','bot','fiction','unknown'):raise ValueError('Reading subject')
+        if item['polarity'] not in ('positive','negative','unknown'):raise ValueError('Reading polarity')
+        if item['mode'] not in ('asserted','quoted','reported','conditional','hypothetical','ironic','unknown'):raise ValueError('Reading modality')
+        if item['time'] not in ('past','present','future','unknown'):raise ValueError('Reading time')
+        hint=item['quoted_speaker']
+        if hint is not None and (not isinstance(hint,str) or not 0<len(hint)<=60):raise ValueError('Unverified quoted-speaker hint')
+        if not isinstance(item['predicate'],str) or not 0<len(item['predicate'])<=220:raise ValueError('Reading predicate')
+        reasons=item['uncertainty']
+        if not isinstance(reasons,list) or len(reasons)>8 or any(not isinstance(v,str) or not 0<len(v)<=80 for v in reasons):raise ValueError('Reading uncertainty')
+        marker=(item['source'],span)
+        if marker in seen:raise ValueError('Duplicate reading source span')
+        seen.add(marker)
+        result.append(dict(proposal=dict(item),reporter=source.get('reporter'),source_version=source.get('version'),
+            observed_at=source.get('at'),full_source=text,source_sha256=hashlib.sha256(text.encode()).hexdigest(),
+            storage_eligible=False,deferred_reason='unvalidated_semantic_proposal'))
+    return dict(items=result,status='ANCHORED_PROPOSALS' if result else 'NO_EVIDENCE',runtime_enabled=False)
