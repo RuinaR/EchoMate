@@ -180,7 +180,7 @@ class ExperienceJournal:
     def _source_allowed(self, db, scope, source):
         return True
 
-    def snapshot(self, scope, *, epoch, topic, now):
+    def snapshot(self, scope, *, epoch, topic, now, include=None):
         positive_integer(epoch)
         positive_integer(now)
         if not isinstance(topic, Topic):
@@ -198,6 +198,8 @@ class ExperienceJournal:
             """, (*scope.key(), epoch, topic.value, now))
             for source, revision, feedback in rows:
                 if self._source_allowed(db, scope, source):
+                    if include is not None and (source, revision) not in include:
+                        return State(), ()
                     state = state.advance(source, revision, feedback)
                     dependencies.append((source, revision, feedback))
         return state, tuple(dependencies)

@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 import tkinter as tk
 
-from .settings import ROOT,Settings,MOODS,ACTIVITY
+from .settings import ROOT,Settings,MOODS,ACTIVITY,scope
 
 STAGES={'utterance_wait':'메시지 보충 대기','social':'실제 청자·대화 흐름 판정','member_resolution':'호칭·답장 근거 확인','summary':'대화 요약 확인·압축', 'conversation_wait':'앞선 질문을 처리하는 중','memory_lookup':'필요한 기억 확인','private_request':'기억·예약 요청 처리','assessment':'참여·대화 지속 판단','continuity':'대화 지속 판단','visual':'이미지 분석',
         'action':'행동 선택','text':'답변 작성','sending':'Discord 전송','research':'인터넷 원문·근거 확인','output_check':'출력 정책 검사'}
@@ -146,7 +146,8 @@ class LocalController:
                     for c in [*guild.channels,*guild.threads]:
                         if isinstance(c,(discord.TextChannel,discord.ForumChannel,discord.Thread)):
                             label=(c.parent.name+' / ' if isinstance(c,discord.Thread) and c.parent else '')+c.name
-                            channels[c.id]=dict(id=c.id,label=label,thread=isinstance(c,discord.Thread),parent=c.parent_id if isinstance(c,discord.Thread) else None)
+                            channels[c.id]=dict(id=c.id,label=label,thread=isinstance(c,discord.Thread),parent=c.parent_id if isinstance(c,discord.Thread) else None,
+                                                text_channel=isinstance(c,discord.TextChannel))
                 for table in ('channels','threads'):
                     for cid in g[table]:channels.setdefault(int(cid),dict(id=int(cid),label='등록된 '+('스레드' if table=='threads' else '채널'),thread=table=='threads'))
                 servers.append(dict(id=gid,label=guild.name if guild else saved['label'] if saved else f'서버 {gid} · 로컬 자료',enabled=g['enabled'],channels=list(channels.values()),
@@ -159,6 +160,9 @@ class LocalController:
                 progress.append(dict(channel=channel.name if channel else '허용된 채널',stage=STAGES.get(p['stage'],p['stage']),seconds=round(time.time()-p['started'],1)))
         preview=getattr(self,'preview_task',None);preview_busy=bool(preview and not preview.done())
         serving=client.backend if client else getattr(self,'preview_backend',None)
+        samples=getattr(getattr(serving,'engine',None),'samples',())
+        resources=({key:samples[-1][key] for key in ('free_vram_mib','ram_available','commit_available')
+                    if key in samples[-1]} if samples else {})
         preparing=bool(getattr(self,'starting_model',False) or getattr(self,'model_preparing',False) or runtime and getattr(runtime,'changing_model',False) or preview_busy and getattr(serving,'model',None) is None)
         try:
             from .ledger import Ledger
@@ -179,6 +183,13 @@ class LocalController:
                       models=[m.public() for m in getattr(self,'models',[])],profiles=getattr(self,'profiles_view',{}),preview=getattr(self,'preview_result',''),
                       recent_reason=next((NO_RESPONSE.get(r['code'],'') for r in reversed(runtime.diagnostics) if r['code'] in NO_RESPONSE or r['code']=='response_sent'),'') if runtime else '',
                       scheduler=serving.scheduler.snapshot() if serving and hasattr(serving,'scheduler') else {},
+                      last_resource_sample=resources,
+                      operating_channel=cfg.get('operating_channel') if cfg else None,
+                      operating_mode=scope(cfg,*cfg['operating_channel']) if cfg and cfg.get('operating_channel') else None,
+                      experience_verification=runtime.channel_experience.verification_status()
+                          if runtime and getattr(runtime,'channel_experience',None) else None,
+                      reset_preview=runtime.reset_preview(*cfg['operating_channel'])
+                          if runtime and cfg and cfg.get('operating_channel') and hasattr(runtime,'reset_preview') else None,
                       command_review=getattr(self,'command_review',None),
                       command_status=getattr(client,'command_status',{}) if client else {},
                       companion=getattr(self,'companion_view',{}),companion_error=getattr(getattr(self,'companion',None),'error',None),
@@ -233,7 +244,7 @@ class LocalController:
             inventory=[]
             async for guild in reader.fetch_guilds(limit=200):
                 channels=await guild.fetch_channels();parents={c.id:c.name for c in channels}
-                entries=[dict(id=c.id,label=c.name,thread=False) for c in channels if isinstance(c,(discord.TextChannel,discord.ForumChannel))]
+                entries=[dict(id=c.id,label=c.name,thread=False,text_channel=isinstance(c,discord.TextChannel)) for c in channels if isinstance(c,(discord.TextChannel,discord.ForumChannel))]
                 entries.extend(dict(id=t.id,label=parents.get(t.parent_id,'')+' / '+t.name,thread=True,parent=t.parent_id) for t in await guild.active_threads())
                 inventory.append(dict(id=guild.id,label=guild.name,channels=entries))
             self.inventory=inventory
@@ -262,7 +273,7 @@ class LocalController:
         finally:self.preview_cancelling=False
 
     async def command(self,operation,**kwargs):
-        if operation in {'start','stop','shutdown','name','preview','preview_cancel','setup','models','profiles'} or (operation=='settings' and 'model' in kwargs.get('values',{})):
+        if operation in {'start','stop','shutdown','name','preview','preview_cancel','setup','models','profiles','operating_channel'} or (operation=='settings' and 'model' in kwargs.get('values',{})):
             if not hasattr(self,'lifecycle_lock'):self.lifecycle_lock=asyncio.Lock()
             async with self.lifecycle_lock:return await self._command(operation,**kwargs)
         return await self._command(operation,**kwargs)
@@ -553,6 +564,15 @@ class LocalController:
                     g['enabled']=not g['enabled']
                 self.settings.change(owner,toggle)
                 if self.client:self.client.runtime.invalidate_all()
+            elif operation=='operating_channel':
+                import discord
+                gid=kwargs['guild'];cid=kwargs['channel']
+                guild=self.client.get_guild(gid) if self.client else None
+                channel=guild.get_channel(cid) if guild else None
+                if not isinstance(channel,discord.TextChannel):
+                    raise ValueError('Connected text channel required')
+                self.settings.select_operating_channel(owner,gid,cid,kwargs['text_mode'],kwargs['reaction_mode'])
+                self.client.runtime.invalidate_all()
             elif operation=='scope':
                 gid=kwargs['guild'];cid=kwargs['channel']
                 if not self.known_guild(gid):raise PermissionError('Guild is not connected')
@@ -571,7 +591,7 @@ class LocalController:
                         for thread in guild.threads:
                             if thread.parent_id==cid:self.client.runtime.invalidate(thread.id)
             else:raise ValueError('Unknown operation')
-            if operation in {'settings','scope','guild'}:self.notice='설정 저장 완료'
+            if operation in {'settings','scope','guild','operating_channel'}:self.notice='설정 저장 완료'
         except Exception as exc:
             success=False
             command_errors={'Command review required':'먼저 명령 목록을 확인하고 변경 내용을 승인해 주세요','Command list changed; review again':'명령 목록이 바뀌었어요. 변경 내용을 다시 확인해 주세요','Command verification failed':'명령 정리 결과를 확인하지 못했어요. 목록을 다시 확인해 주세요','Application identity unavailable':'연결된 봇의 애플리케이션을 확인하지 못했어요','Wrong application':'다른 애플리케이션의 명령은 변경하지 않아요'}

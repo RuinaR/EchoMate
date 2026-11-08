@@ -21,7 +21,7 @@ DEFAULTS = dict(enabled=False, text=True, reactions=False, stickers=False, media
                 media_probability=0., model="base", model_roots=[], character_profile={}, adult_humor=False, guilds={},asset_policy=3,gender='neutral',
                 memory_auto=False,relations_auto=True,context_excerpts=True,reminders_enabled=True,reminder_grace=900,
                 memory_plan_grace=3600,memory_date_grace=86400,memory_state_hours=6,
-                command_sync_pending=False,web_search=False,summaries_auto=False)
+                command_sync_pending=False,web_search=False,summaries_auto=False,operating_channel=None)
 
 
 def private_path(value):
@@ -58,6 +58,11 @@ def positive_id(value):
 def validate(cfg):
     if set(cfg) != set(DEFAULTS):
         raise ValueError("Unknown settings; owner identity cannot be configured here")
+    selected = cfg['operating_channel']
+    if selected is not None:
+        if not isinstance(selected,list) or len(selected)!=2:
+            raise ValueError('Expected one server and text channel')
+        for value in selected:positive_id(value)
     if cfg['asset_policy']!=3 or cfg['media'] or cfg['media_probability']!=0 or cfg['stickers']:raise ValueError('Media and sticker output removed')
     for key in ("enabled", "text", "reactions", "stickers", "media", "vision", "auto_mood",'memory_auto','relations_auto','context_excerpts','reminders_enabled','command_sync_pending','web_search','summaries_auto','adult_humor'):
         if type(cfg[key]) is not bool:
@@ -108,6 +113,9 @@ def validate(cfg):
 def scope(cfg, guild_id, channel_id, parent_id=None, *, action=None):
     if not cfg["enabled"]:
         return "silent"
+    selected=cfg.get('operating_channel')
+    if selected is not None and (parent_id is not None or selected != [guild_id,channel_id]):
+        return "silent"
     g = cfg["guilds"].get(str(guild_id))
     if not g or not g["enabled"]:
         return "silent"
@@ -144,6 +152,7 @@ class Settings:
             if not hmac.compare_digest(actual, envelope["signature"]):
                 raise PermissionError("Settings integrity failure; start disabled and repair locally")
             verified=dict(envelope['data'])
+            verified.setdefault('operating_channel',None)
             # Authenticate original bytes before dropping the obsolete quota.
             verified.pop('daily_limit',None)
             if 'asset_policy' not in verified:
@@ -181,7 +190,7 @@ class Settings:
 
     def set(self, user_id, key, value):
         if key=='model' and value in ('persona','adult'):value='base'
-        if key in {"guilds","asset_policy","media","media_probability"} or key not in DEFAULTS:
+        if key in {"guilds","asset_policy","media","media_probability","operating_channel"} or key not in DEFAULTS:
             raise ValueError("Use scope commands")
         self.change(user_id, lambda cfg: cfg.update({key: value}))
 
@@ -198,4 +207,14 @@ class Settings:
         def mutate(cfg):
             g=cfg['guilds'].setdefault(str(guild_id),dict(enabled=True,channels={},threads={}))
             g['threads' if thread else 'channels'][str(channel_id)]=dict(mode=text_mode,reaction_mode=reaction_mode,inherit=inherit)
+        self.change(user_id,mutate)
+
+    def select_operating_channel(self,user_id,guild_id,channel_id,text_mode,reaction_mode):
+        positive_id(guild_id);positive_id(channel_id)
+        if text_mode not in {'silent','mention','autonomous'}:raise ValueError('Invalid text scope')
+        def mutate(cfg):
+            guild=cfg['guilds'].setdefault(str(guild_id),dict(enabled=True,channels={},threads={}))
+            guild['enabled']=True
+            guild['channels'][str(channel_id)]=dict(mode=text_mode,reaction_mode=reaction_mode,inherit=False)
+            cfg['operating_channel']=[guild_id,channel_id]
         self.change(user_id,mutate)

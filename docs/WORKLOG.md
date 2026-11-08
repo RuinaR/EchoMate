@@ -1,5 +1,14 @@
 # 작업 로그
 
+## 2026-11-08 재접속 격리와 Windows 운영 채널
+
+- 시작 로컬·원격 `4898e9f710b143546d7517b2ebd83bd238524325`, clean. MASTER-VISION의 경험 수명주기 및 단일 채널 계약을 기준으로 작업했다.
+- `ChannelExperience.reconcile`과 `Runtime.pause_gateway`로 재시작·중단 후 확인되지 않은 적응을 격리했다. 모의 원본 응답을 확인된 삭제·정확한 리비전·새 리비전·조회 불가로 분리한다. SQLite의 동의 및 삭제 권위는 유지한다. 현재 프로토타입은 원본 리비전의 신뢰 어댑터를 전제로 하며 제품의 공식 REST에 연결하지 않았다.
+- `Settings.select_operating_channel`, Desktop 저장 및 상태 조회, Runtime 범위·최신성 검사를 연결했다. 기존 상태 화면에 운영 채널, 관측된 화자, 마지막 자원 표본, 경험 검증 표식과 단기 문맥 초기화 영향을 추가했다. 나머지 초기화 범위는 차단 표시만 제공한다. 백업 복원·운영 DB 변경·GPU·실 Discord는 수행하지 않았다.
+- `PYTHONPATH=src;tools;tests`에서 `.venv-gemma4/Scripts/python.exe -m unittest test_identity_runtime test_identity_continuity test_generation_context -q` 38개 OK. 첫 격리 전체 1,181개에는 구 UI 계약을 기대한 검사 3건과 초기 미설정 상태 표시 오류 1건이 있었다. 기대 동작을 단일 채널 계약으로 대조하고 미설정 오류를 수정했다.
+- 두 번째 비활성 Desktop·외부 소켓 차단 전체 회귀는 1,181개 중 1,180개 통과, 1개 오류(297.848초). 단일 채널 저장 직후 상태 게시의 `scope` import 누락을 수정했다. 최종 소스는 같은 격리 하네스의 `loadTestsFromNames`로 UI 저장·초기 실패 복구·위젯·채널 목록·경험 Runtime 표적 17개 OK(3.808초). 최종 import 수정 이후 전체 회귀를 다시 실행하지 않았다.
+- 다음 우선순위는 인증된 원본 리비전 어댑터·별도 적응 동의와 오래된 백업의 현재 권위 검증이다. 실제 자기 상태·경험 영향 목록과 복구 경계를 완료한 후 독립 Lime 세 조건 비교를 실행한다. [설계 경계](ARCHITECTURE.md#운영-콘솔의-관측과-복구-경계) · [전달 요약](CHATGPT-HANDOFF.md)
+
 ## 2026-11-08 Windows 운영 콘솔 설계 통합
 
 - 시작 로컬·원격 `0fd9494`, clean. 기존 Desktop UI의 채널 편집·Controller, Runtime의 `monitor()`·`social_monitor()`, 개인정보 삭제 API, 로컬 테스트 세션 복구를 대조했다. 별도 콘솔 앱이나 중복 저장 경로를 추가하지 않는다.

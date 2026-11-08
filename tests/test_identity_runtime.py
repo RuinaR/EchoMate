@@ -10,7 +10,7 @@ from echomate_bot.character_store import CharacterStores
 from echomate_bot.discord_app import EchoClient
 from echomate_bot.generation_context import compile_context
 from echomate_bot.identity_continuity import Feedback, Scope, Topic
-from echomate_bot.identity_runtime import ChannelExperience
+from echomate_bot.identity_runtime import ChannelExperience, SourceObservation, SourceStatus
 from echomate_bot.runtime import Runtime
 
 
@@ -75,6 +75,68 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
         self.bridge = self.bind(CharacterStores(self.path, clock=lambda: self.now).for_character("lime"))
         self.assertFalse(self.record(2, revision=3))
         self.assertIsNone(self.project())
+
+    async def test_restart_quarantines_until_all_sources_are_checked(self):
+        self.seed()
+        self.bridge = self.bind(CharacterStores(self.path, clock=lambda: self.now).for_character("lime"))
+        scope = Scope("lime", 2, 3, 4)
+        self.assertIsNone(self.project())
+        async def verified(key, source):
+            return SourceObservation(SourceStatus.FOUND, key, source, 1)
+        self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=verified, limit=1), 1)
+        self.assertIsNone(self.project())
+        self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=verified), 1)
+        self.assertIsNotNone(self.project())
+
+    async def test_reconnect_does_not_treat_unavailable_as_deleted(self):
+        self.seed()
+        self.runtime.pause_gateway()
+        await self.runtime.resume_gateway()
+        scope = Scope("lime", 2, 3, 4)
+        async def unavailable(key, source):
+            return SourceObservation(SourceStatus.UNAVAILABLE, key, source)
+        self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=unavailable), 1)
+        self.assertIsNone(self.project())
+        self.assertEqual(self.bridge.state(scope, epoch=1, topic=Topic.PROJECT, now=self.now).count, 2)
+        async def changed(key, source):
+            return SourceObservation(SourceStatus.DELETED if source == self.source(1) else SourceStatus.FOUND,
+                                     key, source, 2)
+        self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=changed), 2)
+        self.assertEqual(self.bridge.state(scope, epoch=1, topic=Topic.PROJECT, now=self.now).count, 0)
+        self.assertFalse(self.record(1, revision=3))
+
+    async def test_disconnect_during_verification_rejects_late_result(self):
+        self.seed()
+        self.bridge.quarantine()
+        async def stale(key, source):
+            self.bridge.quarantine()
+            return SourceObservation(SourceStatus.FOUND, key, source, 1)
+        scope = Scope("lime", 2, 3, 4)
+        self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=stale), 1)
+        self.assertEqual(self.bridge.verification_status()["session_marks"], 0)
+
+    async def test_signed_channel_change_blocks_an_old_send_and_thread(self):
+        self.settings.select_operating_channel(1, 2, 3, "mention", "silent")
+        self.settings.set_scope(1, 2, 8, "mention", thread=True)
+        self.backend.wait = asyncio.Event()
+        await self.runtime.ingest(replace(self.event(), member_mentions=(999,)))
+        for _ in range(100):
+            if self.backend.calls:break
+            await asyncio.sleep(.01)
+        self.assertTrue(self.backend.calls)
+        before = self.runtime.reset_preview(2, 3)
+        self.assertEqual((before["conversations"], before["pending"]), (1, 1))
+        self.assertEqual(self.runtime.reset_preview(2, 3), before)
+        self.settings.select_operating_channel(1, 2, 6, "mention", "silent")
+        self.backend.wait.set()
+        await self.settle()
+        self.assertFalse(self.transport.sent)
+        from echomate_bot.settings import Settings, scope
+        reloaded = Settings(1, self.settings._key.decode(), self.settings.path).get()
+        self.assertEqual(reloaded["operating_channel"], [2, 6])
+        self.assertEqual(scope(reloaded, 2, 6), "mention")
+        self.assertEqual(scope(reloaded, 2, 3), "silent")
+        self.assertEqual(scope(reloaded, 2, 8, 6), "silent")
 
     async def test_trigger_failure_rolls_back_both_consent_and_experience(self):
         self.seed()

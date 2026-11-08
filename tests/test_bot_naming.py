@@ -84,7 +84,7 @@ class NameControls(unittest.IsolatedAsyncioTestCase):
 
 
 class ActiveChannelList(unittest.TestCase):
-    def test_running_filters_rules_and_inherited_threads_with_full_list_escape(self):
+    def test_running_filters_rules_and_excludes_threads_even_in_full_list(self):
         with tempfile.TemporaryDirectory(dir='local_data') as directory:
             cfg=Settings(1,secrets.token_hex(32),Path(directory)/'settings.json')
             cfg.set_activity_scope(1,2,3,'mention','silent',inherit=True)
@@ -97,11 +97,11 @@ class ActiveChannelList(unittest.TestCase):
                     dict(id=5,label='blocked',thread=True,parent=3),dict(id=6,label='unconfigured',thread=False)])],
                     connected=False,phase='',error='',notice='',pending=0,contexts=0,latency=None,progress=[])
                 app.refresh_lists()
-                self.assertEqual({i['id'] for i in app.channel_list.items},{3,4})
+                self.assertEqual({i['id'] for i in app.channel_list.items},{3})
                 app.toggle_channel_view()
-                self.assertEqual(len(app.channel_list.items),4)
+                self.assertEqual({i['id'] for i in app.channel_list.items},{3,6})
                 app.show_all=False;app.snapshot['running']=False;app.refresh_lists()
-                self.assertEqual(len(app.channel_list.items),4)
+                self.assertEqual({i['id'] for i in app.channel_list.items},{3,6})
             finally:
                 app.destroy();app=None;root=None
                 import gc

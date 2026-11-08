@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tkinter as tk
 import unittest
-from unittest.mock import AsyncMock,patch
+from unittest.mock import AsyncMock,Mock,patch
 
 import test_release_desktop as fixtures
 from test_dialog_layout import invoke
@@ -220,12 +220,28 @@ class UIWorkflows(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.dialog().winfo_exists());self.assertEqual(len(store.memories(2,5)),1)
         self.fill(self.dialog(),['삭제']);await self.sync();self.assertFalse(store.memories(2,5))
 
-    async def test_channel_and_thread_save_then_restart_configuration(self):
+    async def test_single_text_channel_save_then_restart_configuration(self):
+        import discord
         app=self.app;app.page='spaces';app.channel_ids={3,7};app.text_mode='autonomous';app.react_mode='mention';app.inherit=True
-        app.save_scope();await self.sync();cfg=self.c.settings.get()
+        initial=self.c.settings.get()
+        app.save_scope()
+        self.assertEqual(self.c.settings.get(),initial)
+        guild=SimpleNamespace(get_channel=lambda cid:Mock(spec=discord.TextChannel) if cid==3 else Mock(spec=discord.ForumChannel))
+        runtime=SimpleNamespace(invalidate_all=Mock())
+        self.c.client=SimpleNamespace(get_guild=lambda gid:guild, runtime=runtime)
+        try:
+            with patch.object(self.c,'_publish'):
+                denied=await self.c.command('operating_channel',guild=2,channel=7,text_mode='mention',reaction_mode='silent')
+                self.assertFalse(denied['ok'])
+                app.channel_ids={3};app.save_scope()
+                await asyncio.gather(*self.tasks)
+        finally:
+            self.c.client=None
+        runtime.invalidate_all.assert_called_once()
+        await self.sync();cfg=self.c.settings.get()
         self.assertEqual(cfg['guilds']['2']['channels']['3']['mode'],'autonomous')
-        self.assertTrue(cfg['guilds']['2']['channels']['3']['inherit'])
-        self.assertFalse(cfg['guilds']['2']['threads']['7']['inherit'])
+        self.assertFalse(cfg['guilds']['2']['channels']['3']['inherit'])
+        self.assertEqual(cfg['operating_channel'],[2,3])
         from echomate_bot.settings import Settings
         restored=Settings(1,self.c.settings._key.decode(),self.fixture.root/'settings.json').get()
         self.assertEqual(restored,cfg)

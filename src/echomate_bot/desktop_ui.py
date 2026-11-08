@@ -146,7 +146,7 @@ class DesktopApp(CompanionViews):
         self.canvas=tk.Canvas(root,bg=BG,highlightthickness=0,takefocus=True);self.canvas.pack(fill='both',expand=True)
         self.feedback=CanvasFeedback(self.canvas,activate_on_release=True)
         self.server_list=SelectionList(self.canvas,self.select_guild)
-        self.channel_list=SelectionList(self.canvas,self.select_channels,True)
+        self.channel_list=SelectionList(self.canvas,self.select_channels)
         self.setup_records()
         self.job_id=None;self.job_list=SelectionList(self.canvas,self.select_job)
         self.model_id=None;self.model_list=SelectionList(self.canvas,self.select_model)
@@ -242,9 +242,26 @@ class DesktopApp(CompanionViews):
     def show_status_detail(self):
         s=self.snapshot or {}
         last=s.get('last_management_error',{})
+        sample=s.get('last_resource_sample',{})
+        resources=' · '.join(f"{label} {sample[key]/unit:.1f} {suffix}" for key,label,unit,suffix in
+                            (('free_vram_mib','VRAM',1,'MiB'),('ram_available','RAM',2**30,'GiB'),
+                             ('commit_available','commit',2**30,'GiB')) if key in sample)
         self.form('현재 상태와 오류',[('phase','현재 상태',s.get('phase','준비 중')),('error','현재 오류',s.get('error') or '현재 오류 없음'),
+                  ('resources','최근 자원 관측 · 현재 실측과 다를 수 있음',resources or '관측 없음'),
                   ('last_error','이 실행에서 마지막으로 확인한 관리 오류',last.get('message','기록된 관리 오류 없음'))],lambda values:None,
                   '긴 자원 안내와 오류 유형을 전체 길이로 확인할 수 있어요.',read_only=True)
+
+    def show_reset_preview(self):
+        preview=(self.snapshot or {}).get('reset_preview')
+        text=(f"채널 {preview['channel']} · 대화 {preview['conversations']}개 · 대기/실행 {preview['pending']}개"
+              if preview is not None else '저장된 운영 채널의 Runtime 상태를 확인할 수 없어요.')
+        self.form('초기화 영향 미리보기',[
+            ('short_term','단기 문맥 후보',text),
+            ('preserved','단기 문맥에서 보존', '장기 기억·동의·경험·캐릭터·프로그램 설정'),
+            ('adaptation','학습된 적응', '영향 목록 미검증 · 실행 불가'),
+            ('selected','선택한 경험·기억과 파생 상태', '영향 목록 미검증 · 실행 불가'),
+            ('character','캐릭터 자기 상태 전체', '영향 목록 미검증 · 실행 불가'),
+        ],lambda values:None,'현재 Runtime 스냅샷을 읽기만 해요. 초기화나 복구는 실행하지 않아요.',read_only=True)
     def remember_scope(self):
         if self.guild_id and self.channel_ids:
             self.drafts[(self.guild_id,frozenset(self.channel_ids))]=(self.text_mode,self.react_mode,self.inherit)
@@ -297,6 +314,7 @@ class DesktopApp(CompanionViews):
         if server:
             g=cfg['guilds'].get(str(self.guild_id),{})
             for c in sorted(server['channels'],key=lambda c:(c['thread'],c['label'])):
+                if c['thread'] or not c.get('text_channel',True):continue
                 if self.snapshot.get('running') and not self.show_all and scope(dict(cfg,enabled=True),self.guild_id,c['id'],c.get('parent'))=='silent':continue
                 rule=g.get('threads' if c['thread'] else 'channels',{}).get(str(c['id']),{})
                 labels={'silent':'꺼짐','mention':'대화 중에만','autonomous':'자연스럽게','reaction':'이모지만'}
@@ -315,11 +333,11 @@ class DesktopApp(CompanionViews):
         self.channel_ids.intersection_update({i['id'] for i in items})
     def save_scope(self):
         server=next((s for s in self.snapshot['servers'] if s['id']==self.guild_id),None) if self.snapshot else None
-        if not server:return
+        if not server or len(self.channel_ids)!=1:return
         for c in server['channels']:
-            if c['id'] in self.channel_ids:
-                self.controller.submit('scope',guild=self.guild_id,channel=c['id'],thread=c['thread'],text_mode=self.text_mode,
-                    reaction_mode=self.react_mode,inherit=self.inherit if not c['thread'] else False,enabled=True)
+            if c['id'] in self.channel_ids and not c['thread'] and c.get('text_channel',True):
+                self.controller.submit('operating_channel',guild=self.guild_id,channel=c['id'],
+                    text_mode=self.text_mode,reaction_mode=self.react_mode)
     def change_guild(self):
         if self.guild_id:self.controller.submit('guild',guild=self.guild_id)
     def toggle_channel_view(self):
@@ -429,7 +447,9 @@ class DesktopApp(CompanionViews):
             self.button(left+10,bottom-25,190,24,'별명·시간대 설정',self.server_options,font_size=8)
         self.channel_list.place(x=mid+10,y=sy+78,width=right-mid-35,height=bottom-sy-94)
         x=right+16;self.text(x,sy+17,'이곳에서 어떻게 할까요?',12,bold=True)
-        self.text(x,sy+46,f'{len(self.channel_ids)}곳을 선택했어요' if self.channel_ids else '먼저 왼쪽에서 채널을 골라 주세요',9,ACCENT)
+        active=cfg.get('operating_channel') if cfg else None
+        selected=[self.guild_id,next(iter(self.channel_ids),None)]
+        self.text(x,sy+46,'현재 저장된 운영 채널' if active==selected else '운영할 텍스트 채널 하나를 골라 주세요',9,ACCENT)
         if cfg and not cfg['reactions'] and self.react_mode!='silent':
             self.button(x,sy+64,216,24,'이모지 켜기 → 응답 방식',lambda:self.set_page('outputs'),font_size=8)
         self.text(x,sy+91,'채팅',10,MUTED)
@@ -437,10 +457,8 @@ class DesktopApp(CompanionViews):
         self.text(x,sy+256,'이모지 반응',10,MUTED)
         for i,(label,mode) in enumerate(REACTION_MODES.items()):self.button(x,sy+281+i*40,216,32,label,lambda m=mode:setattr(self,'react_mode',m),self.react_mode==mode)
         server=next((s for s in self.snapshot['servers'] if s['id']==self.guild_id),None) if self.snapshot else None
-        parent_selected=server and any(c['id'] in self.channel_ids and not c['thread'] for c in server['channels'])
-        if parent_selected:self.toggle(x,sy+414,'이 채널의 스레드도 적용',self.inherit,lambda:setattr(self,'inherit',not self.inherit))
-        else:self.text(x,sy+414,'선택한 스레드에만 적용돼요' if self.channel_ids else '채널을 선택하면 설정할 수 있어요',9,MUTED)
-        self.button(x,sy+445,216,36,f'선택한 {len(self.channel_ids)}곳에 저장' if self.channel_ids else '채널을 먼저 선택하세요',self.save_scope,primary=True,enabled=bool(self.channel_ids))
+        self.text(x,sy+414,'다른 채널과 스레드는 운영 범위 밖이에요',9,MUTED)
+        self.button(x,sy+445,216,36,'운영 채널로 저장' if self.channel_ids else '채널을 먼저 선택하세요',self.save_scope,primary=True,enabled=len(self.channel_ids)==1)
         self.button(x,sy+488,216,32,'이 서버에서 모두 쉬기' if server and server['enabled'] else '이 서버에서 활동 허용',self.change_guild,enabled=bool(server))
     def choices(self,x,y,choices,current,callback,width=105,enabled=True):
         size=10
@@ -740,10 +758,15 @@ class DesktopApp(CompanionViews):
             while size>10 and (self.button_font(size).metrics('linespace')>42 or self.button_font(size).measure(value)>width-32):size-=1
             self.text(x+16,158,label,10,MUTED);self.text(x+16,191,value,size,bold=True)
         q=s.get('scheduler',{});statistics=s.get('statistics',{})
-        self.text(242,254,self.ellipsize(f"GPU 실행 {q.get('running',0)} · 대기 {q.get('waiting',0)}",270,9),9,MUTED)
+        queue=f"GPU 실행 {q['running']} · 대기 {q['waiting']}" if 'running' in q and 'waiting' in q else 'GPU 큐 미관측'
+        self.text(242,254,self.ellipsize(queue,270,9),9,MUTED)
         self.text(530,254,self.ellipsize(f"오늘 응답 {statistics.get('responses_today',0)} · 반응 {statistics.get('reactions_today',0)}",w-756,9),9,MUTED)
         totals=s.get('runtime_totals',{})
-        self.text(242,280,self.ellipsize(f"이번 실행 처리 {totals.get('finished',0)} · 실패/불확실 전송 {statistics.get('uncertain',0)} · 취소 {q.get('counts',{}).get('cancelled',0)} · 만료 {q.get('counts',{}).get('expired',0)} · 기존 종류 미기록 {statistics.get('legacy_today',0)}",w-300,8),8,MUTED)
+        operating=s.get('operating_channel')
+        experience=s.get('experience_verification')
+        channel=(f"채널 {operating[1]} · {s.get('operating_mode') or '미관측'}" if operating else '단일 운영 채널 미지정')
+        verification=(f"이번 세션의 원본 검증 표식 {experience['session_marks']}개" if experience is not None else '경험 저널 미연결')
+        self.text(242,280,self.ellipsize(channel+' · '+verification,w-300,8),8,MUTED)
         self.button(w-214,252,188,30,'비식별 진단 저장',lambda:self.controller.submit('diagnostics'))
         jobs=s.get('jobs',[])
         states={'waiting':'보충 대기','running':'처리 중','sent':'전송 완료','completed':'완료','silence':'침묵·보관 생략','failed':'실패','cancelled':'취소'}
@@ -754,14 +777,15 @@ class DesktopApp(CompanionViews):
         self.job_list.place(x=240,y=300,width=270,height=max(100,h-445));self.job_list.selected={self.job_id} if self.job_id else set()
         selected=next((j for j in jobs if j['id']==self.job_id),None)
         if selected:
-            self.text(535,302,'선택한 작업 · 원본 '+('연결됨' if selected['source_attached'] else '없음')+' · '+str(selected.get('source_count',1))+'개',11,bold=True)
+            actor=f" · 화자 ID {selected['author']}" if selected.get('author') is not None else ''
+            self.text(535,302,'선택한 작업 · 원본 '+('연결됨' if selected['source_attached'] else '없음')+' · '+str(selected.get('source_count',1))+'개'+actor,11,bold=True,width=w-575)
             gpu=selected.get('gpu',{})
             self.text(535,335,f"GPU {gpu.get('status','완료 또는 아직 요청 전')} · 우선 {gpu.get('priority','-')} · 대기 {gpu.get('wait_seconds',0)}초 · 처리 {gpu.get('processing_seconds',0)}초",9,MUTED,width=w-575)
             social=selected.get('social',{})
             targets={'bot':'봇','human':'다른 사람','bot_group':'봇 포함 그룹','broadcast':'채널 전체','uncertain':'불확실'}
             links={'new':'독립 요청','continue':'기존 대화 지속','join':'확인된 합류','resume':'봇 대화 재개','commentary':'제3자 논평','shift':'상대 전환','end':'종료','uncertain':'미확정'}
             if social:
-                self.text(535,365,'청자: '+targets.get(social.get('target'),'미확정')+' · '+links.get(social.get('relation'),'미확정')+' · '+('명시적 호출' if social.get('explicit_call') else '문맥 판정'),9,MUTED,width=w-575)
+                self.text(535,365,'청자 판단: '+targets.get(social.get('target'),'미확정')+' · '+links.get(social.get('relation'),'미확정')+' · '+('명시적 호출 근거' if social.get('explicit_call') else '문맥 판단 근거'),9,MUTED,width=w-575)
                 peers=social.get('current_peers',[]);peer_text=', '.join(peers[:3])+(' 외 '+str(len(peers)-3)+'명' if len(peers)>3 else '')
                 self.text(535,390,'현재 상대 ID: '+(peer_text or '없음')+' · 확인 참여자 '+str(social.get('confirmed_participants',0))+'명',8,MUTED,width=w-575)
             phases=('scope_check','member_resolution','conversation_candidates','conversation_wait','social','assessment','memory_lookup','summary','research','action','text','output_check','sending')
@@ -787,6 +811,7 @@ class DesktopApp(CompanionViews):
                 self.text(535,490,'과거 참여자라고 모든 발언에 답하지 않아요. 발언마다 실제 청자를 다시 확인해요.',10,MUTED,width=w-580)
             else:self.text(535,310,'대화나 작업을 선택하면 실제 상태와 판정 결과를 볼 수 있어요.',11,MUTED,width=w-580)
         self.text(242,h-107,'최근 판단: '+s['recent_reason'] if s.get('recent_reason') else '원문 메시지와 AI 비공개 추론은 표시하지 않아요.',9,MUTED,width=w-300)
+        self.button(242,h-75,182,28,'초기화 영향 미리보기',self.show_reset_preview)
     def draw_outputs(self,w,h,cfg):
         if not cfg:return
         rounded(self.canvas,226,143,w-252,h-210,PANEL)

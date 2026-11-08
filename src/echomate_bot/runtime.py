@@ -145,6 +145,17 @@ class Runtime:
             if {'ended':0,'idle':1,'waiting':2,'active':3}[status]>{'ended':0,'idle':1,'waiting':2,'active':3}[row['status']]:row['status']=status
         return [dict(r,participants=len(r['participants']),peers=list(map(str,sorted(r['peers'])))) for r in rows.values()][:32]
 
+    def reset_preview(self, guild, channel):
+        """Read-only inventory of the short-term scope; no deletion capability."""
+        cfg=self.settings.get()
+        if cfg.get('operating_channel') != [guild,channel]:
+            raise ValueError('Select the saved operating channel')
+        keys={key for key,flow in self.conversations.flows.items()
+              if (flow.guild,flow.channel)==(guild,channel)}
+        return dict(guild=guild,channel=channel,settings_revision=self.settings.revision,
+                    conversations=len({self.conversations.flows[key].conversation_id for key in keys}),
+                    pending=len(keys & (self.tasks.keys() | self.deferred_events.keys())))
+
     def flow_state(self,flow,now=None):
         if flow.ended:return 'ended'
         task=self.tasks.get(flow.key)
@@ -279,6 +290,7 @@ class Runtime:
 
     def pause_gateway(self):
         self.gateway_available=False
+        if self.channel_experience:self.channel_experience.quarantine()
         for task in self.summary_tasks:task.cancel()
         for key,(event,request) in list(self.requests.items()):
             if not self.ledger.contains(event):self.deferred_events.setdefault(key,(event,request))
@@ -649,16 +661,21 @@ class Runtime:
             if self.changing_model:self.note('character_intake_paused');return
             if event.character_epoch is None:event=replace(event,character_epoch=self.model_generation_epoch)
             elif event.character_epoch!=self.model_generation_epoch:self.note('stale_character_event');return
-        if scope(self.settings.get(),event.guild,event.channel,event.parent)=='silent':self.note('scope_denied');return
+        cfg=self.settings.get();revision=self.settings.revision
+        if scope(cfg,event.guild,event.channel,event.parent)=='silent':self.note('scope_denied');return
         lock=self.ingest_locks.setdefault(event.channel,asyncio.Lock())
-        async with lock:await self._ingest(event)
+        async with lock:
+            if (cfg.get('operating_channel') is not None or self.settings.get().get('operating_channel') is not None) and revision!=self.settings.revision:return
+            await self._ingest(event)
 
     async def _ingest(self,event):
+        revision=self.settings.revision
         if not event.raw_parts:
             if event.id in self.seen:return
             if not (await self.transport.permissions(event)).get('view',False):self.note('permission_denied');return
             event=await self.member_evidence(event)
             cfg=self.settings.get();g=cfg['guilds'].get(str(event.guild),{})
+            if cfg.get('operating_channel') is not None and (revision!=self.settings.revision or scope(cfg,event.guild,event.channel,event.parent)=='silent'):return
             aliases=list(g.get('aliases',()))
             if hasattr(self.transport,'address_names'):aliases.extend(self.transport.address_names(event))
             from .naming import address_forms
@@ -1194,6 +1211,7 @@ class Runtime:
         if self.flow_failures.get(self.key(event),0)>=3:self.note('conversation_error_paused');return
         started=time.time();self.stage(event,'assessment',started)
         revision=self.settings.revision;cfg=self.settings.get();mode=scope(cfg,event.guild,event.channel,event.parent)
+        if cfg.get('operating_channel') is not None and mode=='silent':return
         text_mode=scope(cfg,event.guild,event.channel,event.parent,action='text')
         reaction_mode=scope(cfg,event.guild,event.channel,event.parent,action='reaction')
         flow=self.conversations.flows.get(self.key(event))

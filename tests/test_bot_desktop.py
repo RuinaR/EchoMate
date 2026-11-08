@@ -53,7 +53,8 @@ class DesktopWidgets(unittest.TestCase):
                 app.save_scope();app.set_value('activity','normal');root.update_idletasks()
                 self.assertEqual(controller.commands[0][1]['text_mode'],'autonomous')
                 self.assertEqual(controller.commands[0][1]['reaction_mode'],'silent')
-                self.assertTrue(controller.commands[0][1]['inherit'])
+                self.assertEqual(controller.commands[0][0],'operating_channel')
+                self.assertNotIn('inherit',controller.commands[0][1])
                 self.assertEqual(controller.commands[1][1]['values']['activity'],'normal')
                 for page in ('spaces','outputs','character','status','labs'):
                     app.page=page;app.render();root.update_idletasks()
