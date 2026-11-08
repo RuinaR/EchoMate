@@ -1,5 +1,9 @@
 # 현재 상태
 
+## 2026-11-08 인과적 정체성 기준선
+
+격리 SQLite 경험 저널과 표현 전이, 읽기 전용 컴파일러 입력을 구현했다. 실제 Discord 피드백 수집, 프로덕션 연결, Lime 표현 품질 및 모델 교체 뒤 연속성은 미검증이다. RELEASE BLOCKED와 장시간 DEFERRED를 유지한다. [상세 인수인계](CHATGPT-HANDOFF.md)
+
 ## 2026-10-27 자연어 규칙 감사·일반화 경계
 
 검증: 전체1,159개 OK326.343초·Portable263개 OK24.853초. GPU DIRECT는 짧은 health 중단으로 미실행, CPU mock6/4·자율0 유지.

@@ -1,5 +1,9 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-11-08 경험 기반 표현 적응
+
+시작 로컬 `a6bb8b6` clean, 원격 설계 `3f57d58`까지 fast-forward 후 구현. 운영 Runtime 호출자는 새 상태를 주입하지 않는다. 다음 단계는 합성 수정·삭제·철회가 독립 저장소와 읽기 스냅샷에 복구 가능하게 반영되는 연결 검증이다. 실 Discord·실제 Lime 생성·어댑터 훈련보다 먼저 수행한다. [구현 경계](IDENTITY-CONTINUITY-DESIGN.md) · [ChatGPT 인수인계](CHATGPT-HANDOFF.md)
+
 ## 2026-10-27 자연어 규칙 감사·일반화 경계
 
 검증: 전체1,159개 OK326.343초·Portable263개 OK24.853초. GPU DIRECT는 짧은 health 중단으로 미실행, CPU mock6/4·자율0 유지.

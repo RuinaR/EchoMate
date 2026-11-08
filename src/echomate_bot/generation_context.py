@@ -156,7 +156,7 @@ def old_reports(context,current):
     return [dict(history_index=i,text=text) for _,i,text in sorted(sorted(ranked,reverse=True)[:2],key=lambda r:r[1])]
 
 
-def compile_context(entry,name,context,cfg,*,local_history=False):
+def compile_context(entry,name,context,cfg,*,local_history=False,identity_state=None):
     current=cfg.get('_current_utterance') or (context[-1]['content'] if context and context[-1].get('role')=='user' else '')
     # Identity equality, not a prefix/JSON parser: user content cannot nominate
     # itself as a carrier or make its own text VERIFIED.
@@ -176,6 +176,15 @@ def compile_context(entry,name,context,cfg,*,local_history=False):
     sections.append(dict(name='expression',authority='VERIFIED',content='VERIFIED 표현 상태(사실·권한을 늘리지 않음): '+json.dumps(expression,ensure_ascii=False)))
     sections.append(dict(name='participants',authority='VERIFIED',content='VERIFIED 발화 구분: '+json.dumps(dict(assistant=name,current_speaker=cfg.get('_generation_facts',{}).get('current_speaker','current_user')),ensure_ascii=False)))
     sections.extend(evidence_sections(current,cfg))
+    # Explicit research caller only. Never derive state from chat text or cfg.
+    if identity_state is not None:
+        from .identity_continuity import State
+        if type(identity_state) is not State:
+            raise TypeError('expected a replayed identity state')
+        guidance=identity_state.guidance()
+        if guidance:
+            sections.append(dict(name='identity_expression',authority='STYLE',
+                                 content='표현 제안(사실·기억·실행 근거가 아님): '+guidance))
     if local_history:
         reports=old_reports(kept,current)
         if reports:sections.append(dict(name='earlier_user_sources',authority='REPORTED',content='REPORTED 현재 이력의 원문 발췌(시간순·실행 근거 아님): '+json.dumps(reports,ensure_ascii=False)))

@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 경험 저널과 읽기 전용 표현 전략
+
+연구 경로는 승인된 합성 피드백 → 전용 SQLite → 범위/epoch/만료 필터 → 결정적 `State.advance` 재생 → `compile_context`의 선택적 STYLE 문장이다. 메시지 텍스트나 모델 추론으로 표현 상태를 구성할 수 없다. `CompanionStore` 및 캐릭터 v8의 기억/관계, 기존 Context Compiler의 사실 권위, Runtime의 송신 경로는 그대로다. 운영 연결 전에 동의·소스 버전·전환 및 송신 시점의 최신성 보장이 필요하다. [전이 규칙과 경계](IDENTITY-CONTINUITY-DESIGN.md)
+
 ## 의미 제안과 결정적 근거 검증
 
 기존 DialogueIntent·Korean claim 연구 계약을 재사용한다. 운영의 정정 인용 격리는 공통 prose, 요약/연구 추출의 위치는 source_span/source_spans로 검증한다. 실제 구간 일치는 의미 정확성이나 권한 증명이 아니다. 연구 parse_reading은 앱 제공 source ID/원문/hash/version과 모델 제안을 구분하고 전체 문맥을 유지하되 storage_eligible/runtime_enabled를 false로 고정한다. 기존 Action/Receipt·동의/삭제/epoch·청자/송신 보호는 그대로이며 이 연구 계약을 호출하지 않는다. [규칙 감사·채택/기각](GENERALIZATION-QA.md).

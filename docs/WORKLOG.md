@@ -1,5 +1,14 @@
 # 작업 로그
 
+## 2026-11-08 경험 기반 표현 적응 기준선
+
+- 시작 로컬 `a6bb8b6` clean, 원격 `3f57d58` 확인 후 fast-forward. 구현 기준은 `3f57d583799165e88b6263ae77015206112c4d50`. 최종 결과의 SHA는 이 절을 제공하는 커밋과 `origin/main`을 대조해 확인한다.
+- 새 `identity_continuity.py`의 `ExperienceJournal`은 별도 SQLite에서 동의된 합성 피드백의 최신 수정·삭제·철회를 처리한다. `State.advance`의 F는 표현 상세도, G는 다음 보폭을 갱신한다. `generation_context.compile_context`의 명시적 인자는 재생된 표현 상태에서 고정 안내만 가져온다. 합성 테스트는 `tests/test_identity_continuity.py`에 있다. 기존 Discord/CompanionStore/캐릭터 v8에 이를 붙이지 않아 운영 DB 이관이 없다.
+- 기존 저장소의 사용자 동의 epoch, 수정·삭제 경로, 생성 사실 권위와 송신 검사를 검토했다. 별도 DB 사이에는 원자성이 없으므로 전용 DB의 성공만으로 운영 연동을 승인할 수 없다. 스냅샷을 저장하지 않고 재생하는 방식을 선택해 파생 자료 삭제 범위를 줄였다.
+- 별도 합성 사건군을 사전에 정한 전이 결과와 비교했다. 처음에는 반전 사례가 기대 +2에 실제 +3으로 FAIL이었다. 반대 방향의 첫 피드백에 이전 보폭을 재사용하는 원인을 수정한 후 4/4, 범위 외·철회 후는 각각 4/4 기본값이다. 재검증에 사용된 사례는 개발 자료다.
+- 격리 비활성 Desktop과 루프백 제한 전체 회귀는 기존 하네스로 1,167개 OK(308.928초). 이 실행은 최종 반전 수정 전에 시작했다. 수정 후 `PYTHONPATH=src;tools;tests`에서 `.venv-gemma4/Scripts/python.exe -m unittest test_identity_continuity test_generation_context -q`로 25개 OK. GPU·실 Discord·가중치 학습 및 최종 코드의 전체 재실행은 미실행이다. 기존 출시 차단과 장시간 DEFERRED를 유지한다.
+- 우선 재개: 합성 이벤트의 실제 소스/동의 변경과 기존 Runtime snapshot을 접속 없이 연결하고, 삭제·철회·캐릭터 전환 중 발생하는 stale read와 실패 복구를 먼저 검증한다. 그 다음 실제 Lime과 별도 독립 평가를 수행한다. [설계](IDENTITY-CONTINUITY-DESIGN.md) · [전달 요약](CHATGPT-HANDOFF.md)
+
 ## 2026-10-27 자연어 규칙 감사·일반화 경계
 
 검증: 전체1,159개 OK326.343초·Portable263개 OK24.853초. GPU DIRECT는 짧은 health 중단으로 미실행, CPU mock6/4·자율0 유지.
