@@ -73,7 +73,7 @@ from .ledger import Ledger
 
 
 class Runtime:
-    def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None,companion=None,followup_fast_path=True,response_pipeline=None,execution_mode='DISCORD_AUTONOMOUS'):
+    def __init__(self,settings,backend,transport,cache,library,*,ledger_path=ROOT/"sent.sqlite3",rng=None,companion=None,followup_fast_path=True,response_pipeline=None,execution_mode='DISCORD_AUTONOMOUS',channel_experience=None):
         from .execution_modes import ExecutionMode
         self.execution_mode=ExecutionMode(execution_mode)
         if self.execution_mode==ExecutionMode.LOCAL_CHAT:
@@ -82,6 +82,11 @@ class Runtime:
         if character_id and companion is not None and getattr(companion,'character_id',None)!=character_id:
             raise ValueError('Pretrained character requires a matching scoped personal store')
         self.response_pipeline=response_pipeline
+        if channel_experience is not None and (channel_experience.companion is not companion or response_pipeline is not None):
+            raise ValueError('Channel experience requires its matching store and the standard generation path')
+        self.channel_experience=channel_experience
+        self.experience_revision=0
+        self.experience_pending=0
         self.settings=settings;self.backend=backend;self.transport=transport;self.cache=cache;self.library=None
         self.ledger=Ledger(ledger_path);self.rng=rng or random.Random()
         self.states={};self.tasks={};self.seen={};self.blocked_assets=set();self.failures=0
@@ -385,10 +390,12 @@ class Runtime:
         if hasattr(self.transport,'ready') and not self.transport.ready():return
         for row in await asyncio.to_thread(self.companion.due,cfg['reminder_grace']):
             event=Event(int(row['source']),int(row['guild']),int(row['channel']),int(row['requester']),'',datetime.now(timezone.utc),parent=int(row['parent']) if row['parent'] else None)
+            if not self.channel_accepts(event.guild,event.channel,event.parent):continue
             def within_scope(latest):
                 now=self.companion.clock()
                 return (row['due_at']<=now<=row['due_at']+latest['reminder_grace'] and
                         not self.stopped and not self.changing_model and delivery_epoch==self.model_generation_epoch and latest['enabled'] and latest['reminders_enabled'] and latest['text'] and
+                        self.channel_accepts(event.guild,event.channel,event.parent) and
                         scope(latest,event.guild,event.channel,event.parent,action='text')!='silent')
             async def allowed():
                 latest=self.settings.get()
@@ -418,6 +425,9 @@ class Runtime:
                 except (OSError,RuntimeError,sqlite3.Error):self.note('reminder_store_failed')
 
     async def message_changed(self,guild,channel,message,content=None):
+        if not self.channel_accepts(guild,channel):return
+        if self.channel_experience:
+            self.experience_revision+=1
         self.utterances.changed(guild,channel,message)
         self.social.change(guild,channel,message,content)
         for job in self.job_records.values():
@@ -435,10 +445,19 @@ class Runtime:
             self.pending_mentions.pop(key,None);self.deferred_events.pop(key,None)
             state.change_message(channel_id=channel,thread_id=None,message_id=str(message),content=content)
         if self.companion:
-            try:await asyncio.to_thread(self.companion.delete_source,guild,message,known=known)
+            if self.channel_experience:self.experience_pending+=1
+            completed=False
+            try:
+                await asyncio.to_thread(self.companion.delete_source,guild,message,known=known or self.channel_experience is not None)
+                completed=True
             except (OSError,RuntimeError,sqlite3.Error):self.note('memory_delete_failed')
+            finally:
+                if self.channel_experience:
+                    self.experience_pending-=1
+                    if not completed:self.stopped=True
 
     async def reaction_event(self,guild,channel,user,message,emoji,*,remove=False,parent=None):
+        if not self.channel_accepts(guild,channel,parent):return
         if not self.companion or not self.settings.get()['relations_auto'] or scope(self.settings.get(),guild,channel,parent)=='silent':return
         if not await self.automatic_subject_allowed(guild,user):return
         found=False
@@ -619,7 +638,11 @@ class Runtime:
         for task in self.summary_tasks:task.cancel()
         for task in list(self.tasks.values()):task.cancel()
 
+    def channel_accepts(self,guild,channel,parent=None):
+        return self.channel_experience is None or self.channel_experience.accepts(guild,channel,parent)
+
     async def ingest(self,event):
+        if not self.channel_accepts(event.guild,event.channel,event.parent):return
         self.note('event_received')
         if self.stopped or event.bot or event.opted_out:return
         if getattr(self.backend,'character_id',None):
@@ -917,7 +940,7 @@ class Runtime:
             trace=active_trace.get()
             if trace:trace.outcome='cancelled'
             self.note('social_source_changed');return False
-        def current():return ((event.character_epoch is None or event.character_epoch==self.model_generation_epoch) and self.utterances.valid(event) and
+        def current():return (self.channel_accepts(event.guild,event.channel,event.parent) and (event.character_epoch is None or event.character_epoch==self.model_generation_epoch) and self.utterances.valid(event) and
                 (event.social_source is None or self.social.source_current(event.social_source)) and
                 not any(row.parts[0].response_to==(event.response_to or event.id) and
                     (row.parts[0].guild,row.parts[0].channel,row.parts[0].author)==(event.guild,event.channel,event.author)
@@ -1654,6 +1677,23 @@ class Runtime:
                         selection_guard=memory_selection
                         if selection_guard and not await asyncio.to_thread(selection_guard.current,self.companion):
                             self.note('memory_selection_changed');return
+                        if self.channel_experience:
+                            experience=self.channel_experience
+                            character_id=getattr(self.backend,'character_id',None)
+                            def identity_stamp():
+                                return (self.experience_revision,self.model_generation_epoch,
+                                        getattr(self.backend,'name_version',None))
+                            stamp=identity_stamp()
+                            projection=await asyncio.to_thread(experience.projection,event,character_id)
+                            if projection is not None:
+                                async def experience_current():
+                                    if self.experience_pending or stamp!=identity_stamp() or self.changing_model:return False
+                                    latest=await asyncio.to_thread(experience.projection,event,getattr(self.backend,'character_id',None))
+                                    return (latest==projection and not self.experience_pending and not self.changing_model
+                                            and stamp==identity_stamp())
+                                generation_guard=experience_current
+                                if not await self.fresh(event,state,version,revision) or not await generation_guard():return
+                                character['_identity_state']=projection[1]
                         answer=await self.backend.text(context,character)
                 finally:
                     if indicator:
@@ -1709,8 +1749,6 @@ class Runtime:
                                     dependency_stale=True;self.note('subject_evidence_changed');return False
                             except (OSError,RuntimeError,sqlite3.Error):
                                 dependency_stale=True;self.note('delivery_evidence_unavailable');return False
-                            if generation_guard and not await generation_guard():
-                                self.note('generation_evidence_changed');return False
                             if capability_answer is not None:
                                 latest=await public_state(self,event,await self.transport.permissions(event),visual=observation)
                                 old_view=dict(capability_view);new_view=dict(latest)
@@ -1718,6 +1756,8 @@ class Runtime:
                                 if new_view!=old_view:self.note('capability_state_changed');return False
                             if summary_guard and await asyncio.to_thread(self.companion.digest_consent,event.guild,summary_guard)!=summary_guard:return False
                             if summary_id and not await asyncio.to_thread(self.companion.has_digest,event.guild,event.channel,event.author,summary_id):return False
+                            if generation_guard and not await generation_guard():
+                                dependency_stale=True;self.note('generation_evidence_changed');return False
                             return True
                         sent=await self.transport.execute(event,action,self.library,delivery_current)
                     except Exception:

@@ -1,5 +1,14 @@
 # ChatGPT 인수인계 — EchoMate
 
+## 2026-11-08 KST · 단일 채널 경험 수명주기
+
+- 시작 로컬 `7cd218c` clean, 원격 `d7d2e53`으로 fast-forward. [MASTER-VISION](MASTER-VISION.md)은 장기 기준이고 [단일 채널 계약](SINGLE-CHANNEL-MULTIUSER-CONTRACT.md)은 운영 범위다.
+- `identity_runtime.ChannelExperience`는 기존 v8 동의·tombstone과 같은 DB에 격리 경험 테이블을 명시적으로 추가한다. 재시작 후 커밋된 삭제·철회, 재동의 뒤 오래된 메시지 거절, 롤백을 합성으로 검증했다. 운영 DB는 수정하지 않았다.
+- `Runtime`과 GGUF 컴파일러는 합성 주입 시에만 채널 필터·사용자 상태·최종 전송 검사를 사용한다. 교차 요청에서 두 사용자에게 다른 지침과 올바른 reply target을 확인했다. 응답 텍스트는 합성 백엔드 출력이다.
+- 실제 Lime·Discord·GPU는 실행하지 않았다. 오프라인에 놓친 수정/삭제, 커밋 전 종료, 동의 UI, 자동 추출, 자율 청자 품질 및 실제 어댑터 적응은 미검증이다. RELEASE BLOCKED.
+- 관련 오프라인 회귀 92개 통과. 명령과 최초 픽스처 실패는 [작업 로그](WORKLOG.md)에 기록했다. 최종 기준 SHA는 이 문서가 포함된 커밋으로 식별한다.
+- 다음 검토 질문: 재접속 시 원본과 대조하기 전 오래된 상태를 어떻게 격리할 것인가? 경험 동의를 기존 기억 동의와 어떻게 구분할 것인가? [사전 정의한 비교 계획](IDENTITY-CONTINUITY-DESIGN.md#독립-lime-평가-계획)에서 메타 보폭이 고정보다 낫다는 결과를 얻을 수 있는가?
+
 ## 2026-11-08 KST
 
 - 프로젝트: `RuinaR/EchoMate`. 작업 시작 로컬은 `a6bb8b60c2997a6fa8f53b50c54618298f653236` clean. 구현 기준은 원격 설계 커밋 `3f57d583799165e88b6263ae77015206112c4d50`. 아래 내용의 최종 커밋은 이 파일을 제공하는 Git 리비전으로 식별한다.

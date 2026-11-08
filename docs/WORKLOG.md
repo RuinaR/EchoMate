@@ -1,5 +1,13 @@
 # 작업 로그
 
+## 2026-11-08 단일 채널 다중 사용자 경험 통합
+
+- 시작 `7cd218c` clean → 원격 `d7d2e53769ef4eeab8ebfc7aee41bad374b5bfab` fast-forward. 장기 기준은 MASTER-VISION, 운영 범위는 단일 채널 계약으로 정했다. 이 기록을 제공하는 커밋을 `origin/main`과 대조한다.
+- `identity_runtime.py`의 `ChannelExperience`는 동의 및 원본 삭제와 같은 v8 트랜잭션에서 경험 행을 관리한다. `identity_continuity.py`의 reducer는 유지하고 소스 스냅샷을 추가했다. Runtime·Discord 이벤트 핸들러·GGUF 연결은 합성 주입 시에만 사용한다. 제품 부트스트랩·모델 가중치·운영 DB에 자동 적용하지 않았다.
+- 검증은 `PYTHONPATH=src;tools;tests`에서 `.venv-gemma4/Scripts/python.exe -m unittest test_identity_runtime test_identity_continuity test_generation_context test_character_runtime test_parallel_runtime test_discord_simulator -q`, **92개 OK (21.995초)**. 첫 표적 실행의 테스트 픽스처 오류는 존재하지 않는 `CharacterStores.open` 호출이었으며 실제 재개 생성자를 사용하도록 수정했다.
+- 신규 통합 증거는 동의 철회/재동의/재개, 편집·일괄 삭제 및 구버전 재시도, 강제 DB 실패의 롤백/실행 정지, 교차 사용자별 스타일/맥락/reply, 생성 중 삭제와 송신 직전 철회/캐릭터 epoch 변경이다. 합성 백엔드 응답이 다르게 나오는 것은 행동 입력 경로의 증거다. 실제 Lime의 메타적응 효용을 뒷받침하거나 기존 장기 가설을 반박하는 실측은 이번에 없었다.
+- 전체 회귀·Portable·GPU·실 Discord는 이번 차수 미실행이다. 커밋 전 종료/오프라인 이벤트 누락 후 재검증, 적응 전용 동의, 자율 참여와 실제 생성 A/B/C가 남아 있다. [설계 및 평가 계획](IDENTITY-CONTINUITY-DESIGN.md#단일-채널-수명주기-통합-후보).
+
 ## 2026-11-08 경험 기반 표현 적응 기준선
 
 - 시작 로컬 `a6bb8b6` clean, 원격 `3f57d58` 확인 후 fast-forward. 구현 기준은 `3f57d583799165e88b6263ae77015206112c4d50`. 최종 결과의 SHA는 이 절을 제공하는 커밋과 `origin/main`을 대조해 확인한다.

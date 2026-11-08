@@ -634,7 +634,8 @@ class GGUFLocalBackend(LocalBackend):
         from .character import needs_rewrite
         from .generation_context import compile_context
         from .local_chat import local_token_budget
-        compiled=compile_context(self.entry,self.name,context,cfg,local_history=local_token_budget.get())
+        compiled=compile_context(self.entry,self.name,context,cfg,local_history=local_token_budget.get(),
+                                 identity_state=cfg.get('_identity_state'))
         messages=compiled.messages;corrected_turns=compiled.corrected_turns
         runtime_budget=cfg.get('_native_runtime_context') is True
         if runtime_budget:

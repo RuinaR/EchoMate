@@ -368,6 +368,7 @@ class EchoClient(discord.Client):
         if not message.guild or message.author.bot or message.webhook_id:return
         self.runtime.note('gateway_message_received')
         parent=message.channel.parent_id if isinstance(message.channel,discord.Thread) else None
+        if not self.runtime.channel_accepts(message.guild.id,message.channel.id,parent):return
         cfg=self.settings.get()
         if scope(cfg,message.guild.id,message.channel.id,parent)=="silent":self.runtime.note('scope_denied');return
         self.user_names[(message.guild.id,message.author.id)]=message.author.display_name[:80]
@@ -382,6 +383,12 @@ class EchoClient(discord.Client):
 
     async def on_raw_message_delete(self,payload):
         if payload.guild_id:await self.runtime.message_changed(payload.guild_id,payload.channel_id,payload.message_id)
+    async def on_raw_bulk_message_delete(self,payload):
+        if (payload.guild_id and self.runtime.channel_experience
+                and self.runtime.channel_accepts(payload.guild_id,payload.channel_id)):
+            # Stage all invalidations before waiting for their durable writes.
+            await asyncio.gather(*(self.runtime.message_changed(payload.guild_id,payload.channel_id,message)
+                                   for message in payload.message_ids))
     async def on_raw_message_edit(self,payload):
         if payload.guild_id and 'content' in payload.data:await self.runtime.message_changed(payload.guild_id,payload.channel_id,payload.message_id,payload.data['content'])
     async def _reaction_event(self,payload,remove):
@@ -390,6 +397,7 @@ class EchoClient(discord.Client):
         if not guild:return
         channel=guild.get_channel_or_thread(payload.channel_id)
         parent=channel.parent_id if isinstance(channel,discord.Thread) else None
+        if not self.runtime.channel_accepts(guild.id,payload.channel_id,parent):return
         if scope(self.settings.get(),guild.id,payload.channel_id,parent)=='silent':return
         try:member=getattr(payload,'member',None) or await guild.fetch_member(payload.user_id)
         except discord.HTTPException:return

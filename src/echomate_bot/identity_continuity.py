@@ -87,24 +87,28 @@ class ExperienceJournal:
             if (application, version) == (0, 0):
                 if db.execute("SELECT 1 FROM sqlite_master WHERE type='table'").fetchone():
                     raise ValueError("identity journal requires a dedicated database")
-                db.execute("""
-                    CREATE TABLE experience(
+                self.create_tables(db)
+                db.execute(f"PRAGMA application_id={SCHEMA_ID}")
+                db.execute("PRAGMA user_version=1")
+            elif (application, version) != (SCHEMA_ID, 1):
+                raise ValueError("unsupported identity journal version")
+
+    @staticmethod
+    def create_tables(db):
+        db.execute("""
+                    CREATE TABLE IF NOT EXISTS experience(
                         character TEXT NOT NULL, guild TEXT NOT NULL, channel TEXT NOT NULL,
                         subject TEXT NOT NULL, source INTEGER NOT NULL, revision INTEGER NOT NULL,
                         epoch INTEGER NOT NULL, topic TEXT, feedback TEXT, expires INTEGER,
                         PRIMARY KEY(character,guild,channel,subject,source)
                     )
                 """)
-                db.execute("""
-                    CREATE TABLE revoked(
+        db.execute("""
+                    CREATE TABLE IF NOT EXISTS revoked(
                         guild TEXT NOT NULL, subject TEXT NOT NULL, epoch INTEGER NOT NULL,
                         PRIMARY KEY(guild,subject)
                     )
                 """)
-                db.execute(f"PRAGMA application_id={SCHEMA_ID}")
-                db.execute("PRAGMA user_version=1")
-            elif (application, version) != (SCHEMA_ID, 1):
-                raise ValueError("unsupported identity journal version")
 
     @contextmanager
     def _transaction(self, *, write=True):
@@ -131,7 +135,7 @@ class ExperienceJournal:
                 or not isinstance(feedback, Feedback) or expires <= now):
             raise ValueError("expected reviewed feedback and a future expiry")
         with self._transaction() as db:
-            if not self._allowed(db, scope, epoch):
+            if not self._allowed(db, scope, epoch) or not self._source_allowed(db, scope, source):
                 return False
             return bool(db.execute("""
                 INSERT INTO experience VALUES(?,?,?,?,?,?,?,?,?,?)
@@ -171,14 +175,21 @@ class ExperienceJournal:
             db.execute("DELETE FROM experience WHERE guild=? AND subject=? AND epoch<=?", (*key, epoch))
 
     def state(self, scope, *, epoch, topic, now):
+        return self.snapshot(scope, epoch=epoch, topic=topic, now=now)[0]
+
+    def _source_allowed(self, db, scope, source):
+        return True
+
+    def snapshot(self, scope, *, epoch, topic, now):
         positive_integer(epoch)
         positive_integer(now)
         if not isinstance(topic, Topic):
             raise ValueError("expected a trusted topic")
         state = State()
+        dependencies = []
         with self._transaction(write=False) as db:
             if not self._allowed(db, scope, epoch):
-                return state
+                return state, ()
             rows = db.execute("""
                 SELECT source,revision,feedback FROM experience
                 WHERE character=? AND guild=? AND channel=? AND subject=?
@@ -186,5 +197,7 @@ class ExperienceJournal:
                 ORDER BY source
             """, (*scope.key(), epoch, topic.value, now))
             for source, revision, feedback in rows:
-                state = state.advance(source, revision, feedback)
-        return state
+                if self._source_allowed(db, scope, source):
+                    state = state.advance(source, revision, feedback)
+                    dependencies.append((source, revision, feedback))
+        return state, tuple(dependencies)

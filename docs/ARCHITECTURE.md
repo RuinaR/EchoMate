@@ -1,5 +1,9 @@
 # 아키텍처
 
+## 단일 채널 경험 통합 후보
+
+[MASTER-VISION](MASTER-VISION.md)은 장기 목표, [단일 채널 계약](SINGLE-CHANNEL-MULTIUSER-CONTRACT.md)은 운영 범위의 기준이다. 명시적으로 주입한 `ChannelExperience`는 격리 v8 DB에서 기존 consent/tombstone과 경험 행을 같은 트랜잭션으로 처리한다. Runtime은 지정 채널만 허용하고 기존 conversation routing/큐를 재사용한다. 생성 전 및 transport 최종 검사에서 상태와 소스·동의·캐릭터·이름 버전을 재검증한다. [정확한 경계와 평가 계획](IDENTITY-CONTINUITY-DESIGN.md#단일-채널-수명주기-통합-후보).
+
 ## 경험 저널과 읽기 전용 표현 전략
 
 연구 경로는 승인된 합성 피드백 → 전용 SQLite → 범위/epoch/만료 필터 → 결정적 `State.advance` 재생 → `compile_context`의 선택적 STYLE 문장이다. 메시지 텍스트나 모델 추론으로 표현 상태를 구성할 수 없다. `CompanionStore` 및 캐릭터 v8의 기억/관계, 기존 Context Compiler의 사실 권위, Runtime의 송신 경로는 그대로다. 운영 연결 전에 동의·소스 버전·전환 및 송신 시점의 최신성 보장이 필요하다. [전이 규칙과 경계](IDENTITY-CONTINUITY-DESIGN.md)

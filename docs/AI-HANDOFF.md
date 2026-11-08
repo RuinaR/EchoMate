@@ -1,5 +1,9 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-11-08 단일 채널 경험 후보
+
+원격 `d7d2e53`의 [MASTER-VISION](MASTER-VISION.md)과 [단일 채널 계약](SINGLE-CHANNEL-MULTIUSER-CONTRACT.md)을 기준으로 격리 v8 통합을 구현했다. 다음 작업은 오프라인·커밋 실패 후 원본 대조, 별도 경험 동의, 실제 Lime 독립 평가다. 현재 production 부트스트랩에는 연결하지 않는다. [최신 결과](CHATGPT-HANDOFF.md)
+
 ## 2026-11-08 경험 기반 표현 적응
 
 시작 로컬 `a6bb8b6` clean, 원격 설계 `3f57d58`까지 fast-forward 후 구현. 운영 Runtime 호출자는 새 상태를 주입하지 않는다. 다음 단계는 합성 수정·삭제·철회가 독립 저장소와 읽기 스냅샷에 복구 가능하게 반영되는 연결 검증이다. 실 Discord·실제 Lime 생성·어댑터 훈련보다 먼저 수행한다. [구현 경계](IDENTITY-CONTINUITY-DESIGN.md) · [ChatGPT 인수인계](CHATGPT-HANDOFF.md)
