@@ -1,5 +1,11 @@
 # 작업 로그
 
+## 2026-11-08 Windows 운영 콘솔 설계 통합
+
+- 시작 로컬·원격 `0fd9494`, clean. 기존 Desktop UI의 채널 편집·Controller, Runtime의 `monitor()`·`social_monitor()`, 개인정보 삭제 API, 로컬 테스트 세션 복구를 대조했다. 별도 콘솔 앱이나 중복 저장 경로를 추가하지 않는다.
+- MASTER-VISION과 PROJECT-DEFINITION에 최종 목표를, UI-COMPONENT-GUIDELINES에 화면과 근거 표시를, ARCHITECTURE에 범위별 초기화·복구 및 진입 게이트를 기록했다.
+- 검증은 문서 diff·링크·변경 파일 감사로 한정했다. 소스·운영 데이터·화면 조작은 변경 범위 밖이었다. 콘솔 구현 및 검증은 기존 수명주기 작업 이후 진행한다. [전달 요약](CHATGPT-HANDOFF.md)
+
 ## 2026-11-08 단일 채널 다중 사용자 경험 통합
 
 - 시작 `7cd218c` clean → 원격 `d7d2e53769ef4eeab8ebfc7aee41bad374b5bfab` fast-forward. 장기 기준은 MASTER-VISION, 운영 범위는 단일 채널 계약으로 정했다. 이 기록을 제공하는 커밋을 `origin/main`과 대조한다.

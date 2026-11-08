@@ -1,5 +1,9 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-11-08 Windows 운영 콘솔 요구 통합
+
+최종 화면과 관측 출처, 단일 채널 서명 설정, 네 가지 초기화 범위와 복구 승인 조건을 문서에 통합했다. 이번 변경은 설계다. 이전 경험 수명주기 작업은 유지하고, 원본 대조와 최신 동의 확인 이후 기존 Controller에 읽기 전용 관측부터 연결한다. [ChatGPT 인수인계](CHATGPT-HANDOFF.md)
+
 ## 2026-11-08 단일 채널 경험 후보
 
 원격 `d7d2e53`의 [MASTER-VISION](MASTER-VISION.md)과 [단일 채널 계약](SINGLE-CHANNEL-MULTIUSER-CONTRACT.md)을 기준으로 격리 v8 통합을 구현했다. 다음 작업은 오프라인·커밋 실패 후 원본 대조, 별도 경험 동의, 실제 Lime 독립 평가다. 현재 production 부트스트랩에는 연결하지 않는다. [최신 결과](CHATGPT-HANDOFF.md)
