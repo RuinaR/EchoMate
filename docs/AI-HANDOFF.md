@@ -1,5 +1,9 @@
 # AI 인수인계서 — EchoMate 현재 상태
 
+## 2026-11-08 SDK 원본 검증·별도 적응 동의
+
+실제 연결 없이 SDK 예외와 메시지 객체를 모의했다. `verify_experience_sources`는 격리 Runtime에서만 명시적으로 호출하며 채널·캐릭터·연결·동의 변화 뒤 응답을 폐기한다. `/동의`에 별도 적응 항목을 추가했다. 다음 게이트는 DB 전체 복원 시점의 권위 검증, 승인된 실제 원본 조회 절차, 독립 Lime A/B/C다. [ChatGPT 인수인계](CHATGPT-HANDOFF.md)
+
 ## 2026-11-08 단일 채널 설정 및 경험 원본 격리
 
 기존 서명 설정과 Desktop 화면에 명시적 단일 채널 선택을 연결했다. `ChannelExperience.reconcile`은 격리 시험에서 확인된 원본만 복구한다. 재접속 세대와 현재 SQLite 동의·삭제 상태를 함께 확인한다. 제품에서 실제 REST 연결, 과거 백업 복구와 적응 전용 동의가 남아 있다. [최신 인수인계](CHATGPT-HANDOFF.md)

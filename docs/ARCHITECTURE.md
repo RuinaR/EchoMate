@@ -2,6 +2,12 @@
 
 ## 운영 콘솔의 관측과 복구 경계
 
+경험 원본 조회 후보는 기존 `DiscordTransport.experience_source`의 SDK `fetch_message` 한 건을 사용한다. 지정된 텍스트 채널, 보기·이력 권한, 메시지·서버·채널·작성자 ID, 봇·웹후크 제외, 내용 및 수정 시각을 검사한다. 정확히 일치한 리비전과 해시만 현재 세션 표식을 얻는다. 더 최신 리비전은 기존 기여를 무효화하며, 같은 리비전에서 내용이 다르면 확인 불가로 보류한다. 해당 채널의 메시지 조회에서 Discord `10008`만 삭제로 처리한다. 접근 실패·통신 실패·조회 제한·불명확한 응답·오래된 결과·저장소 실패는 분리한다. SDK 위에 자동 재시도나 병렬 배치를 추가하지 않았다. [SDK 조회 계약](https://discordpy.readthedocs.io/en/stable/api.html#discord.TextChannel.fetch_message) · [Discord 오류 코드](https://github.com/discord/discord-api-docs/blob/main/developers/topics/opcodes-and-status-codes.mdx) · [조회 제한](https://github.com/discord/discord-api-docs/blob/main/developers/topics/rate-limits.mdx)
+
+경험 적응은 별도 `adaptation` 동의가 기본 OFF이며 관계·기억·요약의 기존 읽기 계약을 유지한다. 경험 표와 내용 해시는 같은 SQLite 트랜잭션에서 저장한다. 적응 철회 시 트리거가 경험 행과 의존 해시를 제거하며 재생과 송신 전에 최신 동의를 확인한다. 기존 기억 동의를 새 동의로 승격하지 않는다. 내용 해시가 없는 예전 연구 행은 확인 불가다. 과거 행을 현재 권위 DB에 다시 넣어도 현재 철회를 우회할 수 없지만, DB 전체가 옛 버전으로 교체되는 복구에는 별도 최신 권위가 필요하다. 해당 복구와 구 연구 브리지 다운그레이드는 지원하지 않는다.
+
+원본 재검증은 합성 주입 후 `Runtime.verify_experience_sources`로 명시적으로 호출한다. 제품 부트스트랩과 실제 Discord에는 연결하지 않았다. Windows 화면은 현재 연결에서 얻은 표식 수와 마지막 결과의 분류만 표시한다.
+
 현재 단일 채널 선택은 `Settings.select_operating_channel`로 서명 저장하고 대화·예약의 공통 `scope`에서 적용한다. 저장 전에 Controller가 연결된 텍스트 채널을 확인한다. 서명된 기존 설정은 선택 전까지 호환 모드를 유지하며, 별도 관리/개인정보 명령의 범위는 이번 변경에 포함하지 않았다. 상태 화면은 운영 범위, 작업 화자, 기존 청자 판정 및 단계, 마지막 소유 GGUF 자원 표본과 검증 표식 수를 표시한다. 표식 수는 현재 유효 사건 수가 아니다. 초기화 미리보기는 운영 채널의 단기 흐름·연결된 대기 작업 수와 보존 범주까지만 읽는다.
 
 격리 경험 저널은 재시작 시 확인 표식 없이 열리고 Gateway 중단 때 표식을 폐기한다. `ChannelExperience.reconcile`은 전달받은 원본 조회 어댑터로 범위·출처·리비전을 비교한다. 해당 범위의 유효 사건을 모두 확인하기 전에는 생성에 주입하지 않는다. 조회 불가 또는 불명확한 응답은 배치를 중단하며, 확인된 삭제는 기존 tombstone 경로를 사용하고 확인된 새 리비전은 기존 기여를 무효화한다. 응답이 늦어 다른 세션에 도착하면 표식을 적용하지 않는다. 실제 REST 어댑터는 연결하지 않았다. 연결 전에는 Discord SDK의 권한·rate limit 처리, 인증된 원본 리비전 매핑 및 접근 오류와 확정 삭제 구분을 합성 계약과 대조해야 한다.

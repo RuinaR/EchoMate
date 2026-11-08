@@ -765,7 +765,11 @@ class DesktopApp(CompanionViews):
         operating=s.get('operating_channel')
         experience=s.get('experience_verification')
         channel=(f"채널 {operating[1]} · {s.get('operating_mode') or '미관측'}" if operating else '단일 운영 채널 미지정')
-        verification=(f"이번 세션의 원본 검증 표식 {experience['session_marks']}개" if experience is not None else '경험 저널 미연결')
+        results={'found':'일치','changed':'수정 확인','deleted':'삭제 확인','forbidden':'권한 부족',
+                 'network_failure':'통신 실패','rate_limited':'조회 제한','unavailable':'확인 불가',
+                 'stale':'이전 상태 결과 폐기','storage_failure':'저장소 오류'}
+        verification=(f"원본 표식 {experience['session_marks']}개 · {results.get(experience.get('last_result'),'조회 결과 없음')}"
+                      if experience is not None else '경험 저널 미연결')
         self.text(242,280,self.ellipsize(channel+' · '+verification,w-300,8),8,MUTED)
         self.button(w-214,252,188,30,'비식별 진단 저장',lambda:self.controller.submit('diagnostics'))
         jobs=s.get('jobs',[])

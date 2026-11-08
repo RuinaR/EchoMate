@@ -2,12 +2,20 @@
 import asyncio
 import discord
 
-LABELS={'relationships':'친밀도·호칭 근거','memory':'장기 기억','summaries':'대화 요약'}
+LABELS={'relationships':'친밀도·호칭 근거','memory':'장기 기억','summaries':'대화 요약','adaptation':'경험 적응'}
+
+def consent_view(store,guild,user):
+    choices=store.consent(guild,user)
+    counts=store.data_counts(guild,user)
+    choices['adaptation'],counts['adaptation']=store.adaptation_consent(guild,user)
+    return choices,counts
 
 class ConsentPanel(discord.ui.View):
     def __init__(self,client,guild,user,choices,counts):
         super().__init__(timeout=300);self.client=client;self.guild=guild;self.user=user
-        self.choices=choices;self.counts=counts;self.selected=None;self.confirm=False;self.delete_revision=0;self.lock=asyncio.Lock();self.update_labels()
+        self.choices={'adaptation':False,**choices}
+        self.counts={'adaptation':0,**counts}
+        self.selected=None;self.confirm=False;self.delete_revision=0;self.lock=asyncio.Lock();self.update_labels()
     async def on_error(self,i,error,item):
         self.client.runtime.note('consent_update_failed_'+type(error).__name__)
         message='처리를 확인하지 못했어. /동의를 다시 열어 현재 상태를 확인해 줘.'
@@ -21,7 +29,8 @@ class ConsentPanel(discord.ui.View):
                 '친밀도: User ID와 연결된 교류 횟수·반응·관계 상태·별명 근거. 변화 이력은 30일, 별명 근거는 90일, 관계 상태·확정 별명은 삭제 전까지 보관해.\n'
                 '기억: 민감정보를 제외한 취향·활동·일정. 상태는 기본 6시간, 일정은 종료+유예 뒤 만료해. 목표는 최근 확인 90일 뒤 자동 활용을 보류하며 보류된 목표·취향·직접 기억은 삭제 전까지 남을 수 있어.\n'
                 '요약: 여러 턴의 주제·정정·결정·미해결 내용과 출처·참여자·시각·채널. 참여한 사람 모두 요약 저장에 동의한 대화만 저장하며 30일 뒤 만료해. 과거 선별 발췌도 별도로 남아 있을 수 있어.\n'
-                '각 항목은 기본 꺼짐이야. 켜도 소유자가 해당 자동 기능을 켠 범위에서만 저장해. **끄기=새 자동 저장·자동 활용 중지, 기존 자료는 유지**. '
+                '경험 적응: 명시적 표현 피드백과 출처를 사용해 이후 응답 전략을 조정하는 별도 선택이야. **끄면 기존 경험 기여도 제거**해. 켜도 운영 기능이 연결되기 전에는 수집하지 않아.\n'
+                '각 항목은 기본 꺼짐이야. 켜도 소유자가 해당 자동 기능을 켠 범위에서만 저장해. 경험 적응 외 항목의 **끄기=새 자동 저장·자동 활용 중지, 기존 자료는 유지**. '
                 '**삭제=해당 자료와 캐시 제거, 해당 동의도 끔**. 예약 알림은 이 삭제에 포함하지 않아. 자동 백업/삭제 자료 자동 복원은 없어.\n'
                 '아래에서 직접 선택해 줘. 다른 서버에는 적용되지 않아.')
 
@@ -42,8 +51,7 @@ class ConsentPanel(discord.ui.View):
             await asyncio.to_thread(self.client.companion.set_consent,self.guild,i.user.id,key,desired,subject=self.user)
             if desired:self.client.runtime.members.clear(self.guild,user=self.user)
             else:self.client.runtime.privacy_changed(self.guild,self.user,key,False)
-            self.choices=await asyncio.to_thread(self.client.companion.consent,self.guild,self.user)
-            self.counts=await asyncio.to_thread(self.client.companion.data_counts,self.guild,self.user)
+            self.choices,self.counts=await asyncio.to_thread(consent_view,self.client.companion,self.guild,self.user)
             self.update_labels();await i.edit_original_response(content=self.notice(),view=self)
 
     @discord.ui.button(label='친밀도 켜기',custom_id='consent:relationships',row=0)
@@ -52,6 +60,8 @@ class ConsentPanel(discord.ui.View):
     async def memory(self,i,b):await self.change(i,'memory')
     @discord.ui.button(label='대화 요약 켜기',custom_id='consent:summaries',row=0)
     async def summaries(self,i,b):await self.change(i,'summaries')
+    @discord.ui.button(label='경험 적응 켜기',custom_id='consent:adaptation',row=0)
+    async def adaptation(self,i,b):await self.change(i,'adaptation')
     @discord.ui.select(placeholder='삭제할 내 자료 선택 · 동의 끄기와 달라요',options=[discord.SelectOption(label=v,value=k) for k,v in LABELS.items()],row=1)
     async def choose_delete(self,i,select):
         if not await self.interaction_check(i):return
@@ -75,8 +85,7 @@ class ConsentPanel(discord.ui.View):
                 await i.edit_original_response(content=self.notice()+'\n선택한 자료를 삭제하려면 삭제 확인을 눌러 줘.',view=self);return
             await asyncio.to_thread(self.client.companion.delete_personal,self.guild,i.user.id,selected)
             self.client.runtime.privacy_changed(self.guild,self.user,selected,True)
-            self.choices=await asyncio.to_thread(self.client.companion.consent,self.guild,self.user)
-            self.counts=await asyncio.to_thread(self.client.companion.data_counts,self.guild,self.user)
+            self.choices,self.counts=await asyncio.to_thread(consent_view,self.client.companion,self.guild,self.user)
             self.confirm=False;self.delete_revision+=1;button.label='선택 자료 삭제';self.update_labels()
             await i.edit_original_response(content=self.notice()+'\n선택한 자료를 삭제했어.',view=self)
 
@@ -85,7 +94,6 @@ async def open_consent(client,i):
         await i.response.send_message('등록된 서버에서 본인 데이터 설정을 열어 줘.',ephemeral=True);return
     await i.response.defer(ephemeral=True)
     if client.companion.error:await asyncio.to_thread(client.companion.recover_readonly)
-    choices=await asyncio.to_thread(client.companion.consent,i.guild_id,i.user.id)
-    counts=await asyncio.to_thread(client.companion.data_counts,i.guild_id,i.user.id)
+    choices,counts=await asyncio.to_thread(consent_view,client.companion,i.guild_id,i.user.id)
     view=ConsentPanel(client,i.guild_id,i.user.id,choices,counts)
     await i.followup.send(view.notice(),view=view,ephemeral=True)

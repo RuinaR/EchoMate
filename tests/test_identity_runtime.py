@@ -1,16 +1,20 @@
 import asyncio
 from dataclasses import replace
+from datetime import datetime, timezone
 import sqlite3
 from types import SimpleNamespace
 import unittest
+from unittest.mock import AsyncMock, Mock, patch
+
+import discord
 
 import test_bot_integration as base
 from test_character_runtime import Backend
 from echomate_bot.character_store import CharacterStores
-from echomate_bot.discord_app import EchoClient
+from echomate_bot.discord_app import DiscordTransport, EchoClient
 from echomate_bot.generation_context import compile_context
 from echomate_bot.identity_continuity import Feedback, Scope, Topic
-from echomate_bot.identity_runtime import ChannelExperience, SourceObservation, SourceStatus
+from echomate_bot.identity_runtime import ChannelExperience, SourceObservation, SourceStatus, content_digest
 from echomate_bot.runtime import Runtime
 
 
@@ -34,8 +38,8 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.runtime.direct_cooldown = 0
         self.runtime.direct_spam_window = 0
-        self.store.set_consent(2, 4, "memory", True)
-        self.store.set_consent(2, 5, "memory", True)
+        self.store.set_consent(2, 4, "adaptation", True)
+        self.store.set_consent(2, 5, "adaptation", True)
         self.now += 10
 
     def bind(self, store):
@@ -48,7 +52,7 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
         return self.bridge.record_feedback(
             Scope("lime", 2, channel, subject), source=self.source(number),
             revision=revision, epoch=epoch, topic=Topic.PROJECT, feedback=Feedback.MORE_DETAIL,
-            now=self.now, expires=self.now + 50,
+            now=self.now, expires=self.now + 50, digest=content_digest("synthetic feedback"),
         )
 
     def seed(self):
@@ -58,15 +62,165 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
     def project(self):
         return self.bridge.projection(self.event(), "lime")
 
+    def sdk_transport(self):
+        guild = SimpleNamespace(id=2,me=object())
+        channel = Mock(spec=discord.TextChannel)
+        channel.id=3;channel.guild=guild
+        channel.permissions_for.return_value=SimpleNamespace(view_channel=True,read_message_history=True)
+        channel.fetch_message=AsyncMock()
+        guild.get_channel=lambda cid:channel if cid==3 else None
+        client=SimpleNamespace(runtime=self.runtime,settings=self.settings,is_ready=lambda:True,
+                               get_guild=lambda gid:guild if gid==2 else None)
+        self.transport.experience_source=DiscordTransport(client).experience_source
+        return channel
+
+    def sdk_message(self, channel, source, *, author=4, content="synthetic feedback", edited=False):
+        return SimpleNamespace(id=source,guild=channel.guild,channel=channel,
+                               author=SimpleNamespace(id=author,bot=False),webhook_id=None,
+                               created_at=datetime.fromtimestamp(1800000001,timezone.utc),
+                               edited_at=datetime.fromtimestamp(1800000002,timezone.utc) if edited else None,
+                               content=content)
+
+    async def test_sdk_reconciliation_proves_identity_revision_and_content(self):
+        revision=1800000001000000
+        for source in (1,2):self.assertTrue(self.record(source,revision=revision))
+        self.runtime.pause_gateway()
+        await self.runtime.resume_gateway()
+        channel=self.sdk_transport()
+        channel.fetch_message.side_effect=lambda source:self.sdk_message(channel,source,author=5)
+        self.assertEqual(await self.runtime.verify_experience_sources(4),1)
+        self.assertIsNone(self.project())
+        self.assertEqual(self.bridge.verification_status()["last_result"],"unavailable")
+        channel.fetch_message.side_effect=lambda source:self.sdk_message(channel,source)
+        self.assertEqual(await self.runtime.verify_experience_sources(4),2)
+        self.assertIsNotNone(self.project())
+        self.bridge.quarantine()
+        channel.fetch_message.side_effect=lambda source:self.sdk_message(channel,source,content="ambiguous content")
+        self.assertEqual(await self.runtime.verify_experience_sources(4),1)
+        self.assertEqual(self.bridge.verification_status()["last_result"],"unavailable")
+        self.assertIsNone(self.project())
+        channel.fetch_message.side_effect=lambda source:self.sdk_message(
+            channel,source,content="changed content" if source==self.source(2) else "synthetic feedback",
+            edited=source==self.source(2))
+        self.assertEqual(await self.runtime.verify_experience_sources(4),2)
+        self.assertEqual(self.bridge.verification_status()["last_result"],"changed")
+        self.assertIsNone(self.project())
+
+    async def test_sdk_separates_failures_and_only_unknown_message_removes_source(self):
+        self.seed()
+        self.bridge.quarantine()
+        channel=self.sdk_transport()
+        errors=(
+            (discord.Forbidden(SimpleNamespace(status=403,reason="Forbidden"),{"code":50013}),"forbidden"),
+            (discord.NotFound(SimpleNamespace(status=404,reason="Not found"),{"code":10003}),"unavailable"),
+            (discord.HTTPException(SimpleNamespace(status=429,reason="Limited"),{"code":0}),"rate_limited"),
+            (OSError("synthetic disconnect"),"network_failure"),
+        )
+        scope=Scope("lime",2,3,4)
+        for exc,status in errors:
+            channel.fetch_message.side_effect=exc
+            self.assertEqual(await self.runtime.verify_experience_sources(4),1)
+            self.assertEqual(self.bridge.verification_status()["last_result"],status)
+            self.assertEqual(self.bridge.state(scope,epoch=1,topic=Topic.PROJECT,now=self.now).count,2)
+            self.assertIsNone(self.project())
+        channel.fetch_message.side_effect=discord.NotFound(
+            SimpleNamespace(status=404,reason="Not found"),{"code":10008})
+        self.assertEqual(await self.runtime.verify_experience_sources(4),2)
+        self.assertEqual(self.bridge.verification_status()["last_result"],"deleted")
+        self.assertFalse(self.record(1,revision=2))
+
+    async def test_sdk_inflight_consent_channel_and_storage_invalidate_results(self):
+        self.seed()
+        self.bridge.quarantine()
+        channel=self.sdk_transport()
+        async def change(source):
+            self.settings.select_operating_channel(1,2,6,"mention","silent")
+            return self.sdk_message(channel,source)
+        channel.fetch_message.side_effect=change
+        self.assertEqual(await self.runtime.verify_experience_sources(4),1)
+        self.assertEqual(self.bridge.verification_status()["last_result"],"stale")
+        self.assertIsNone(self.project())
+        self.settings.select_operating_channel(1,2,3,"mention","silent")
+        async def revoke(source):
+            self.store.set_consent(2,4,"adaptation",False)
+            return self.sdk_message(channel,source)
+        channel.fetch_message.side_effect=revoke
+        self.assertEqual(await self.runtime.verify_experience_sources(4),1)
+        self.assertEqual(self.bridge.verification_status()["last_result"],"stale")
+        self.assertIsNone(self.project())
+        with patch.object(self.store,"consent_version",side_effect=sqlite3.OperationalError):
+            self.assertEqual(await self.runtime.verify_experience_sources(4),0)
+        self.assertEqual(self.bridge.verification_status()["last_result"],"storage_failure")
+
+    async def test_memory_consent_is_independent_and_legacy_rows_are_quarantined(self):
+        self.store.set_consent(2,4,"memory",True)
+        self.store.set_consent(2,4,"adaptation",False)
+        self.assertFalse(self.record(1))
+        self.assertTrue(self.store.consent(2,4)["memory"])
+        self.store.set_consent(2,4,"adaptation",True)
+        self.assertFalse(self.record(1,epoch=3))
+        # Legacy provenance has no content digest and cannot be verified.
+        self.now=1800000000
+        self.store.set_consent(2,4,"adaptation",True)
+        self.now+=10
+        scope=Scope("lime",2,3,4)
+        with self.store.db() as db:
+            db.execute("INSERT INTO experience VALUES(?,?,?,?,?,?,?,?,?,?)",
+                       (*scope.key(),self.source(1),1,4,"project","more_detail",self.now+10))
+        channel=self.sdk_transport()
+        self.assertEqual(await self.runtime.verify_experience_sources(4),0)
+        channel.fetch_message.assert_not_awaited()
+        self.assertEqual(self.bridge.verification_status()["last_result"],"unavailable")
+        self.assertIsNone(self.project())
+
+    async def test_saved_rows_cannot_override_current_revocation(self):
+        self.seed()
+        with self.store.db() as db:
+            saved=[tuple(row) for row in db.execute("SELECT * FROM experience")]
+            evidence=[tuple(row) for row in db.execute("SELECT * FROM experience_evidence")]
+        self.store.set_consent(2,4,"adaptation",False)
+        # Deliberately simulate stale rows supplied by a proposed import,
+        # without restoring the older consent authority.
+        with self.store.db() as db:
+            db.executemany("INSERT INTO experience VALUES(?,?,?,?,?,?,?,?,?,?)",saved)
+            db.executemany("INSERT INTO experience_evidence VALUES(?,?,?,?,?,?,?)",evidence)
+        self.bridge.quarantine()
+        channel=self.sdk_transport()
+        self.assertEqual(await self.runtime.verify_experience_sources(4),0)
+        channel.fetch_message.assert_not_awaited()
+        self.assertIsNone(self.project())
+
+    async def test_sdk_character_change_and_concurrent_verification(self):
+        self.seed()
+        self.bridge.quarantine()
+        channel=self.sdk_transport()
+        entered=asyncio.Event()
+        release=asyncio.Event()
+        async def fetch(source):
+            entered.set()
+            await release.wait()
+            return self.sdk_message(channel,source)
+        channel.fetch_message.side_effect=fetch
+        pending=asyncio.create_task(self.runtime.verify_experience_sources(4))
+        try:
+            await asyncio.wait_for(entered.wait(),3)
+            self.assertEqual(await self.runtime.verify_experience_sources(5),0)
+            self.runtime.model_generation_epoch+=1
+        finally:
+            release.set()
+        self.assertEqual(await pending,1)
+        self.assertEqual(channel.fetch_message.await_count,1)
+        self.assertEqual(self.bridge.verification_status()["last_result"],"stale")
+
     async def test_revoke_reopen_and_reconsent_cannot_restore_old_source(self):
         self.seed()
         self.assertIsNotNone(self.project())
-        self.store.delete_personal(2, 4, "memory")
+        self.store.delete_personal(2, 4, "adaptation")
         self.now += 10
         self.bridge = self.bind(CharacterStores(self.path, clock=lambda: self.now).for_character("lime"))
         self.assertIsNone(self.project())
-        self.bridge.companion.set_consent(2, 4, "memory", True)
-        epoch = self.bridge.companion.consent_version(2, 4, "memory")
+        self.bridge.companion.set_consent(2, 4, "adaptation", True)
+        epoch = self.bridge.companion.consent_version(2, 4, "adaptation")
         self.assertFalse(self.record(2, epoch=epoch, revision=2))
 
     async def test_source_delete_is_durable_even_without_live_history(self):
@@ -82,7 +236,7 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
         scope = Scope("lime", 2, 3, 4)
         self.assertIsNone(self.project())
         async def verified(key, source):
-            return SourceObservation(SourceStatus.FOUND, key, source, 1)
+            return SourceObservation(SourceStatus.FOUND, key, source, 1, content_digest("synthetic feedback"))
         self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=verified, limit=1), 1)
         self.assertIsNone(self.project())
         self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=verified), 1)
@@ -100,7 +254,7 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bridge.state(scope, epoch=1, topic=Topic.PROJECT, now=self.now).count, 2)
         async def changed(key, source):
             return SourceObservation(SourceStatus.DELETED if source == self.source(1) else SourceStatus.FOUND,
-                                     key, source, 2)
+                                     key, source, 2, content_digest("edited feedback"))
         self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=changed), 2)
         self.assertEqual(self.bridge.state(scope, epoch=1, topic=Topic.PROJECT, now=self.now).count, 0)
         self.assertFalse(self.record(1, revision=3))
@@ -110,7 +264,7 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
         self.bridge.quarantine()
         async def stale(key, source):
             self.bridge.quarantine()
-            return SourceObservation(SourceStatus.FOUND, key, source, 1)
+            return SourceObservation(SourceStatus.FOUND, key, source, 1, content_digest("synthetic feedback"))
         scope = Scope("lime", 2, 3, 4)
         self.assertEqual(await self.bridge.reconcile(scope, epoch=1, fetch_source=stale), 1)
         self.assertEqual(self.bridge.verification_status()["session_marks"], 0)
@@ -146,8 +300,8 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
                 BEGIN SELECT RAISE(ABORT, 'synthetic disk failure'); END
             """)
         with self.assertRaises(sqlite3.IntegrityError):
-            self.store.delete_personal(2, 4, "memory")
-        self.assertEqual(self.store.consent_version(2, 4, "memory"), 1)
+            self.store.delete_personal(2, 4, "adaptation")
+        self.assertEqual(self.store.consent_version(2, 4, "adaptation"), 1)
         self.assertIsNotNone(self.project())
 
     async def test_interleaved_users_have_distinct_flow_and_generated_strategy(self):
@@ -180,7 +334,7 @@ class ChannelExperienceTests(unittest.IsolatedAsyncioTestCase):
         self.seed()
         original = self.transport.execute
         async def revoke_then_execute(event, action, library, fresh):
-            self.store.set_consent(2, 4, "memory", False)
+            self.store.set_consent(2, 4, "adaptation", False)
             return await original(event, action, library, fresh)
         self.transport.execute = revoke_then_execute
         await self.runtime.ingest(replace(self.event(), member_mentions=(999,)))

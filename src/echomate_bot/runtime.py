@@ -297,6 +297,31 @@ class Runtime:
         for task in list(self.tasks.values()):task.cancel()
         self.note('gateway_paused_pending_preserved')
 
+    async def verify_experience_sources(self, subject):
+        """Explicit opt-in path. Production bootstrap does not bind a journal."""
+        experience=self.channel_experience
+        if experience is None or not hasattr(self.transport,'experience_source'):return 0
+        from .identity_continuity import Scope
+        guild,channel=experience.place
+        character=getattr(self.backend,'character_id',None)
+        stamp=(self.settings.revision,self.model_generation_epoch)
+        def current():
+            return (self.channel_experience is experience and self.companion is experience.companion
+                    and character==experience.companion.character_id==getattr(self.backend,'character_id',None)
+                    and not self.stopped and not self.changing_model and self.gateway_available
+                    and stamp==(self.settings.revision,self.model_generation_epoch)
+                    and scope(self.settings.get(),guild,channel)!='silent')
+        if not current():return 0
+        try:
+            epoch=await asyncio.to_thread(experience.companion.consent_version,guild,subject,'adaptation')
+            if epoch is None or not current():return 0
+            return await experience.reconcile(Scope(character,guild,channel,subject),epoch=epoch,
+                                              fetch_source=self.transport.experience_source,current=current)
+        except (OSError,RuntimeError,sqlite3.Error):
+            experience.quarantine('storage_failure')
+            self.note('experience_verification_storage_failure')
+            return 0
+
     async def resume_gateway(self):
         await asyncio.gather(*list(self.tasks.values()),return_exceptions=True)
         self.gateway_available=True

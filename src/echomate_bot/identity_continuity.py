@@ -128,22 +128,29 @@ class ExperienceJournal:
         ).fetchone()
         return (row is None or epoch > row[0]) and self.authorize(scope, epoch) is True
 
-    def record_feedback(self, scope, *, source, revision, epoch, topic, feedback, now, expires):
+    @staticmethod
+    def _validate_feedback(source, revision, epoch, topic, feedback, now, expires):
         for value in (source, revision, epoch, now, expires):
             positive_integer(value)
         if (revision == DELETED_REVISION or not isinstance(topic, Topic)
                 or not isinstance(feedback, Feedback) or expires <= now):
             raise ValueError("expected reviewed feedback and a future expiry")
+
+    def record_feedback(self, scope, *, source, revision, epoch, topic, feedback, now, expires):
+        self._validate_feedback(source, revision, epoch, topic, feedback, now, expires)
         with self._transaction() as db:
             if not self._allowed(db, scope, epoch) or not self._source_allowed(db, scope, source):
                 return False
-            return bool(db.execute("""
+            return self._store_feedback(db, scope, source, revision, epoch, topic, feedback, expires)
+
+    def _store_feedback(self, db, scope, source, revision, epoch, topic, feedback, expires):
+        return bool(db.execute("""
                 INSERT INTO experience VALUES(?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(character,guild,channel,subject,source) DO UPDATE SET
                     revision=excluded.revision, epoch=excluded.epoch, topic=excluded.topic,
                     feedback=excluded.feedback, expires=excluded.expires
                 WHERE excluded.revision > experience.revision
-            """, (*scope.key(), source, revision, epoch, topic.value, feedback.value, expires)).rowcount)
+        """, (*scope.key(), source, revision, epoch, topic.value, feedback.value, expires)).rowcount)
 
     def invalidate_source(self, scope, *, source, revision, epoch, deleted=False):
         """Remove the contribution and reject retries of this or older revisions."""

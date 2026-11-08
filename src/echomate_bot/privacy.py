@@ -26,11 +26,11 @@ class PrivacyStore:
     def set_consent(self,guild,actor,category,enabled,*,subject=None):
         positive_id(guild);positive_id(actor)
         if subject is not None and (type(subject) is not int or subject!=actor):raise PermissionError('Self consent only')
-        if category not in CATEGORIES or type(enabled) is not bool:raise ValueError('Invalid consent')
+        if category not in (*CATEGORIES,'adaptation') or type(enabled) is not bool:raise ValueError('Invalid consent')
         with self.db() as db:
             db.execute('INSERT INTO consent_choices VALUES(?,?,?,?,1,?) ON CONFLICT(guild,user,category) DO UPDATE SET enabled=excluded.enabled,version=consent_choices.version+1,at=excluded.at',(str(guild),str(actor),category,int(enabled),self.clock()))
             # Historic opt-out flags are not a substitute for category choices.
-            if enabled:
+            if enabled and category!='adaptation':
                 db.execute('DELETE FROM optouts WHERE guild=? AND user=?',(str(guild),str(actor)))
                 if category=='memory':db.execute('DELETE FROM memory_optouts WHERE guild=? AND user=?',(str(guild),str(actor)))
 
@@ -64,11 +64,12 @@ class PrivacyStore:
             return result
 
     def delete_personal(self,guild,actor,category):
-        if category not in CATEGORIES:raise ValueError('Invalid category')
+        if category not in (*CATEGORIES,'adaptation'):raise ValueError('Invalid category')
         positive_id(guild);positive_id(actor)
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
             db.execute('INSERT INTO consent_choices VALUES(?,?,?,?,1,?) ON CONFLICT(guild,user,category) DO UPDATE SET enabled=0,version=consent_choices.version+1,at=excluded.at',(str(guild),str(actor),category,0,self.clock()))
+            if category=='adaptation':return  # The experience trigger removes all contributions atomically.
             if category=='summaries':
                 db.execute('INSERT OR IGNORE INTO summary_tombstones SELECT s.guild,s.source FROM summary_sources s JOIN summary_participants p ON s.id=p.id WHERE p.guild=? AND p.user=?',(str(guild),str(actor)))
                 db.execute('INSERT OR IGNORE INTO summary_tombstones SELECT guild,source FROM conversation_summaries WHERE guild=? AND user=?',(str(guild),str(actor)))
@@ -78,6 +79,15 @@ class PrivacyStore:
             if category=='relationships':db.execute('DELETE FROM alias_evidence WHERE guild=? AND witness=?',(str(guild),str(actor)))
             # Prevent pending work from recreating deleted personal records.
             if category=='memory':db.execute('INSERT INTO memory_cutoffs VALUES(?,?,?) ON CONFLICT(guild,user) DO UPDATE SET at=excluded.at',(str(guild),str(actor),self.clock()))
+
+    def adaptation_consent(self,guild,user):
+        with self.db() as db:
+            enabled=db.execute("SELECT enabled FROM consent_choices WHERE guild=? AND user=? AND category='adaptation'",
+                               (str(guild),str(user))).fetchone()
+            exists=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='experience'").fetchone()
+            count=db.execute('SELECT COUNT(*) FROM experience WHERE guild=? AND subject=?',
+                             (str(guild),str(user))).fetchone()[0] if exists else 0
+            return bool(enabled and enabled[0]),count
 
     def save_summary(self,event,text,version):
         from .companion_store import safe_subject_text

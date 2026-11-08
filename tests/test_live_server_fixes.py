@@ -284,12 +284,19 @@ class CommandAndStorage(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(adapter.create_interaction_response.call_args.kwargs['params'].payload['data']['flags'],64)
                 self.assertTrue(adapter.execute_webhook.call_args.kwargs['payload']['flags']&64)
                 panel=panels[0]
+                self.assertFalse(client.companion.adaptation_consent(2,4)[0])
+                await panel.adaptation.callback(interaction(component=True))
+                self.assertTrue(client.companion.adaptation_consent(2,4)[0])
+                self.assertFalse(client.companion.consent(2,4)['memory'])
                 await panel.memory.callback(interaction(component=True));self.assertTrue(client.companion.consent(2,4)['memory'])
                 await panel.memory.callback(interaction(component=True));self.assertFalse(client.companion.consent(2,4)['memory'])
                 self.assertFalse(await panel.interaction_check(interaction(5,True)))
                 panel.selected='memory';panel.confirm=True
                 await panel.delete.callback(interaction(component=True));self.assertFalse(client.companion.consent(2,4)['memory'])
                 restarted=CompanionStore(client.companion.path);self.assertFalse(restarted.consent(2,4)['memory'])
+                self.assertTrue(restarted.adaptation_consent(2,4)[0])
+                await panel.adaptation.callback(interaction(component=True))
+                self.assertFalse(restarted.adaptation_consent(2,4)[0])
         finally:
             for panel in panels:panel.stop()
             async_context.reset(token);await client.close()

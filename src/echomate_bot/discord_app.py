@@ -43,6 +43,50 @@ def assets_from_message(message):
 class DiscordTransport:
     def ready(self):return self.client.is_ready()
 
+    async def experience_source(self, key, source):
+        """Read exactly one message through the official SDK, without app retries."""
+        from aiohttp import ClientError
+        from .identity_runtime import SourceObservation, SourceStatus, content_digest
+
+        def result(status, revision=None, digest=None):
+            return SourceObservation(status,key,source,revision,digest)
+
+        runtime=self.client.runtime
+        if (not self.ready() or not runtime.gateway_available
+                or not runtime.channel_accepts(key.guild,key.channel)
+                or scope(self.client.settings.get(),key.guild,key.channel)=='silent'):
+            return result(SourceStatus.UNAVAILABLE)
+        guild=self.client.get_guild(key.guild)
+        channel=guild.get_channel(key.channel) if guild else None
+        if not isinstance(channel,discord.TextChannel) or channel.guild.id!=key.guild or channel.id!=key.channel:
+            return result(SourceStatus.UNAVAILABLE)
+        if guild.me is None:return result(SourceStatus.UNAVAILABLE)
+        permissions=channel.permissions_for(guild.me)
+        if not permissions.view_channel or not permissions.read_message_history:
+            return result(SourceStatus.FORBIDDEN)
+        try:
+            message=await channel.fetch_message(source)
+        except discord.Forbidden:
+            return result(SourceStatus.FORBIDDEN)
+        except discord.NotFound as exc:
+            return result(SourceStatus.DELETED if exc.code==10008 else SourceStatus.UNAVAILABLE)
+        except discord.RateLimited:
+            return result(SourceStatus.RATE_LIMITED)
+        except discord.HTTPException as exc:
+            return result(SourceStatus.RATE_LIMITED if exc.status==429 else
+                          SourceStatus.NETWORK if exc.status>=500 else SourceStatus.UNAVAILABLE)
+        except (OSError,TimeoutError,ClientError):
+            return result(SourceStatus.NETWORK)
+        if (message.id!=source or getattr(message.guild,'id',None)!=key.guild
+                or message.channel.id!=key.channel or message.author.id!=key.subject
+                or message.author.bot or message.webhook_id or not isinstance(message.content,str)
+                or not message.content.strip()):
+            return result(SourceStatus.UNAVAILABLE)
+        stamp=message.edited_at or message.created_at
+        if stamp.tzinfo is None or stamp < message.created_at:
+            return result(SourceStatus.UNAVAILABLE)
+        return result(SourceStatus.FOUND,round(stamp.timestamp()*1_000_000),content_digest(message.content))
+
     def address_names(self,event):
         from .naming import validate_name
         guild=self.client.get_guild(event.guild);me=guild.me if guild else None

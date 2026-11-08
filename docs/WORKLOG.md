@@ -1,5 +1,14 @@
 # 작업 로그
 
+## 2026-11-08 원본 SDK 검증과 적응 동의
+
+- 시작 로컬·원격 `448d99a4e044b0f3010252074ed1b8e325fca3e4`, clean. 기존 비활성 Desktop·외부 소켓 차단 하네스로 기준 전체 회귀 **1,181개 OK(293.131초)**.
+- `DiscordTransport.experience_source`와 `Runtime.verify_experience_sources`는 공식 SDK 단건 조회를 격리 브리지에 연결한다. 권한, 출처·작성자, 수정 시각, 내용 해시 및 연결/채널/캐릭터/동의 최신성을 검사한다. 조회 결과 분류는 Windows 읽기 전용 상태에 연결했다.
+- `PrivacyStore`와 기존 `ConsentPanel`에 독립 기본 OFF 적응 선택을 추가했다. 기억 및 관계 API의 동의 의미는 보존한다. 신규 증거표·트리거는 격리 브리지 연결 때만 생성하며, 기존 무해시 연구 행은 검증하지 않는다.
+- `PYTHONPATH=src;tools;tests`에서 `.venv-gemma4/Scripts/python.exe -m unittest test_identity_runtime test_identity_continuity test_live_server_fixes test_discord_simulator test_character_store -q` **81개 OK(19.472초)**. SDK 응답·에러, 거짓 작성자, 동시 검증, 재시작·중단, 철회·채널·캐릭터 경합, SQLite 실패, 과거 행 재삽입을 모의했다.
+- 변경 후 격리 전체 1,187개 중 1,185개 통과·2개 오류(291.036초). 두 오류 모두 구 형식 패널 입력에 적응 키가 없는 경우였다. 기본 OFF/0으로 호환한 최종 코드에서 `-m unittest test_bot_integration.BotIntegration.test_live_sdk_command_and_component_checks test_release_privacy test_live_server_fixes -q` **41개 OK(9.765초)**. 최종 호환 수정 뒤 전체 재실행은 하지 않았다.
+- 전체 DB 백업 복원은 현재 권위 유실을 막을 근거가 필요해 계속 차단한다. 실제 Discord 연결, 운영 DB, GPU와 실제 Lime A/B/C는 사용하지 않았다. 다음 검증은 과거 권위 재등장 방지와 독립 Lime 응답 평가다. [아키텍처](ARCHITECTURE.md#운영-콘솔의-관측과-복구-경계)
+
 ## 2026-11-08 재접속 격리와 Windows 운영 채널
 
 - 시작 로컬·원격 `4898e9f710b143546d7517b2ebd83bd238524325`, clean. MASTER-VISION의 경험 수명주기 및 단일 채널 계약을 기준으로 작업했다.
